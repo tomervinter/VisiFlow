@@ -8,20 +8,41 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using System.Security.Claims;
+using Npgsql;
 
-// wwwroot only exists at the project's source location (nothing copies it to the build output),
-// so the content root is pinned to that source directory via AppContext.BaseDirectory instead of
-// the default (the process's working directory) - this way the app runs correctly regardless of
-// which directory it's launched from.
-var projectSourceDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
-var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args, ContentRootPath = projectSourceDir });
+// Local `dotnet build`/`run` (Debug) doesn't copy wwwroot into bin/Debug/net8.0 in this project, so
+// the content root needs to be pinned to the project's source directory (3 levels up from
+// AppContext.BaseDirectory) instead of the default - otherwise static files 404 regardless of which
+// directory the process was launched from. `dotnet publish` (Release - what the Docker image runs)
+// DOES copy wwwroot next to the DLL, and has none of that nested bin/Debug/net8.0 structure to walk
+// up out of - walking up 3 levels there lands outside the container's /app entirely. So: only apply
+// the walk-up when wwwroot isn't already sitting right next to the assembly.
+var contentRoot = Directory.Exists(Path.Combine(AppContext.BaseDirectory, "wwwroot"))
+    ? AppContext.BaseDirectory
+    : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args, ContentRootPath = contentRoot });
 
-var solutionRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
-var dataDir = Path.Combine(solutionRoot, "data");
-Directory.CreateDirectory(dataDir);
-var dbPath = Path.Combine(dataDir, "visiflow.db");
+// DATABASE_URL present (Render/Supabase in production) -> Postgres. Otherwise -> the local SQLite
+// file, unchanged from how this has always run - local `dotnet run` during development never sets
+// this, so that workflow keeps working exactly as before.
+var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+var usingPostgres = !string.IsNullOrWhiteSpace(databaseUrl);
 
-builder.Services.AddDbContext<VisiFlowDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
+builder.Services.AddDbContext<VisiFlowDbContext>(options =>
+{
+    if (usingPostgres)
+    {
+        options.UseNpgsql(NpgsqlConnectionStringFromUrl(databaseUrl!));
+    }
+    else
+    {
+        var solutionRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var dataDir = Path.Combine(solutionRoot, "data");
+        Directory.CreateDirectory(dataDir);
+        var dbPath = Path.Combine(dataDir, "visiflow.db");
+        options.UseSqlite($"Data Source={dbPath}");
+    }
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -55,7 +76,18 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<VisiFlowDbContext>();
-    db.Database.Migrate();
+    if (usingPostgres)
+    {
+        // No EF migration history on Postgres yet (deliberate simplification for the first cloud
+        // deploy - see the deployment plan) - creates the current schema directly from the model.
+        // A future schema change here needs a manual approach (or graduating this to real per-provider
+        // migrations) since EnsureCreated doesn't apply incremental changes to an existing database.
+        db.Database.EnsureCreated();
+    }
+    else
+    {
+        db.Database.Migrate();
+    }
 }
 
 app.UseDefaultFiles(new DefaultFilesOptions { DefaultFileNames = new List<string> { "home.html" } });
@@ -89,6 +121,27 @@ app.UseAuthorization();
 
 const long MaxImportUploadBytes = 20 * 1024 * 1024;
 static string[] AllowedImportExtensions() => new[] { ".xlsx", ".xls" };
+
+// Supabase (and most managed Postgres hosts) hand out DATABASE_URL as a postgres:// URI
+// (postgres://user:pass@host:port/db) - Npgsql's own connection-string format
+// (Host=...;Username=...;Password=...;Database=...) doesn't parse that directly, so this converts
+// one to the other. Require+TrustServerCertificate matches how Supabase's pooler is reached (TLS,
+// but not against a certificate chain Npgsql's default trust store necessarily has).
+static string NpgsqlConnectionStringFromUrl(string url)
+{
+    var uri = new Uri(url);
+    var userInfo = uri.UserInfo.Split(':', 2);
+    var csb = new NpgsqlConnectionStringBuilder
+    {
+        Host = uri.Host,
+        Port = uri.Port > 0 ? uri.Port : 5432,
+        Username = Uri.UnescapeDataString(userInfo[0]),
+        Password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "",
+        Database = uri.AbsolutePath.TrimStart('/'),
+        SslMode = SslMode.Require
+    };
+    return csb.ConnectionString;
+}
 
 // Starting set of editable non-visit reasons, seeded once per new company (see POST /api/companies
 // below) - the admin can then rename/add/remove freely from the "סיבות אי ביקור" screen.

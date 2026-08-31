@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: visiflow-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /home.html
+    autoDeployTrigger: commit
+    envVars:
+      # Postgres lives in Supabase, not on Render - fill this in from the Supabase project dashboard:
+      # Settings > Database > Connection string (use the "Connection pooling" URI, port 6543).
+      - key: DATABASE_URL
+        sync: false
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production

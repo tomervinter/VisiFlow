@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using System.Security.Claims;
 using Npgsql;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 // Local `dotnet build`/`run` (Debug) doesn't copy wwwroot into bin/Debug/net8.0 in this project, so
 // the content root needs to be pinned to the project's source directory (3 levels up from
@@ -81,8 +82,20 @@ using (var scope = app.Services.CreateScope())
         // No EF migration history on Postgres yet (deliberate simplification for the first cloud
         // deploy - see the deployment plan) - creates the current schema directly from the model.
         // A future schema change here needs a manual approach (or graduating this to real per-provider
-        // migrations) since EnsureCreated doesn't apply incremental changes to an existing database.
-        db.Database.EnsureCreated();
+        // migrations) since this doesn't apply incremental changes to an existing database.
+        //
+        // NOT EnsureCreated() - that only creates tables when the DATABASE itself doesn't exist yet.
+        // Supabase's "postgres" database is always pre-provisioned, so EnsureCreated would silently
+        // create nothing and every request would then fail with "relation does not exist"
+        // (confirmed against a real Supabase instance while building this). CreateTablesAsync() is
+        // the lower-level call that creates the tables regardless of whether the database pre-existed.
+        try
+        {
+            await db.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalDatabaseCreator>().CreateTablesAsync();
+        }
+        catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P07") // relation already exists - fine, a previous boot already created it
+        {
+        }
     }
     else
     {

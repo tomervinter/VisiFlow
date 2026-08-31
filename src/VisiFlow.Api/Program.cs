@@ -961,6 +961,16 @@ app.MapPost("/api/visitplan/generate", async (GenerateVisitPlanRequest req, Visi
     // exact month's own upload, never silently borrowed from a different month's data.
     if (!await db.Customers.AnyAsync(c => c.CompanyId == req.CompanyId && c.Year == req.Year && c.Month == req.Month))
         return Results.BadRequest($"לא נטען קובץ לקוחות עבור {req.Month:00}/{req.Year} - יש לטעון קודם קובץ לקוחות לחודש הזה במסך \"לקוחות\"");
+
+    // VisitPlanGenerator.GenerateAsync always clears this exact (year, month) before generating - fine
+    // for a fresh month, but a real report showed it silently deleting entries that a "בחירת כל
+    // הנתונים" -> "העברה לתחילת החודש הבא" bulk action had just moved IN from the previous month's
+    // unscheduled list. Require an explicit confirmation before ever clearing a month that already has
+    // entries in it, instead of the previous silent-overwrite behavior.
+    var existingCount = await db.VisitPlanEntries.CountAsync(e => e.CompanyId == req.CompanyId && e.PlanYear == req.Year && e.PlanMonth == req.Month);
+    if (existingCount > 0 && !req.ConfirmClearExisting)
+        return Results.Json(new { ExistingCount = existingCount }, statusCode: StatusCodes.Status409Conflict);
+
     var result = await VisitPlanGenerator.GenerateAsync(db, req.CompanyId, req.Year, req.Month);
     return Results.Ok(result);
 }).RequireAuthorization();
@@ -1418,7 +1428,7 @@ record VisitPlanWeightsDto(
         w.FullDayCapacity, w.HalfDayCapacity);
 }
 
-record GenerateVisitPlanRequest(int CompanyId, int Year, int Month);
+record GenerateVisitPlanRequest(int CompanyId, int Year, int Month, bool ConfirmClearExisting = false);
 
 record OptimizeByCityRequest(int CompanyId, int Year, int Month);
 

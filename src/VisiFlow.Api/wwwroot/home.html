@@ -332,9 +332,17 @@
   .donut-legend-value { color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .donut-legend-pct { color: var(--text-muted); font-size: 0.74rem; font-variant-numeric: tabular-nums; min-width: 34px; text-align: left; }
 
+  /* Agent list specifically (not every donut's legend) can run long with many agents - split into 2
+     columns instead of one tall list. CSS multi-column, not flex, so the browser balances item count
+     between columns on its own; break-inside:avoid keeps a single agent's row from splitting across
+     the column break. */
+  #dashAgentDonut .donut-legend { display: block; column-count: 2; column-gap: 16px; min-width: 320px; }
+  #dashAgentDonut .donut-legend-item { break-inside: avoid; }
+
   @media (max-width: 640px) {
     .donut-panel-body { flex-direction: column; align-items: stretch; text-align: center; }
     .donut-svg-wrap { margin: 0 auto; }
+    #dashAgentDonut .donut-legend { column-count: 1; min-width: 0; }
   }
 
 
@@ -3827,6 +3835,13 @@ btnConfirmDeleteVp.addEventListener("click", async () => {
   } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; btnConfirmDeleteVp.disabled = false; }
 });
 
+async function generateVpPlan(companyId, ym, confirmClearExisting) {
+  return fetch("/api/visitplan/generate", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ CompanyId: companyId, Year: ym.year, Month: ym.month, ConfirmClearExisting: confirmClearExisting })
+  });
+}
+
 document.getElementById("btnGeneratePlan").addEventListener("click", async () => {
   const companyId = selectedCompanyId();
   const ym = vpSelectedYearMonth();
@@ -3834,10 +3849,18 @@ document.getElementById("btnGeneratePlan").addEventListener("click", async () =>
   if (!companyId || !ym) return;
   msg.className = "form-msg"; msg.textContent = "יוצר תוכנית...";
   try {
-    const res = await fetch("/api/visitplan/generate", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ CompanyId: companyId, Year: ym.year, Month: ym.month })
-    });
+    let res = await generateVpPlan(companyId, ym, false);
+    // 409 = the target month already has entries (e.g. customers moved in from last month's
+    // "unscheduled" list via the bulk-move action) - never clear them without an explicit choice.
+    if (res.status === 409) {
+      const conflict = await res.json();
+      const proceed = confirm(
+        `כבר יש ${conflict.ExistingCount} ביקורים בתוכנית של ${ym.month}/${ym.year} (יכול לכלול ביקורים שהועברו מחודש קודם).\n\n` +
+        `יצירת תוכנית חדשה תמחק את כל הביקורים הקיימים ותחליף אותם. להמשיך?`
+      );
+      if (!proceed) { msg.className = "form-msg"; msg.textContent = "יצירת התוכנית בוטלה - הנתונים הקיימים לא נמחקו."; return; }
+      res = await generateVpPlan(companyId, ym, true);
+    }
     if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
     const result = await res.json();
     msg.className = result.Unscheduled > 0 ? "form-msg error" : "form-msg success";

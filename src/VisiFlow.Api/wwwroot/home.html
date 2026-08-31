@@ -982,18 +982,23 @@
           <span class="badge accent" id="customersCount"></span>
         </div>
         <p class="desc">רשימת הלקוחות כפי שנטענה לחודש/שנה שנבחרו למטה.</p>
-        <div class="controls" style="margin-bottom:0;">
-          <div class="month-picker">
-            <label for="customersYearSelect" style="font-size:0.84rem;font-weight:600;color:var(--text-muted);">שנה:</label>
+        <div class="pill-filter-bar">
+          <div class="pill-filter">
+            <label for="customersChannelFilter">ערוץ מכר:</label>
+            <select id="customersChannelFilter"><option value="">כל הערוצים</option></select>
+          </div>
+          <div class="pill-filter">
+            <label for="customersYearSelect">שנה:</label>
             <select id="customersYearSelect"></select>
-            <label for="customersMonthSelect" style="font-size:0.84rem;font-weight:600;color:var(--text-muted);">חודש:</label>
+          </div>
+          <div class="pill-filter">
+            <label for="customersMonthSelect">חודש:</label>
             <select id="customersMonthSelect"></select>
           </div>
         </div>
         <div class="controls">
           <div class="search"><input type="text" id="customersSearch" placeholder="חיפוש לפי מספר לקוח, שם, סוכן..." /></div>
           <select id="customersStatusFilter"><option value="">כל הסטטוסים</option><option value="Active">פעיל</option><option value="Inactive">לא פעיל</option></select>
-          <select id="customersChannelFilter"><option value="">כל הערוצים</option></select>
           <select id="customersAgentFilter"><option value="">כל הסוכנים</option></select>
           <button type="button" class="btn small" id="btnClearCustomersFilters">נקה סינון</button>
           <button type="button" class="btn danger small" id="btnDeleteAllCustomers">&#128465; מחיקת החודש הנבחר</button>
@@ -1133,16 +1138,16 @@
         </p>
         <div class="pill-filter-bar">
           <div class="pill-filter">
+            <label for="vlChannelFilter">ערוץ מכר:</label>
+            <select id="vlChannelFilter"><option value="">כל הערוצים</option></select>
+          </div>
+          <div class="pill-filter">
             <label for="vlYearFilter">שנה:</label>
             <select id="vlYearFilter"><option value="">כל השנים</option></select>
           </div>
           <div class="pill-filter">
             <label for="vlMonthFilter">חודש:</label>
             <select id="vlMonthFilter"><option value="">כל החודשים</option></select>
-          </div>
-          <div class="pill-filter">
-            <label for="vlChannelFilter">ערוץ מכר:</label>
-            <select id="vlChannelFilter"><option value="">כל הערוצים</option></select>
           </div>
           <button type="button" class="btn small" id="btnClearVlFilters">נקה סינון</button>
         </div>
@@ -1194,17 +1199,22 @@
           <span class="badge accent" id="distCount"></span>
         </div>
         <p class="desc">בחרו כאן איזה חודש להציג (בלי קשר לחודש שנבחר למעלה לצורך טעינה), ולסנן לפי ערוץ/סוכן/חיפוש חופשי.</p>
-        <div class="controls" style="margin-bottom:0;">
-          <div class="month-picker">
-            <label for="distReportYearSelect" style="font-size:0.84rem;font-weight:600;color:var(--text-muted);">שנה:</label>
+        <div class="pill-filter-bar">
+          <div class="pill-filter">
+            <label for="distChannelFilter">ערוץ מכר:</label>
+            <select id="distChannelFilter"><option value="">כל הערוצים</option></select>
+          </div>
+          <div class="pill-filter">
+            <label for="distReportYearSelect">שנה:</label>
             <select id="distReportYearSelect"></select>
-            <label for="distReportMonthSelect" style="font-size:0.84rem;font-weight:600;color:var(--text-muted);">חודש:</label>
+          </div>
+          <div class="pill-filter">
+            <label for="distReportMonthSelect">חודש:</label>
             <select id="distReportMonthSelect"></select>
           </div>
         </div>
         <div class="controls">
           <div class="search"><input type="text" id="distSearch" placeholder="חיפוש לפי מספר לקוח, שם, סוכן, ערוץ..." /></div>
-          <select id="distChannelFilter"><option value="">כל הערוצים</option></select>
           <select id="distAgentFilter"><option value="">כל הסוכנים</option></select>
           <button type="button" class="btn small" id="btnClearDistFilters">נקה סינון</button>
           <button type="button" class="btn danger small" id="btnDeleteAllDist">&#128465; מחיקת כל הנתונים</button>
@@ -1243,9 +1253,14 @@
           <span class="form-msg" id="vsMsg"></span>
         </div>
 
+        <div class="pill-filter-bar">
+          <div class="pill-filter">
+            <label for="vsChannelFilter">ערוץ מכר:</label>
+            <select id="vsChannelFilter"><option value="">כל הערוצים</option></select>
+          </div>
+        </div>
         <div class="controls">
           <div class="search"><input type="text" id="vsSearch" placeholder="חיפוש לפי מספר לקוח, שם, סוכן, ערוץ..." /></div>
-          <select id="vsChannelFilter"><option value="">כל הערוצים</option></select>
           <select id="vsAgentFilter"><option value="">כל הסוכנים</option></select>
           <button type="button" class="btn small" id="btnSelectAllVsFiltered">בחירת כל הלקוחות המסוננים</button>
           <button type="button" class="btn small" id="btnSelectAllVsCustomers">בחירת כל הלקוחות (ללא סינון)</button>
@@ -1358,6 +1373,10 @@
         <p class="desc">ממוינת כברירת מחדל לפי תאריך מתוכנן (מהקרוב לרחוק). לקוח שלא ניתן היה לשבץ בקיבולת הזמינה מסומן בהתאם.</p>
         <div class="pill-filter-bar">
           <div class="pill-filter">
+            <label for="vpChannelFilter">ערוץ מכר:</label>
+            <select id="vpChannelFilter"><option value="">כל הערוצים</option></select>
+          </div>
+          <div class="pill-filter">
             <label for="vpTableYearFilter">שנה:</label>
             <select id="vpTableYearFilter"></select>
           </div>
@@ -1368,7 +1387,6 @@
         </div>
         <div class="controls">
           <div class="search"><input type="text" id="vpSearch" placeholder="חיפוש לפי מספר לקוח, שם, סוכן..." /></div>
-          <select id="vpChannelFilter"><option value="">כל הערוצים</option></select>
           <select id="vpAgentFilter"><option value="">כל הסוכנים</option></select>
           <button type="button" class="btn small" id="btnClearVpFilters">נקה סינון</button>
           <button type="button" class="btn small" id="btnShowUnscheduled" style="display:none;"></button>

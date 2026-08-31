@@ -1275,6 +1275,30 @@ app.MapPost("/api/visitplan/entries/bulkdelete", async (BulkDeleteVisitPlanEntri
     return Results.Ok(new DeleteCustomersResultDto(deleted));
 }).RequireAuthorization();
 
+// Bulk version of the single-entry reschedule above (Admin branch only - no CustomerVisit involved,
+// this is for moving still-unscheduled entries, not walking back a completed/logged visit) - backs
+// the "unscheduled customers" bulk drill-in on the תוכנית ביקורים screen. Every entry gets the SAME
+// NewDate (client picks the target month's first work day) and its own note recording where it moved
+// from, same wording/fields as the single-entry endpoint so both screens' "moved manually" badge and
+// tooltip work identically either way.
+app.MapPost("/api/visitplan/entries/bulkreschedule", async (BulkRescheduleVisitPlanEntriesRequest req, VisiFlowDbContext db) =>
+{
+    if (req.Ids == null || req.Ids.Count == 0) return Results.BadRequest("יש לבחור לפחות שורה אחת להעברה");
+    var entries = await db.VisitPlanEntries.Where(e => req.Ids.Contains(e.Id)).ToListAsync();
+    var newDateStr = req.NewDate.ToString("dd/MM");
+    foreach (var entry in entries)
+    {
+        var oldDateStr = entry.PlannedDate?.ToString("dd/MM") ?? "ללא שיבוץ";
+        entry.PlannedDate = req.NewDate.Date;
+        entry.PlanYear = req.NewDate.Year;
+        entry.PlanMonth = req.NewDate.Month;
+        entry.ManuallyModifiedAt = DateTime.UtcNow;
+        entry.ManuallyModifiedNote = $"הוזז ידנית על ידי מנהל מ-{oldDateStr} ל-{newDateStr}";
+    }
+    await db.SaveChangesAsync();
+    return Results.Ok(new { Rescheduled = entries.Count });
+}).RequireAuthorization();
+
 app.MapDelete("/api/visitplan", async (int companyId, int year, int month, VisiFlowDbContext db) =>
 {
     if (await db.Companies.FindAsync(companyId) == null) return Results.BadRequest("החברה שנבחרה אינה קיימת");
@@ -1399,6 +1423,7 @@ record GenerateVisitPlanRequest(int CompanyId, int Year, int Month);
 record OptimizeByCityRequest(int CompanyId, int Year, int Month);
 
 record BulkDeleteVisitPlanEntriesRequest(List<int> Ids);
+record BulkRescheduleVisitPlanEntriesRequest(List<int> Ids, DateTime NewDate);
 record BulkDeleteCustomerVisitsRequest(List<int> Ids);
 
 record VisitPlanEntryDto(

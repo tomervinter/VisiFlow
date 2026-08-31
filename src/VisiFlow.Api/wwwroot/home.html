@@ -1323,8 +1323,10 @@
         </div>
         <div class="controls" style="margin-top:0;">
           <span class="vs-selected-count" id="vpSelectedCount">לא נבחרו שורות</span>
-          <button type="button" class="btn danger small" id="btnDeleteVpSelected" disabled>&#128465; מחיקת נבחרים</button>
+          <button type="button" class="btn small" id="btnSelectAllVp">בחירת כל הנתונים</button>
           <button type="button" class="btn small" id="btnClearVpSelection" disabled>ניקוי בחירה</button>
+          <button type="button" class="btn primary small" id="btnMoveVpSelectedToNextMonth" disabled>📅 העברה לתחילת החודש הבא</button>
+          <button type="button" class="btn danger small" id="btnDeleteVpSelected" disabled>&#128465; מחיקת נבחרים</button>
           <button type="button" class="btn danger small" id="btnDeleteAllVp" style="margin-inline-start:auto;">&#128465; מחיקת כל התוכנית לחודש הנבחר</button>
           <span class="form-msg" id="vpDeleteMsg"></span>
         </div>
@@ -3697,6 +3699,7 @@ function updateVpSelectionBar() {
   document.getElementById("vpSelectedCount").textContent = n === 0 ? "לא נבחרו שורות" : `נבחרו ${n} שורות`;
   document.getElementById("btnDeleteVpSelected").disabled = n === 0;
   document.getElementById("btnClearVpSelection").disabled = n === 0;
+  document.getElementById("btnMoveVpSelectedToNextMonth").disabled = n === 0;
 }
 
 document.getElementById("vpTable").addEventListener("change", (e) => {
@@ -3707,10 +3710,59 @@ document.getElementById("vpTable").addEventListener("change", (e) => {
   updateVpSelectionBar();
 });
 
+document.getElementById("btnSelectAllVp").addEventListener("click", () => {
+  vpTable.getVisibleRows().forEach(e => vpSelected.add(e.Id));
+  updateVpSelectionBar();
+  vpTable.refresh();
+});
+
 document.getElementById("btnClearVpSelection").addEventListener("click", () => {
   vpSelected.clear();
   updateVpSelectionBar();
   vpTable.refresh();
+});
+
+// Finds the first non-"Off" day of a given month, respecting the same default-by-weekday/holiday
+// rules as the יומן ימי עבודה screen (calDefaultType/calHoliday) plus any admin overrides fetched
+// from the server for that month - so "first work day" here always matches what that screen would
+// actually show, not just a naive "the 1st of the month".
+async function firstWorkDayOf(companyId, year, month) {
+  const overrides = new Map();
+  try {
+    const res = await fetch(`/api/workcalendar?companyId=${companyId}&year=${year}&month=${month}`);
+    if (res.ok) (await res.json()).forEach(r => overrides.set(String(r.Date).slice(0, 10), r.DayType));
+  } catch { /* offline - fall back to defaults only */ }
+  const daysInMonth = new Date(year, month, 0).getDate();
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month - 1, day);
+    const key = calDateKey(year, month, day);
+    const type = overrides.get(key) || calDefaultType(date);
+    if (type !== "Off") return key;
+  }
+  return calDateKey(year, month, 1); // the whole month is "Off" (shouldn't happen) - just use day 1
+}
+
+document.getElementById("btnMoveVpSelectedToNextMonth").addEventListener("click", async () => {
+  const msg = document.getElementById("vpDeleteMsg");
+  if (vpSelected.size === 0) return;
+  const companyId = selectedCompanyId();
+  const ym = vpTableSelectedYearMonth();
+  if (!companyId || !ym) return;
+  const nextMonth = ym.month === 12 ? 1 : ym.month + 1;
+  const nextYear = ym.month === 12 ? ym.year + 1 : ym.year;
+  msg.className = "form-msg"; msg.textContent = "מעביר לחודש הבא...";
+  try {
+    const newDate = await firstWorkDayOf(companyId, nextYear, nextMonth);
+    const res = await fetch("/api/visitplan/entries/bulkreschedule", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ Ids: [...vpSelected], NewDate: newDate })
+    });
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+    const result = await res.json();
+    msg.className = "form-msg success"; msg.textContent = `${result.Rescheduled} פגישות הועברו ל-${fmtDate(newDate)}.`;
+    vpSelected.clear();
+    await refreshVpTable();
+  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
 });
 
 document.getElementById("btnDeleteVpSelected").addEventListener("click", async () => {

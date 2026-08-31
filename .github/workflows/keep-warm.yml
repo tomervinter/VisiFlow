@@ -1,0 +1,16 @@
+name: Keep Render service warm
+
+# Render's free tier spins the container down after ~15 minutes of no incoming requests, so the
+# first request after a gap pays a 30-50s cold-start penalty. Pinging on a schedule well under
+# that window keeps the service from ever spinning down during normal use.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping VisiFlow
+        run: curl -fsS -o /dev/null https://visiflow-api-wiq2.onrender.com/home.html

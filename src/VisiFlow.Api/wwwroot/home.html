@@ -486,9 +486,6 @@
   }
   .vp-weight-input-wrap input:focus { outline: 2px solid var(--electric); outline-offset: 1px; }
   .vp-weight-input-wrap span { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.8rem; pointer-events: none; }
-  .vp-weights-save-cell { justify-content: flex-end; align-items: stretch; }
-  .vp-weights-save-cell #btnSaveWeights { padding: 8px 6px; font-size: 0.76rem; white-space: nowrap; }
-  .vp-weights-save-cell #vpWeightsSum { text-align: center; white-space: normal; padding: 2px 4px; font-size: 0.64rem; line-height: 1.3; }
   #vpWeightsSum.error { background: var(--crit-bg); color: var(--crit-fg); }
   .vp-score-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .vp-score-cell .vp-score-main { font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -895,6 +892,17 @@
           <table id="dashTodayVisitsTable"></table>
         </div>
       </section>
+
+      <section class="panel">
+        <h2 class="dash-section-title">
+          <svg class="dash-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+          פגישות מתוכננות לסוכן
+        </h2>
+        <p class="dash-section-sub">כמות פגישות מתוכננות לכל סוכן, היום ולחודש הנוכחי (בהתאם לפילטר הערוץ שנבחר למעלה). לחצו על שורה למעבר לתוכנית הביקורים של הסוכן.</p>
+        <div class="table-wrap" style="max-height:420px;">
+          <table id="dashAgentMeetingCountsTable"></table>
+        </div>
+      </section>
     </div>
 
     <!-- ===================== CUSTOMERS ===================== -->
@@ -1209,7 +1217,11 @@
             <h3 class="vp-build-col-title">1. משקלי חשיבות</h3>
             <p class="vp-build-col-desc">כמה כל פרמטר משפיע על סדר העדיפויות. ברירת מחדל: 20% לכל אחד - הסה"כ חייב להיות בדיוק 100%.</p>
             <div class="vp-weights-grid" id="vpWeightsGrid"></div>
-            <span class="form-msg" id="vpWeightsMsg"></span>
+            <div class="vp-build-col-foot">
+              <button type="button" class="btn primary" id="btnSaveWeights">שמירה</button>
+              <span id="vpWeightsSum" class="badge accent"></span>
+              <span class="form-msg" id="vpWeightsMsg"></span>
+            </div>
           </div>
 
           <div class="vp-build-col">
@@ -1242,17 +1254,17 @@
             </div>
             <div class="vp-build-col-foot">
               <button type="button" class="btn primary" id="btnGeneratePlan">יצירת תוכנית</button>
+              <span class="form-msg" id="vpGenerateMsg"></span>
             </div>
-            <span class="form-msg" id="vpGenerateMsg"></span>
           </div>
 
           <div class="vp-build-col vp-build-col-action">
             <h3 class="vp-build-col-title">4. אופטימיזציה לפי עיר</h3>
             <p class="vp-build-col-desc">מסדר מחדש בין תאריכים חוקיים כדי לרכז ביקורים של אותו סוכן באותה עיר לאותו יום, על התוכנית של החודש שנבחר בשלב 3.</p>
             <div class="vp-build-col-foot">
-              <button type="button" class="btn" id="btnOptimizeByCity">📍 אופטימיזציה לפי עיר</button>
+              <button type="button" class="btn" id="btnOptimizeByCity">📍 אופטימיזציה</button>
+              <span class="form-msg" id="vpOptimizeMsg"></span>
             </div>
-            <span class="form-msg" id="vpOptimizeMsg"></span>
           </div>
         </div>
       </section>
@@ -2150,6 +2162,30 @@ document.getElementById("dashTodayVisitsTable").addEventListener("click", (e) =>
   navigateToVisitPlanFiltered({ year: d.selYear, month: d.selMonth, agent: row.dataset.drillTodayAgent || undefined });
 });
 
+function renderAgentMeetingCountsTable(agentMeetingCounts) {
+  const table = document.getElementById("dashAgentMeetingCountsTable");
+  const entries = [...agentMeetingCounts.entries()].sort((a, b) => b[1].month - a[1].month);
+  if (entries.length === 0) {
+    table.innerHTML = `<tbody><tr><td style="padding:16px;color:var(--text-muted);text-align:center;">אין פגישות מתוכננות החודש.</td></tr></tbody>`;
+    return;
+  }
+  const head = `<thead><tr><th>סוכן</th><th>היום</th><th>החודש</th></tr></thead>`;
+  const body = entries.map(([agentId, g]) => `
+    <tr class="dash-today-row" data-drill-agent-meetings="${agentId}" style="cursor:pointer;">
+      <td>${g.name}</td>
+      <td><span class="mono">${fmtNumber(g.today)}</span></td>
+      <td><span class="mono">${fmtNumber(g.month)}</span></td>
+    </tr>`).join("");
+  table.innerHTML = head + `<tbody>${body}</tbody>`;
+}
+document.getElementById("dashAgentMeetingCountsTable").addEventListener("click", (e) => {
+  const row = e.target.closest("[data-drill-agent-meetings]");
+  const d = DASH_STATE;
+  if (!row || !d) return;
+  const today = new Date();
+  navigateToVisitPlanFiltered({ year: today.getFullYear(), month: today.getMonth() + 1, agent: row.dataset.drillAgentMeetings || undefined });
+});
+
 document.getElementById("dashGlobalChannelFilter").addEventListener("change", () => refreshDashboard());
 
 document.getElementById("dashAgentPerfChart").addEventListener("click", (e) => {
@@ -2173,6 +2209,7 @@ async function refreshDashboard() {
     document.getElementById("dashAgentPerfChart").innerHTML = "";
     document.getElementById("dashTodayVisitsTable").innerHTML = "";
     document.getElementById("dashTodayVisitsCount").textContent = "";
+    document.getElementById("dashAgentMeetingCountsTable").innerHTML = "";
     document.getElementById("dashUpdatedLine").textContent = "";
     DASH_STATE = null;
     return;
@@ -2239,6 +2276,9 @@ async function refreshDashboard() {
   const visitsToday = visits.filter(v => v.Outcome === "Visited" && (v.VisitDate || "").slice(0, 10) === todayIso
     && (!globalChannel || customerByNumber.get(v.CustomerNumber)?.Channel === globalChannel));
 
+  const postponedToday = visits.filter(v => v.Outcome === "NotVisited" && (v.VisitDate || "").slice(0, 10) === todayIso
+    && (!globalChannel || customerByNumber.get(v.CustomerNumber)?.Channel === globalChannel));
+
   const plannedTodayCount = todayPlanEntries
     .filter(e => (e.PlannedDate || "").slice(0, 10) === todayIso)
     .filter(e => !globalChannel || e.Channel === globalChannel).length;
@@ -2280,6 +2320,7 @@ async function refreshDashboard() {
     { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel ? `בערוץ ${globalChannel}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים` },
     { id: "plannedToday", value: fmtNumber(plannedTodayCount), label: "ביקורים מתוכננים להיום", sub: fmtDate(todayIso) },
     { id: "visitsToday", value: fmtNumber(visitsToday.length), label: "ביקורים שבוצעו היום", sub: fmtDate(todayIso) },
+    { id: "postponedToday", value: fmtNumber(postponedToday.length), label: "ביקורים שנדחו היום", sub: fmtDate(todayIso) },
     { id: "neglected", value: fmtNumber(neglected.length), label: "לקוחות שלא ביקרנו מעל 30 יום", sub: "לחצו לרשימה המלאה", tier: neglected.length === 0 ? "good" : (neglected.length > kpiCustomers.length * 0.2 ? "crit" : "warn") },
     { id: "decliningNeglected", value: fmtNumber(decliningNeglected.length), label: "יורדים במכר וללא ביקור מספק", sub: "ירידה במכר + לא ביקרנו מעל 30 יום", tier: decliningNeglected.length === 0 ? "good" : "crit" }
   ]);
@@ -2302,6 +2343,19 @@ async function refreshDashboard() {
     })
     .sort((a, b) => (a.AgentName || "").localeCompare(b.AgentName || "", "he") || (a.CustomerName || "").localeCompare(b.CustomerName || "", "he"));
   renderTodayVisitsTable(todayVisits);
+
+  // todayPlanEntries is always fetched for the REAL current month (see the fetch above, independent
+  // of the selYear/selMonth dropcown) - so it's already exactly "this month" for both counts below.
+  const agentMeetingCounts = new Map();
+  for (const e of todayPlanEntries) {
+    if (globalChannel && e.Channel !== globalChannel) continue;
+    const id = e.AgentIdNumber || `__noid__:${e.AgentName || "ללא סוכן"}`;
+    if (!agentMeetingCounts.has(id)) agentMeetingCounts.set(id, { name: e.AgentName || "ללא סוכן", today: 0, month: 0 });
+    const g = agentMeetingCounts.get(id);
+    g.month++;
+    if ((e.PlannedDate || "").slice(0, 10) === todayIso) g.today++;
+  }
+  renderAgentMeetingCountsTable(agentMeetingCounts);
 
   const lastUpdate = customers.reduce((max, c) => !max || c.UpdatedAt > max ? c.UpdatedAt : max, null);
   document.getElementById("dashUpdatedLine").textContent = lastUpdate ? `עדכון קובץ לקוחות אחרון: ${fmtDate(lastUpdate)}` : "";
@@ -3259,10 +3313,6 @@ let vpTouchedWeights = new Set();
 
 function renderVpWeightsGrid(weights) {
   vpTouchedWeights = new Set();
-  // The save button + sum badge are rendered as a 6th grid cell (5 weight fields fill row 1's 3 cells
-  // and 2 of row 2's 3 cells, leaving exactly one empty cell for this) instead of their own row below
-  // the grid - saves a whole row of height on this card, which - since vp-build-grid stretches all 4
-  // "build a plan" cards to match the tallest one - shrinks the whole row, not just this card.
   const fieldsHtml = VP_FACTORS.map(f => `
     <div class="vp-weight-field">
       <label for="vpWeight_${f.key}" title="${f.label}">${f.label}</label>
@@ -3272,16 +3322,10 @@ function renderVpWeightsGrid(weights) {
       </div>
     </div>
   `).join("");
-  const saveCellHtml = `
-    <div class="vp-weight-field vp-weights-save-cell">
-      <button type="button" class="btn primary" id="btnSaveWeights">שמירה</button>
-      <span id="vpWeightsSum" class="badge accent"></span>
-    </div>`;
-  document.getElementById("vpWeightsGrid").innerHTML = fieldsHtml + saveCellHtml;
+  document.getElementById("vpWeightsGrid").innerHTML = fieldsHtml;
   VP_FACTORS.forEach(f => document.getElementById(`vpWeight_${f.key}`).addEventListener("input", () => onVpWeightInput(f.key)));
   document.getElementById("vpFullDayCapacity").value = weights.FullDayCapacity;
   document.getElementById("vpHalfDayCapacity").value = weights.HalfDayCapacity;
-  document.getElementById("btnSaveWeights").addEventListener("click", () => saveVpWeights());
   updateVpWeightsSum();
 }
 
@@ -3350,6 +3394,7 @@ async function saveVpWeights(msgElId = "vpWeightsMsg") {
   } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
 }
 document.getElementById("btnSaveCapacity").addEventListener("click", () => saveVpWeights("vpCapacityMsg"));
+document.getElementById("btnSaveWeights").addEventListener("click", () => saveVpWeights());
 
 function vpSelectedYearMonth() {
   const yearSel = document.getElementById("vpYearSelect");

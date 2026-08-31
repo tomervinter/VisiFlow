@@ -567,6 +567,11 @@
   .dropzone-body svg { color: var(--brand); flex-shrink: 0; }
   .dropzone-body p { margin: 0; font-size: 0.86rem; }
   .dropzone-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 0; }
+  /* Inline in the year/month controls row instead of its own full-width block - same drop target,
+     just compact padding and a one-line body instead of the stacked icon/text/button layout. */
+  .dropzone-compact { padding: 6px 12px; flex: 1 1 260px; }
+  .dropzone-compact .dropzone-body { gap: 8px; flex-wrap: nowrap; white-space: nowrap; }
+  .dropzone-compact .dropzone-body span { font-size: 0.82rem; }
 
   .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: none; align-items: center; justify-content: center; z-index: 100; }
   .modal-overlay.open { display: flex; }
@@ -949,27 +954,26 @@
           חדש באותו חודש ייווסף. יש לוודא שהשורה הראשונה בקובץ מכילה את כותרות העמודות בדיוק כפי שמופיע
           בתבנית. תקן ביקורים (אם הוגדר) עובר אוטומטית בין חודשים ולא צריך להגדיר אותו מחדש.
         </p>
-        <div class="controls" style="margin-bottom:14px;">
+        <div class="controls" style="margin-bottom:10px;">
           <div class="month-picker">
             <label for="importYearSelect" style="font-size:0.84rem;font-weight:600;color:var(--text-muted);">שנה:</label>
             <select id="importYearSelect"></select>
             <label for="importMonthSelect" style="font-size:0.84rem;font-weight:600;color:var(--text-muted);">חודש:</label>
             <select id="importMonthSelect"></select>
           </div>
-          <a class="btn small" id="btnDownloadTemplate" href="/api/customers/import/template">&#8681; הורדת תבנית לדוגמה</a>
-        </div>
-
-        <div class="dropzone" id="importDropzone">
-          <input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none" />
-          <div class="dropzone-body">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M12 16V4M12 4 7 9M12 4l5 5"/><path d="M20 16v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/></svg>
-            <p>גררו לכאן קובץ אקסל, או:</p>
-            <div class="dropzone-actions">
-              <button type="button" class="btn primary" id="btnBrowseImport">&#128193; בחירת קובץ</button>
+          <div class="dropzone dropzone-compact" id="importDropzone">
+            <input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none" />
+            <div class="dropzone-body">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M12 16V4M12 4 7 9M12 4l5 5"/><path d="M20 16v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/></svg>
+              <span>גררו לכאן קובץ אקסל, או</span>
+              <div class="dropzone-actions">
+                <button type="button" class="btn small primary" id="btnBrowseImport">&#128193; בחירת קובץ</button>
+              </div>
             </div>
           </div>
+          <a class="btn small" id="btnDownloadTemplate" href="/api/customers/import/template">&#8681; הורדת תבנית לדוגמה</a>
         </div>
-        <p class="form-msg" id="importMsg" style="margin-top:10px;"></p>
+        <p class="form-msg" id="importMsg" style="margin-top:0;"></p>
       </section>
 
       <section class="panel">

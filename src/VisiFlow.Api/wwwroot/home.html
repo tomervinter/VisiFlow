@@ -276,6 +276,12 @@
 
   .dash-charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-bottom: 22px; align-items: stretch; }
   @media (max-width: 900px) { .dash-charts-row { grid-template-columns: 1fr; } }
+  /* dash-charts-row's align-items:stretch matches this panel's height to its (often taller) sibling,
+     but .vbar-chart's own fixed height doesn't grow into that extra space, leaving a visible empty
+     gap below the bars. Only the city chart specifically was reported looking half-empty - make just
+     this panel a flex column so its chart can grow to fill whatever height the row gives it. */
+  .dash-city-panel { display: flex; flex-direction: column; }
+  .dash-city-panel #dashCityChart { flex: 1; height: auto; min-height: 210px; }
 
   /* Ranked bar lists (reasons, etc.) */
   .bar-chart { display: flex; flex-direction: column; gap: 12px; }
@@ -844,7 +850,7 @@
           <p class="dash-section-sub">לחצו על סוכן למעבר לרשימת הלקוחות שלו.</p>
           <div class="donut-panel-body" id="dashAgentDonut"></div>
         </section>
-        <section class="panel">
+        <section class="panel dash-city-panel">
           <h2 class="dash-section-title">
             <svg class="dash-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg>
             כמות לקוחות לפי עיר

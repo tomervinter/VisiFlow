@@ -333,16 +333,15 @@
   .donut-legend-pct { color: var(--text-muted); font-size: 0.74rem; font-variant-numeric: tabular-nums; min-width: 34px; text-align: left; }
 
   /* Agent list specifically (not every donut's legend) can run long with many agents - split into 2
-     columns instead of one tall list. CSS multi-column, not flex, so the browser balances item count
-     between columns on its own; break-inside:avoid keeps a single agent's row from splitting across
-     the column break. */
-  #dashAgentDonut .donut-legend { display: block; column-count: 2; column-gap: 16px; min-width: 320px; }
-  #dashAgentDonut .donut-legend-item { break-inside: avoid; }
+     columns instead of one tall list. Two explicit side-by-side flex columns (built in JS, see
+     splitDonutLegendIntoColumns) rather than CSS multi-column - deterministic across browsers instead
+     of depending on multi-column layout support/quirks. */
+  #dashAgentDonut .donut-legend.two-col { display: flex; flex-direction: row; gap: 16px; min-width: 320px; }
+  #dashAgentDonut .donut-legend.two-col .donut-legend-col { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 
   @media (max-width: 640px) {
     .donut-panel-body { flex-direction: column; align-items: stretch; text-align: center; }
     .donut-svg-wrap { margin: 0 auto; }
-    #dashAgentDonut .donut-legend { column-count: 1; min-width: 0; }
   }
 
 
@@ -2039,6 +2038,26 @@ function renderDonutChart(containerId, entriesMap, { centerLabel, sortFn, drillA
     <div class="donut-legend">${legendHtml}</div>`;
 }
 
+// Rebuilds an already-rendered donut's legend into N explicit side-by-side columns (top-to-bottom
+// fill, first column gets the extra item when the count is odd) - called right after
+// renderDonutChart() for whichever donut wants this (currently just the by-agent one, which can run
+// long with many agents). Deliberately explicit DOM columns instead of CSS multi-column: identical
+// result in every browser regardless of multi-column layout support/quirks.
+function splitDonutLegendIntoColumns(containerId, columnCount) {
+  const legend = document.querySelector(`#${containerId} .donut-legend`);
+  if (!legend) return;
+  const items = [...legend.children];
+  if (items.length <= columnCount) return; // not enough rows for this to matter
+  legend.classList.add("two-col");
+  const perColumn = Math.ceil(items.length / columnCount);
+  const colsHtml = [];
+  for (let c = 0; c < columnCount; c++) {
+    const slice = items.slice(c * perColumn, (c + 1) * perColumn);
+    colsHtml.push(`<div class="donut-legend-col">${slice.map(el => el.outerHTML).join("")}</div>`);
+  }
+  legend.innerHTML = colsHtml.join("");
+}
+
 // Read-only work-calendar month view for the dashboard - reuses the same day-type logic/labels as
 // the real "יומן ימי עבודה" screen (calDefaultType, calDateKey, HE_WEEKDAY_LETTERS, CAL_TYPE_NOTE,
 // all defined further down in that screen's own section) but renders into its own grid with no click
@@ -2376,6 +2395,7 @@ async function refreshDashboard() {
   ]);
   renderReasonsChart(reasonAgg);
   renderDonutChart("dashAgentDonut", agentComposition, { centerLabel: "לקוחות", drillAttr: "drill-agent-donut", inlineCount: true, showPct: false });
+  splitDonutLegendIntoColumns("dashAgentDonut", 2);
   renderDonutChart("dashFrequencyDonut", frequencyBuckets, {
     centerLabel: "לקוחות", drillAttr: "drill-frequency", inlineCount: true, showPct: true,
     sortFn: (a, b) => FREQUENCY_SORT_VAL.get(b[0]) - FREQUENCY_SORT_VAL.get(a[0])

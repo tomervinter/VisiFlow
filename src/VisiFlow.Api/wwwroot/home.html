@@ -526,6 +526,7 @@
   .form-msg { font-size: 0.84rem; }
   .form-msg.error { color: var(--crit-fg); }
   .form-msg.success { color: var(--good-fg); }
+  .form-msg.warning { color: var(--warn-fg); }
 
   .vp-steps { margin: 0; padding-inline-start: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 0.88rem; color: var(--text); }
   .vp-steps strong { color: var(--brand); }
@@ -3940,8 +3941,14 @@ document.getElementById("btnGeneratePlan").addEventListener("click", async () =>
     }
     if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
     const result = await res.json();
-    msg.className = result.Unscheduled > 0 ? "form-msg error" : "form-msg success";
-    msg.textContent = `נוצרה תוכנית: ${result.Scheduled} ביקורים שובצו${result.Unscheduled > 0 ? `, ${result.Unscheduled} לא שובצו (אין קיבולת פנויה)` : ""}.`;
+    // Unscheduled > 0 is NOT a failure - the plan was created successfully, just not everyone fit in
+    // the available daily capacity. Styled as a warning (not error/red) so a partial fit doesn't read
+    // as something broke, with a pointer to the actual fix (raise capacity in step 2, or use the
+    // "הצג X לקוחות שלא שובצו" button below to decide what to do with them).
+    msg.className = result.Unscheduled > 0 ? "form-msg warning" : "form-msg success";
+    msg.textContent = result.Unscheduled > 0
+      ? `נוצרה תוכנית: ${result.Scheduled} ביקורים שובצו, ${result.Unscheduled} לא שובצו (אין קיבולת פנויה - אפשר להגדיל בשלב 2, או להשתמש בכפתור "לקוחות שלא שובצו" למטה).`
+      : `נוצרה תוכנית: ${result.Scheduled} ביקורים שובצו.`;
     syncVpTableFilterTo(ym);
     await refreshVpTable();
   } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }

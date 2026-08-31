@@ -2275,11 +2275,15 @@ function renderAgentMeetingCountsTable(agentMeetingCounts) {
     table.innerHTML = `<tbody><tr><td style="padding:16px;color:var(--text-muted);text-align:center;">אין פגישות מתוכננות החודש.</td></tr></tbody>`;
     return;
   }
-  const head = `<thead><tr><th>סוכן</th><th>היום</th><th>החודש</th></tr></thead>`;
+  // First <th>/<td> in the DOM renders as the RIGHTMOST column in this RTL table - channel goes first
+  // in source order specifically to land there, per how this section was asked to look.
+  const head = `<thead><tr><th>ערוץ מכר</th><th>סוכן</th><th>היום</th><th>בוצעו היום</th><th>החודש</th></tr></thead>`;
   const body = entries.map(([agentId, g]) => `
     <tr class="dash-today-row" data-drill-agent-meetings="${agentId}" style="cursor:pointer;">
+      <td>${[...g.channels].join(", ") || `<span class="muted">—</span>`}</td>
       <td>${g.name}</td>
       <td><span class="mono">${fmtNumber(g.today)}</span></td>
+      <td><span class="mono">${fmtNumber(g.performedToday)}</span></td>
       <td><span class="mono">${fmtNumber(g.month)}</span></td>
     </tr>`).join("");
   table.innerHTML = head + `<tbody>${body}</tbody>`;
@@ -2459,10 +2463,15 @@ async function refreshDashboard() {
   for (const e of todayPlanEntries) {
     if (globalChannel && e.Channel !== globalChannel) continue;
     const id = e.AgentIdNumber || `__noid__:${e.AgentName || "ללא סוכן"}`;
-    if (!agentMeetingCounts.has(id)) agentMeetingCounts.set(id, { name: e.AgentName || "ללא סוכן", today: 0, month: 0 });
+    if (!agentMeetingCounts.has(id)) agentMeetingCounts.set(id, { name: e.AgentName || "ללא סוכן", channels: new Set(), today: 0, performedToday: 0, month: 0 });
     const g = agentMeetingCounts.get(id);
+    if (e.Channel) g.channels.add(e.Channel);
     g.month++;
-    if ((e.PlannedDate || "").slice(0, 10) === todayIso) g.today++;
+    if ((e.PlannedDate || "").slice(0, 10) === todayIso) {
+      g.today++;
+      const visit = visits.find(v => v.CustomerNumber === e.CustomerNumber && (v.VisitDate || "").slice(0, 10) === todayIso);
+      if (visit && visit.Outcome === "Visited") g.performedToday++;
+    }
   }
   renderAgentMeetingCountsTable(agentMeetingCounts);
 

@@ -429,6 +429,16 @@
   .field input:focus, .field select:focus { outline: 2px solid var(--electric); outline-offset: 1px; }
   .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 14px; }
 
+  /* Pick zero-or-more channels - a fixed list of short chip-labeled checkboxes, not a data table, so
+     it doesn't reuse the per-row bulk-selection checkbox pattern used elsewhere in this file. */
+  .checkbox-group { display: flex; flex-wrap: wrap; gap: 8px; }
+  .checkbox-item {
+    display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--offwhite); color: var(--text);
+    font-size: 0.84rem; cursor: pointer; user-select: none;
+  }
+  .checkbox-item input { margin: 0; cursor: pointer; }
+
   /* Compact mode for the visit-plan table specifically - it has far more columns (21) than any other
      table in the app, so the normal density leaves most of them off-screen behind horizontal scroll.
      table-layout:fixed makes the explicit per-column widths below actually binding (not just hints),
@@ -1004,6 +1014,10 @@
               <input type="password" id="newUserPassword" autocomplete="new-password" required minlength="6" />
             </div>
           </div>
+          <div class="field" style="margin-top:12px;">
+            <label>ערוצים מורשים (ריק = כל הערוצים)</label>
+            <div class="checkbox-group" id="newUserChannels"></div>
+          </div>
           <div class="controls" style="margin-top:12px;">
             <button type="submit" class="btn primary">+ הוספת משתמש</button>
             <span class="form-msg" id="addUserMsg"></span>
@@ -1035,6 +1049,21 @@
           <button type="button" class="btn primary" id="btnConfirmResetPassword">שמירת סיסמה חדשה</button>
           <button type="button" class="btn" id="btnCancelResetPassword">ביטול</button>
           <span class="form-msg" id="resetPasswordMsg"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="editChannelsModalOverlay">
+      <div class="modal-box">
+        <h3>עריכת ערוצים</h3>
+        <p class="desc" style="text-align:center;">ערוצים מורשים עבור <strong id="editChannelsUsername"></strong> (ריק = כל הערוצים).</p>
+        <div class="field" style="margin-bottom:14px;">
+          <div class="checkbox-group" id="editChannelsList"></div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn primary" id="btnConfirmEditChannels">שמירה</button>
+          <button type="button" class="btn" id="btnCancelEditChannels">ביטול</button>
+          <span class="form-msg" id="editChannelsMsg"></span>
         </div>
       </div>
     </div>
@@ -2219,12 +2248,14 @@ async function refreshDashboard() {
   const isSameMonth = selYear === today.getFullYear() && selMonth === today.getMonth() + 1;
   let customers = [], visits = [], calendarDays = [], todayPlanEntries = [], selectedMonthPlanEntries = [];
   try {
+    // allChannels=true - the dashboard always shows every channel to every user regardless of their
+    // own view restriction, so cross-channel comparison stays possible even for a restricted user.
     const [cRes, vRes, calRes, todayPlanRes, selMonthPlanRes] = await Promise.all([
-      fetch(`/api/customers?companyId=${companyId}&year=${selYear}&month=${selMonth}`),
-      fetch(`/api/customervisits?companyId=${companyId}`),
+      fetch(`/api/customers?companyId=${companyId}&year=${selYear}&month=${selMonth}&allChannels=true`),
+      fetch(`/api/customervisits?companyId=${companyId}&allChannels=true`),
       fetch(`/api/workcalendar?companyId=${companyId}&year=${selYear}&month=${selMonth}`),
-      fetch(`/api/visitplan?companyId=${companyId}&year=${today.getFullYear()}&month=${today.getMonth() + 1}`),
-      isSameMonth ? Promise.resolve(null) : fetch(`/api/visitplan?companyId=${companyId}&year=${selYear}&month=${selMonth}`)
+      fetch(`/api/visitplan?companyId=${companyId}&year=${today.getFullYear()}&month=${today.getMonth() + 1}&allChannels=true`),
+      isSameMonth ? Promise.resolve(null) : fetch(`/api/visitplan?companyId=${companyId}&year=${selYear}&month=${selMonth}&allChannels=true`)
     ]);
     if (cRes.ok) customers = await cRes.json();
     if (vRes.ok) visits = await vRes.json();
@@ -3862,15 +3893,37 @@ document.getElementById("btnLogout").addEventListener("click", async (e) => {
 /* ==================== USER MANAGEMENT (admin-interface logins) ==================== */
 let liveUsers = [];
 
+async function fetchChannelsForCompany(companyId) {
+  if (!companyId) return [];
+  try { const res = await fetch(`/api/channels?companyId=${companyId}`); return res.ok ? await res.json() : []; }
+  catch { return []; }
+}
+function renderChannelCheckboxes(containerId, channels, checkedSet) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = channels.length
+    ? channels.map(ch => `
+        <label class="checkbox-item"><input type="checkbox" value="${ch}" ${checkedSet.has(ch) ? "checked" : ""}/> ${ch}</label>`).join("")
+    : `<span class="muted">אין ערוצים זמינים לחברה זו</span>`;
+}
+function readCheckedChannels(containerId) {
+  return [...document.querySelectorAll(`#${containerId} input:checked`)].map(cb => cb.value);
+}
+
 const usersTable = createDataTable({
   tableId: "usersTable",
   columns: [
     { key: "username", label: "שם משתמש", text: u => u.Username, render: u => `<span class="mono name">${u.Username}</span>` },
     { key: "displayName", label: "שם תצוגה", text: u => u.DisplayName, render: u => u.DisplayName },
+    {
+      key: "channels", label: "ערוצים", noFilter: true,
+      text: u => (u.AllowedChannels && u.AllowedChannels.length ? u.AllowedChannels.join(", ") : "כל הערוצים"),
+      render: u => (u.AllowedChannels && u.AllowedChannels.length ? u.AllowedChannels.join(", ") : `<span class="muted">כל הערוצים</span>`)
+    },
     { key: "createdAt", label: "נוצר בתאריך", text: u => u.CreatedAt, sortValue: u => u.CreatedAt, render: u => `<span class="mono">${fmtDate(u.CreatedAt)}</span>` },
     {
       key: "actions", label: "", noFilter: true, text: () => "",
       render: u => `
+        <button type="button" class="btn small" data-action="edit-channels" data-id="${u.Id}" data-username="${u.Username}" data-companyid="${u.CompanyId}">עריכת ערוצים</button>
         <button type="button" class="btn small" data-action="reset-password" data-id="${u.Id}" data-username="${u.Username}">איפוס סיסמה</button>
         <button type="button" class="btn-icon" data-action="delete-user" data-id="${u.Id}" title="מחיקה">&#128465;</button>`
     }
@@ -3886,6 +3939,8 @@ async function refreshUsersView() {
   } catch { /* offline */ }
   document.getElementById("usersCount").textContent = `${liveUsers.length} משתמשים`;
   usersTable.refresh();
+  const channels = await fetchChannelsForCompany(selectedCompanyId());
+  renderChannelCheckboxes("newUserChannels", channels, new Set());
 }
 VIEW_ACTIVATION_HOOKS["users"] = refreshUsersView;
 
@@ -3897,11 +3952,12 @@ document.getElementById("addUserForm").addEventListener("submit", async (e) => {
   const username = document.getElementById("newUserUsername").value.trim();
   const displayName = document.getElementById("newUserDisplayName").value.trim();
   const password = document.getElementById("newUserPassword").value;
+  const allowedChannels = readCheckedChannels("newUserChannels");
   msg.className = "form-msg"; msg.textContent = "יוצר משתמש...";
   try {
     const res = await fetch("/api/users", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ CompanyId: companyId, Username: username, DisplayName: displayName, Password: password })
+      body: JSON.stringify({ CompanyId: companyId, Username: username, DisplayName: displayName, Password: password, AllowedChannels: allowedChannels })
     });
     if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
     msg.className = "form-msg success"; msg.textContent = "המשתמש נוצר בהצלחה.";
@@ -3932,7 +3988,41 @@ document.getElementById("btnConfirmResetPassword").addEventListener("click", asy
   } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
 });
 
+const editChannelsModal = document.getElementById("editChannelsModalOverlay");
+let editChannelsUserId = null;
+function closeEditChannelsModal() { editChannelsModal.classList.remove("open"); editChannelsUserId = null; }
+document.getElementById("btnCancelEditChannels").addEventListener("click", closeEditChannelsModal);
+editChannelsModal.addEventListener("click", (e) => { if (e.target === editChannelsModal) closeEditChannelsModal(); });
+
+document.getElementById("btnConfirmEditChannels").addEventListener("click", async () => {
+  const msg = document.getElementById("editChannelsMsg");
+  const allowedChannels = readCheckedChannels("editChannelsList");
+  msg.className = "form-msg"; msg.textContent = "שומר...";
+  try {
+    const res = await fetch(`/api/users/${editChannelsUserId}/channels`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ AllowedChannels: allowedChannels })
+    });
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+    msg.className = "form-msg success"; msg.textContent = "הערוצים עודכנו!";
+    await refreshUsersView();
+    setTimeout(closeEditChannelsModal, 900);
+  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+});
+
 document.getElementById("usersTable").addEventListener("click", async (e) => {
+  const editChannelsBtn = e.target.closest('[data-action="edit-channels"]');
+  if (editChannelsBtn) {
+    editChannelsUserId = editChannelsBtn.dataset.id;
+    document.getElementById("editChannelsUsername").textContent = editChannelsBtn.dataset.username;
+    document.getElementById("editChannelsMsg").textContent = "";
+    // The target user's own company - not the global selector, which may point at a different one.
+    const user = liveUsers.find(u => String(u.Id) === editChannelsBtn.dataset.id);
+    const channels = await fetchChannelsForCompany(editChannelsBtn.dataset.companyid);
+    renderChannelCheckboxes("editChannelsList", channels, new Set(user && user.AllowedChannels ? user.AllowedChannels : []));
+    editChannelsModal.classList.add("open");
+    return;
+  }
   const resetBtn = e.target.closest('[data-action="reset-password"]');
   if (resetBtn) {
     resetPasswordUserId = resetBtn.dataset.id;

@@ -104,6 +104,13 @@ using (var scope = app.Services.CreateScope())
         catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P07") // relation already exists - fine, a previous boot already created it
         {
         }
+
+        // CreateTablesAsync() above only creates missing tables, it never alters an existing one - a
+        // new column on an already-provisioned table (like AllowedChannels below) needs a manual,
+        // idempotent statement instead. Postgres natively supports IF NOT EXISTS on ADD COLUMN, so
+        // unlike CreateTablesAsync's PostgresException dance this is safe to just run on every boot.
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"AllowedChannels\" character varying(2000);");
     }
     else
     {
@@ -209,6 +216,26 @@ app.MapGet("/api/auth/me", async (HttpContext ctx, VisiFlowDbContext db) =>
     return Results.Ok(UserDto.From(user));
 }).RequireAuthorization();
 
+// Resolves the caller's channel view-restriction fresh from the DB on every call (same "never trust
+// the claim, re-read the row" convention as /api/auth/me above) - null return = unrestricted, sees
+// every channel. Used to scope read-only endpoints; write endpoints (plan generation, city
+// optimization, Excel import) deliberately stay whole-company regardless of this.
+static async Task<List<string>?> ResolveAllowedChannelsAsync(HttpContext ctx, VisiFlowDbContext db)
+{
+    var userId = int.Parse(ctx.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var user = await db.Users.FindAsync(userId);
+    if (user == null || string.IsNullOrWhiteSpace(user.AllowedChannels)) return null;
+    var channels = user.AllowedChannels.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+    return channels.Count == 0 ? null : channels;
+}
+
+// Empty/null list -> null (stored as unrestricted), matching ResolveAllowedChannelsAsync's own reading.
+static string? JoinChannels(List<string>? channels)
+{
+    var cleaned = (channels ?? new List<string>()).Select(c => c.Trim()).Where(c => c.Length > 0).ToList();
+    return cleaned.Count == 0 ? null : string.Join(",", cleaned);
+}
+
 // User management (create/reset-password/delete other admin-interface logins) - flat permission
 // model, no roles yet: any logged-in user can manage any other user, including themselves.
 app.MapGet("/api/users", async (VisiFlowDbContext db) =>
@@ -223,7 +250,11 @@ app.MapPost("/api/users", async (CreateUserRequest req, VisiFlowDbContext db, IP
     if (await db.Companies.FindAsync(req.CompanyId) == null) return Results.BadRequest("החברה שנבחרה אינה קיימת");
     if (await db.Users.AnyAsync(u => u.Username == req.Username)) return Results.BadRequest("שם המשתמש כבר תפוס");
 
-    var user = new User { CompanyId = req.CompanyId, Username = req.Username.Trim(), DisplayName = req.DisplayName.Trim(), CreatedAt = DateTime.UtcNow };
+    var user = new User
+    {
+        CompanyId = req.CompanyId, Username = req.Username.Trim(), DisplayName = req.DisplayName.Trim(), CreatedAt = DateTime.UtcNow,
+        AllowedChannels = JoinChannels(req.AllowedChannels)
+    };
     user.PasswordHash = hasher.HashPassword(user, req.Password);
     db.Users.Add(user);
     await db.SaveChangesAsync();
@@ -238,6 +269,15 @@ app.MapPost("/api/users/{id:int}/reset-password", async (int id, ResetPasswordRe
     user.PasswordHash = hasher.HashPassword(user, req.Password);
     await db.SaveChangesAsync();
     return Results.NoContent();
+}).RequireAuthorization();
+
+app.MapPost("/api/users/{id:int}/channels", async (int id, SetUserChannelsRequest req, VisiFlowDbContext db) =>
+{
+    var user = await db.Users.FindAsync(id);
+    if (user == null) return Results.NotFound("המשתמש לא נמצא");
+    user.AllowedChannels = JoinChannels(req.AllowedChannels);
+    await db.SaveChangesAsync();
+    return Results.Ok(UserDto.From(user));
 }).RequireAuthorization();
 
 app.MapDelete("/api/users/{id:int}", async (int id, HttpContext ctx, VisiFlowDbContext db) =>
@@ -283,10 +323,18 @@ app.MapPost("/api/companies", async (HttpRequest request, VisiFlowDbContext db) 
 
 // Each customer file upload is its own (year, month) snapshot (see Customer.cs) - callers must say
 // which month's snapshot they want, same as distribution days already require.
-app.MapGet("/api/customers", async (int companyId, int year, int month, VisiFlowDbContext db) =>
+app.MapGet("/api/customers", async (int companyId, int year, int month, bool? allChannels, HttpContext ctx, VisiFlowDbContext db) =>
 {
     var customers = await db.Customers.Where(c => c.CompanyId == companyId && c.Year == year && c.Month == month)
         .OrderBy(c => c.CustomerNumber).ToListAsync();
+    // allChannels=true bypasses the caller's channel restriction - used ONLY by the dashboard's own
+    // fetches, which must always show every channel for cross-channel comparison regardless of who's
+    // logged in. Every other screen omits the flag and gets scoped automatically.
+    if (allChannels != true)
+    {
+        var allowed = await ResolveAllowedChannelsAsync(ctx, db);
+        if (allowed != null) customers = customers.Where(c => c.Channel != null && allowed.Contains(c.Channel)).ToList();
+    }
     var standards = await db.CustomerVisitStandards.Where(s => s.CompanyId == companyId).ToDictionaryAsync(s => s.CustomerNumber);
     return customers.Select(c => CustomerDto.From(c, standards.TryGetValue(c.CustomerNumber, out var s) ? s.RequiredVisitsPerWeek : null));
 }).RequireAuthorization();
@@ -298,6 +346,14 @@ app.MapGet("/api/customers/months", async (int companyId, VisiFlowDbContext db) 
     (await db.Customers.Where(c => c.CompanyId == companyId).Select(c => new { c.Year, c.Month }).Distinct().ToListAsync())
         .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month)
         .Select(x => new { x.Year, x.Month })
+).RequireAuthorization();
+
+// Distinct channel values ever seen for this company, across all months - drives the channel picker
+// on the users-management screen, which has no customer rows loaded to derive them from client-side
+// (every other screen's channel filter dropdown derives options from its own already-loaded rows).
+app.MapGet("/api/channels", async (int companyId, VisiFlowDbContext db) =>
+    (await db.Customers.Where(c => c.CompanyId == companyId && c.Channel != null).Select(c => c.Channel!).Distinct().ToListAsync())
+        .OrderBy(ch => ch, StringComparer.CurrentCulture)
 ).RequireAuthorization();
 
 // Bulk wipe for the "מחיקת החודש הנבחר" danger button - lets an admin clear one month's customer
@@ -591,11 +647,22 @@ var DISTRIBUTION_IMPORT_COLUMNS = new (string Label, string Key, bool Required)[
     ("שבת", "Saturday", false),
 };
 
-app.MapGet("/api/distributiondays", async (int companyId, int year, int month, VisiFlowDbContext db) =>
-    (await db.CustomerDistributionDays.Where(d => d.CompanyId == companyId && d.Year == year && d.Month == month)
-        .OrderBy(d => d.CustomerNumber).ToListAsync())
-        .Select(CustomerDistributionDayDto.From)
-).RequireAuthorization();
+app.MapGet("/api/distributiondays", async (int companyId, int year, int month, HttpContext ctx, VisiFlowDbContext db) =>
+{
+    var days = await db.CustomerDistributionDays.Where(d => d.CompanyId == companyId && d.Year == year && d.Month == month)
+        .OrderBy(d => d.CustomerNumber).ToListAsync();
+    // No allChannels bypass here - the dashboard never calls this endpoint, so there's nothing to
+    // exempt. CustomerDistributionDayDto doesn't expose Channel (the client already derives it from
+    // the already-scoped /api/customers response) - this join is only for server-side filtering.
+    var allowed = await ResolveAllowedChannelsAsync(ctx, db);
+    if (allowed != null)
+    {
+        var channelByCustomer = await db.Customers.Where(c => c.CompanyId == companyId && c.Year == year && c.Month == month)
+            .ToDictionaryAsync(c => c.CustomerNumber, c => c.Channel);
+        days = days.Where(d => channelByCustomer.TryGetValue(d.CustomerNumber, out var ch) && ch != null && allowed.Contains(ch)).ToList();
+    }
+    return days.Select(CustomerDistributionDayDto.From);
+}).RequireAuthorization();
 
 // Bulk wipe for the "מחיקת כל הנתונים" danger button - clears every month/year for the company, same
 // pattern as DELETE /api/customers.
@@ -771,7 +838,7 @@ app.MapPost("/api/workcalendar", async (HttpRequest request, VisiFlowDbContext d
 // the visit-planning algorithm will use for "days since last visit". Entered by an admin today;
 // this is what an agent's tablet/phone app would eventually write directly.
 
-app.MapGet("/api/customervisits", async (int companyId, VisiFlowDbContext db) =>
+app.MapGet("/api/customervisits", async (int companyId, bool? allChannels, HttpContext ctx, VisiFlowDbContext db) =>
 {
     var visits = await db.CustomerVisits.Include(v => v.NonVisitReason).Where(v => v.CompanyId == companyId)
         .OrderByDescending(v => v.VisitDate).ThenByDescending(v => v.Id).ToListAsync();
@@ -780,11 +847,15 @@ app.MapGet("/api/customervisits", async (int companyId, VisiFlowDbContext db) =>
     // Falls back to null gracefully if no snapshot exists for that exact month.
     var customerByKey = (await db.Customers.Where(c => c.CompanyId == companyId).ToListAsync())
         .ToDictionary(c => (c.CustomerNumber, c.Year, c.Month));
-    return Results.Ok(visits.Select(v =>
+    // See /api/customers above for the allChannels bypass - same convention, dashboard-only.
+    var allowed = allChannels == true ? null : await ResolveAllowedChannelsAsync(ctx, db);
+    var result = visits.Select(v =>
     {
         customerByKey.TryGetValue((v.CustomerNumber, v.VisitDate.Year, v.VisitDate.Month), out var customer);
-        return CustomerVisitDto.From(v, customer);
-    }));
+        return (Visit: v, Customer: customer);
+    });
+    if (allowed != null) result = result.Where(r => r.Customer?.Channel != null && allowed.Contains(r.Customer.Channel));
+    return Results.Ok(result.Select(r => CustomerVisitDto.From(r.Visit, r.Customer)));
 }).RequireAuthorization();
 
 // Deliberately NOT behind auth - this is the agent's own "mark visited/not visited" write path
@@ -894,7 +965,7 @@ app.MapPost("/api/visitplan/generate", async (GenerateVisitPlanRequest req, Visi
     return Results.Ok(result);
 }).RequireAuthorization();
 
-app.MapGet("/api/visitplan", async (int companyId, int year, int month, VisiFlowDbContext db) =>
+app.MapGet("/api/visitplan", async (int companyId, int year, int month, bool? allChannels, HttpContext ctx, VisiFlowDbContext db) =>
 {
     // SQLite/EF Core can't translate ORDER BY on a decimal column into SQL - order in memory instead.
     var entries = (await db.VisitPlanEntries
@@ -906,6 +977,14 @@ app.MapGet("/api/visitplan", async (int companyId, int year, int month, VisiFlow
     var customers = await db.Customers.Where(c => c.CompanyId == companyId && c.Year == year && c.Month == month)
         .ToDictionaryAsync(c => c.CustomerNumber);
     var standards = await db.CustomerVisitStandards.Where(s => s.CompanyId == companyId).ToDictionaryAsync(s => s.CustomerNumber);
+    // See /api/customers above for the allChannels bypass - same convention, dashboard-only. Plan
+    // GENERATION itself always covers the whole company (unchanged) - only this displayed list narrows.
+    if (allChannels != true)
+    {
+        var allowed = await ResolveAllowedChannelsAsync(ctx, db);
+        if (allowed != null)
+            entries = entries.Where(e => customers.TryGetValue(e.CustomerNumber, out var c) && c.Channel != null && allowed.Contains(c.Channel)).ToList();
+    }
     return Results.Ok(entries.Select(e => VisitPlanEntryDto.From(e, customers.GetValueOrDefault(e.CustomerNumber),
         standards.TryGetValue(e.CustomerNumber, out var s) ? s.RequiredVisitsPerWeek : null)));
 }).RequireAuthorization();
@@ -1223,11 +1302,13 @@ record CompanyDto(int Id, string Name)
 }
 
 record LoginRequest(string Username, string? Password);
-record CreateUserRequest(int CompanyId, string Username, string DisplayName, string Password);
+record CreateUserRequest(int CompanyId, string Username, string DisplayName, string Password, List<string>? AllowedChannels);
 record ResetPasswordRequest(string Password);
-record UserDto(int Id, int CompanyId, string Username, string DisplayName, DateTime CreatedAt)
+record SetUserChannelsRequest(List<string>? AllowedChannels);
+record UserDto(int Id, int CompanyId, string Username, string DisplayName, DateTime CreatedAt, List<string>? AllowedChannels)
 {
-    public static UserDto From(User u) => new(u.Id, u.CompanyId, u.Username, u.DisplayName, u.CreatedAt);
+    public static UserDto From(User u) => new(u.Id, u.CompanyId, u.Username, u.DisplayName, u.CreatedAt,
+        string.IsNullOrWhiteSpace(u.AllowedChannels) ? null : u.AllowedChannels.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList());
 }
 
 record CustomerDto(

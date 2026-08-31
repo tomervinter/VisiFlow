@@ -138,6 +138,7 @@ public class VisiFlowDbContext : DbContext
             entity.Property(u => u.Username).IsRequired().HasMaxLength(100);
             entity.Property(u => u.PasswordHash).IsRequired();
             entity.Property(u => u.DisplayName).IsRequired().HasMaxLength(200);
+            entity.Property(u => u.AllowedChannels).HasMaxLength(2000);
             entity.HasIndex(u => u.Username).IsUnique();
             entity.HasOne(u => u.Company).WithMany().HasForeignKey(u => u.CompanyId).OnDelete(DeleteBehavior.Restrict);
         });

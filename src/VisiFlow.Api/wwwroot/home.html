@@ -398,6 +398,7 @@
   }
   tr.filter-row input:focus { outline: 2px solid var(--electric); outline-offset: 1px; }
   tbody td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: normal; text-align: center; }
+  tfoot td { padding: 8px; text-align: center; font-weight: 700; background: var(--ice); border-top: 2px solid var(--border); position: sticky; bottom: 0; }
   tbody tr:last-child td { border-bottom: none; }
   tbody tr:hover td { background: var(--ice); }
 
@@ -2286,7 +2287,15 @@ function renderAgentMeetingCountsTable(agentMeetingCounts) {
       <td><span class="mono">${fmtNumber(g.performedToday)}</span></td>
       <td><span class="mono">${fmtNumber(g.month)}</span></td>
     </tr>`).join("");
-  table.innerHTML = head + `<tbody>${body}</tbody>`;
+  const totals = entries.reduce((t, [, g]) => ({ today: t.today + g.today, performedToday: t.performedToday + g.performedToday, month: t.month + g.month }),
+    { today: 0, performedToday: 0, month: 0 });
+  const foot = `<tfoot><tr class="dash-agent-meetings-total">
+    <td colspan="2">סה"כ (${fmtNumber(entries.length)} סוכנים)</td>
+    <td><span class="mono">${fmtNumber(totals.today)}</span></td>
+    <td><span class="mono">${fmtNumber(totals.performedToday)}</span></td>
+    <td><span class="mono">${fmtNumber(totals.month)}</span></td>
+  </tr></tfoot>`;
+  table.innerHTML = head + `<tbody>${body}</tbody>` + foot;
 }
 document.getElementById("dashAgentMeetingCountsTable").addEventListener("click", (e) => {
   const row = e.target.closest("[data-drill-agent-meetings]");

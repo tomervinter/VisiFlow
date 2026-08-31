@@ -1851,11 +1851,17 @@ function navigateToCustomersFiltered({ status, channel, agent, search, customerN
   }
   activateView("customers");
 }
-function navigateToVisitLogFiltered({ search } = {}) {
+function navigateToVisitLogFiltered({ search, date, outcome } = {}) {
   const input = document.getElementById("vlSearch");
   input.value = search || "";
   activateView("visitlog");
   input.dispatchEvent(new Event("input"));
+  // date/outcome are exact-match predicates (via setPredicate, same mechanism as the visit-plan
+  // drill-downs) rather than folded into the free-text search box - the search box does a single
+  // contiguous substring match across all columns, which can't express "this date AND this outcome".
+  vlTable.setPredicate("dateOutcome", (date || outcome)
+    ? v => (!date || v.VisitDate.slice(0, 10) === date) && (!outcome || v.Outcome === outcome)
+    : null);
 }
 function navigateToVisitPlanFiltered({ year, month, search, channel, agent, customerNumbers } = {}) {
   if (year) document.getElementById("vpYearSelect").value = String(year);
@@ -1892,6 +1898,7 @@ const KPI_ICONS = {
   active: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.3 2.9-6 6.5-6s6.5 2.7 6.5 6"/><circle cx="17" cy="7" r="2.3"/><path d="M14.8 14.3c.6-.3 1.3-.4 2-.4 2.9 0 5.2 2.4 5.2 5.3"/></svg>`,
   plannedToday: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="M12 13v3.5l2.5 1.5"/><circle cx="12" cy="15.5" r="4.5"/></svg>`,
   visitsToday: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="m8 14 2.5 2.5L16 11"/></svg>`,
+  postponedToday: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="m9 12 6 5M15 12l-6 5"/></svg>`,
   neglected: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>`,
   decliningNeglected: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l6 6 4-4 8 8"/><path d="M15 17h6v-6"/></svg>`
 };
@@ -2082,6 +2089,8 @@ document.getElementById("dashKpiGrid").addEventListener("click", (e) => {
     navigateToVisitPlanFiltered({ year: d.selYear, month: d.selMonth, customerNumbers: d.decliningNeglected.map(c => c.CustomerNumber) });
   } else if (id === "visitsToday") {
     navigateToVisitLogFiltered({ search: d.todayIso });
+  } else if (id === "postponedToday") {
+    navigateToVisitLogFiltered({ date: d.todayIso, outcome: "NotVisited" });
   }
 });
 
@@ -2724,6 +2733,7 @@ document.getElementById("btnClearVlFilters").addEventListener("click", () => {
   vlTable.setPredicate("year", null);
   vlTable.setPredicate("month", null);
   vlTable.setPredicate("channel", null);
+  vlTable.setPredicate("dateOutcome", null);
   vlTable.refresh();
 });
 

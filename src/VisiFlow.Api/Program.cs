@@ -11,6 +11,14 @@ using System.Security.Claims;
 using Npgsql;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
+// This whole app treats DateTime values as naive/local (SQLite has no concept of Kind at all - it
+// was built and always ran against SQLite), but Npgsql 6+ strictly requires Kind=Utc for a "timestamp
+// with time zone" column and throws otherwise - e.g. a DateTime bound straight from a query string
+// (?startDate=2026-08-01) comes out Kind=Unspecified and would 500 on any endpoint that uses it in a
+// query, confirmed against a real deploy. This restores Npgsql's pre-6.0 lenient behavior (accept
+// Unspecified/Local Kind as-is) instead of hunting down and re-tagging every DateTime the app touches.
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 // Local `dotnet build`/`run` (Debug) doesn't copy wwwroot into bin/Debug/net8.0 in this project, so
 // the content root needs to be pinned to the project's source directory (3 levels up from
 // AppContext.BaseDirectory) instead of the default - otherwise static files 404 regardless of which

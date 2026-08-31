@@ -19,6 +19,7 @@ public class VisiFlowDbContext : DbContext
     public DbSet<VisitPlanWeights> VisitPlanWeights => Set<VisitPlanWeights>();
     public DbSet<VisitPlanEntry> VisitPlanEntries => Set<VisitPlanEntry>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<CityGroup> CityGroups => Set<CityGroup>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -141,6 +142,15 @@ public class VisiFlowDbContext : DbContext
             entity.Property(u => u.AllowedChannels).HasMaxLength(2000);
             entity.HasIndex(u => u.Username).IsUnique();
             entity.HasOne(u => u.Company).WithMany().HasForeignKey(u => u.CompanyId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CityGroup>(entity =>
+        {
+            entity.ToTable("CityGroups");
+            entity.HasKey(g => g.Id);
+            entity.Property(g => g.Name).IsRequired().HasMaxLength(200);
+            entity.Property(g => g.Cities).IsRequired().HasMaxLength(2000);
+            entity.HasOne(g => g.Company).WithMany().HasForeignKey(g => g.CompanyId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

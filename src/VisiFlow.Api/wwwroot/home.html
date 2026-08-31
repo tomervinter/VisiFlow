@@ -446,6 +446,14 @@
   }
   .checkbox-item input { margin: 0; cursor: pointer; }
 
+  .city-group-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--offwhite);
+    margin-bottom: 6px; font-size: 0.86rem;
+  }
+  .city-group-item .name { font-weight: 700; color: var(--text); }
+  .city-group-item .cities { color: var(--text-muted); font-size: 0.8rem; }
+
   /* Compact mode for the visit-plan table specifically - it has far more columns (21) than any other
      table in the app, so the normal density leaves most of them off-screen behind horizontal scroll.
      table-layout:fixed makes the explicit per-column widths below actually binding (not just hints),
@@ -1075,6 +1083,31 @@
       </div>
     </div>
 
+    <div class="modal-overlay" id="cityGroupsModalOverlay">
+      <div class="modal-box" style="max-width:520px;">
+        <h3>ניהול אשכולות ערים</h3>
+        <p class="desc" style="text-align:center;">
+          ערים שמוגדרות באותו אשכול נחשבות כמיקום אחד ב"אופטימיזציה לפי עיר" - ביקורים של אותו סוכן
+          בערים מאותו אשכול ירוכזו לאותו יום, גם אם שם העיר אינו זהה.
+        </p>
+        <div id="cityGroupsList" style="margin-bottom:16px;"></div>
+        <h4 style="margin:0 0 8px;font-size:0.9rem;">הוספת אשכול חדש</h4>
+        <div class="field" style="margin-bottom:10px;">
+          <label for="newCityGroupName">שם האשכול</label>
+          <input type="text" id="newCityGroupName" placeholder="למשל: רמת גן וגבעתיים" />
+        </div>
+        <div class="field" style="margin-bottom:14px;">
+          <label>ערים באשכול (לפחות 2)</label>
+          <div class="checkbox-group" id="newCityGroupCities"></div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn primary" id="btnAddCityGroup">+ הוספת אשכול</button>
+          <button type="button" class="btn" id="btnCloseCityGroups">סגירה</button>
+          <span class="form-msg" id="cityGroupsMsg"></span>
+        </div>
+      </div>
+    </div>
+
     <!-- ===================== VISIT LOG ===================== -->
     <div class="view" id="view-visitlog">
       <section class="panel">
@@ -1296,7 +1329,7 @@
 
           <div class="vp-build-col vp-build-col-action">
             <h3 class="vp-build-col-title">4. אופטימיזציה לפי עיר</h3>
-            <p class="vp-build-col-desc">מסדר מחדש בין תאריכים חוקיים כדי לרכז ביקורים של אותו סוכן באותה עיר לאותו יום, על התוכנית של החודש שנבחר בשלב 3.</p>
+            <p class="vp-build-col-desc">מסדר מחדש בין תאריכים חוקיים כדי לרכז ביקורים של אותו סוכן באותה עיר לאותו יום, על התוכנית של החודש שנבחר בשלב 3. <a href="#" id="lnkManageCityGroups">ניהול אשכולות ערים קרובות</a></p>
             <div class="vp-build-col-foot">
               <button type="button" class="btn" id="btnOptimizeByCity">📍 אופטימיזציה</button>
               <span class="form-msg" id="vpOptimizeMsg"></span>
@@ -3920,6 +3953,78 @@ async function refreshVisitPlanView() {
 }
 VIEW_ACTIVATION_HOOKS["visitplan"] = refreshVisitPlanView;
 
+/* ---- city groups: admin-defined "nearby cities" clusters that feed the optimizer above ---- */
+let liveCityGroups = [];
+
+async function fetchCitiesForCompany(companyId) {
+  if (!companyId) return [];
+  try { const res = await fetch(`/api/cities?companyId=${companyId}`); return res.ok ? await res.json() : []; }
+  catch { return []; }
+}
+
+function renderCityGroupsList() {
+  const el = document.getElementById("cityGroupsList");
+  el.innerHTML = liveCityGroups.length
+    ? liveCityGroups.map(g => `
+        <div class="city-group-item" data-group-id="${g.Id}">
+          <div><span class="name">${g.Name}</span><br><span class="cities">${g.Cities.join(", ")}</span></div>
+          <button type="button" class="btn-icon" data-action="delete-city-group" data-id="${g.Id}" title="מחיקה">&#128465;</button>
+        </div>`).join("")
+    : `<span class="muted">עדיין לא הוגדרו אשכולות ערים.</span>`;
+}
+
+async function refreshCityGroupsModal() {
+  const companyId = selectedCompanyId();
+  const msg = document.getElementById("cityGroupsMsg");
+  msg.textContent = "";
+  if (!companyId) return;
+  try {
+    const res = await fetch(`/api/citygroups?companyId=${companyId}`);
+    liveCityGroups = res.ok ? await res.json() : [];
+  } catch { liveCityGroups = []; }
+  renderCityGroupsList();
+  const cities = await fetchCitiesForCompany(companyId);
+  renderChannelCheckboxes("newCityGroupCities", cities, new Set(), "אין ערים זמינות לחברה זו.");
+}
+
+const cityGroupsModal = document.getElementById("cityGroupsModalOverlay");
+function closeCityGroupsModal() { cityGroupsModal.classList.remove("open"); }
+document.getElementById("lnkManageCityGroups").addEventListener("click", (e) => {
+  e.preventDefault();
+  cityGroupsModal.classList.add("open");
+  refreshCityGroupsModal();
+});
+document.getElementById("btnCloseCityGroups").addEventListener("click", closeCityGroupsModal);
+cityGroupsModal.addEventListener("click", (e) => { if (e.target === cityGroupsModal) closeCityGroupsModal(); });
+
+document.getElementById("btnAddCityGroup").addEventListener("click", async () => {
+  const companyId = selectedCompanyId();
+  const msg = document.getElementById("cityGroupsMsg");
+  const name = document.getElementById("newCityGroupName").value.trim();
+  const cities = readCheckedChannels("newCityGroupCities");
+  if (!name) { msg.className = "form-msg error"; msg.textContent = "יש להזין שם לאשכול"; return; }
+  if (cities.length < 2) { msg.className = "form-msg error"; msg.textContent = "יש לבחור לפחות שתי ערים"; return; }
+  msg.className = "form-msg"; msg.textContent = "שומר...";
+  try {
+    const res = await fetch("/api/citygroups", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ CompanyId: companyId, Name: name, Cities: cities })
+    });
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+    msg.className = "form-msg success"; msg.textContent = "האשכול נוסף בהצלחה.";
+    document.getElementById("newCityGroupName").value = "";
+    await refreshCityGroupsModal();
+  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+});
+
+document.getElementById("cityGroupsList").addEventListener("click", async (e) => {
+  const btn = e.target.closest('[data-action="delete-city-group"]');
+  if (!btn) return;
+  if (!confirm("למחוק את האשכול הזה?")) return;
+  await fetch(`/api/citygroups/${btn.dataset.id}`, { method: "DELETE" });
+  await refreshCityGroupsModal();
+});
+
 /* ==================== AUTH (admin interface only) ====================
    Gates the whole app behind a login screen - checked once on load via /api/auth/me (the cookie, if
    any, is sent automatically). Does NOT touch agent.html or its identify-by-ID-number flow at all. */
@@ -4003,12 +4108,12 @@ async function fetchChannelsForCompany(companyId) {
   try { const res = await fetch(`/api/channels?companyId=${companyId}`); return res.ok ? await res.json() : []; }
   catch { return []; }
 }
-function renderChannelCheckboxes(containerId, channels, checkedSet) {
+function renderChannelCheckboxes(containerId, options, checkedSet, emptyMessage) {
   const el = document.getElementById(containerId);
-  el.innerHTML = channels.length
-    ? channels.map(ch => `
-        <label class="checkbox-item"><input type="checkbox" value="${ch}" ${checkedSet.has(ch) ? "checked" : ""}/> ${ch}</label>`).join("")
-    : `<span class="muted">אין ערוצים זמינים לחברה זו</span>`;
+  el.innerHTML = options.length
+    ? options.map(opt => `
+        <label class="checkbox-item"><input type="checkbox" value="${opt}" ${checkedSet.has(opt) ? "checked" : ""}/> ${opt}</label>`).join("")
+    : `<span class="muted">${emptyMessage || "אין ערוצים זמינים לחברה זו"}</span>`;
 }
 function readCheckedChannels(containerId) {
   return [...document.querySelectorAll(`#${containerId} input:checked`)].map(cb => cb.value);

@@ -48,6 +48,17 @@ public static class VisitPlanCityOptimizer
 
         var distByCustomer = await VisitPlanGenerator.LoadDistributionDaysWithFallback(db, companyId, year, month, customerNumbers);
 
+        // Admin-defined "nearby cities" clusters (see CityGroup.cs) - maps each grouped city to a
+        // shared cluster key so the fragmentation/swap logic below treats them as one location. A city
+        // not in any group maps to itself (its own singleton cluster) via ClusterOf's fallback below.
+        var cityToCluster = new Dictionary<string, string>();
+        foreach (var group in await db.CityGroups.Where(g => g.CompanyId == companyId).ToListAsync())
+        {
+            var clusterKey = $"__group_{group.Id}";
+            foreach (var city in group.Cities.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                cityToCluster[city] = clusterKey;
+        }
+
         var overrides = await db.WorkCalendarDays
             .Where(d => d.CompanyId == companyId && d.Date >= monthStart && d.Date <= monthEnd)
             .ToDictionaryAsync(d => d.Date.Date, d => d.DayType);
@@ -59,12 +70,16 @@ public static class VisitPlanCityOptimizer
         };
 
         string? CityOf(VisitPlanEntry e) => customers.TryGetValue(e.CustomerNumber, out var c) ? c.City : null;
+        // The grouping key actually used for fragmentation/swap decisions below - a grouped city's
+        // cluster key, or the raw city itself if it's in no group. CityOf stays the raw city for
+        // display (CityOptimizedNote), ClusterOf is what "same location" means for this optimizer.
+        string? ClusterOf(VisitPlanEntry e) { var city = CityOf(e); return city == null ? null : cityToCluster.GetValueOrDefault(city, city); }
         // AgentIdNumber, not AgentName - two different real agents can share a display name, and
         // grouping by name would let this optimizer "consolidate" one agent's city visits onto a
         // day that actually belongs to a different agent who happens to share their name.
         string? AgentKeyOf(VisitPlanEntry e) => customers.TryGetValue(e.CustomerNumber, out var c) ? VisitPlanGenerator.AgentKey(c) : e.AgentName;
 
-        var fragmentationBefore = TotalFragmentation(entries, CityOf, AgentKeyOf);
+        var fragmentationBefore = TotalFragmentation(entries, ClusterOf, AgentKeyOf);
 
         var swapsApplied = 0;
         var agentsAffected = new HashSet<string>();
@@ -133,7 +148,7 @@ public static class VisitPlanCityOptimizer
                         var b = eligible[j];
                         var cityA = CityOf(a)!;
                         var cityB = CityOf(b)!;
-                        if (cityA == cityB) continue;
+                        if (ClusterOf(a) == ClusterOf(b)) continue; // already the same location (or same group) - nothing to gain
                         var dateA = a.PlannedDate!.Value;
                         var dateB = b.PlannedDate!.Value;
                         if (dateA == dateB) continue;
@@ -141,7 +156,7 @@ public static class VisitPlanCityOptimizer
                         if (!LegalDatesFor(a).Contains(dateB)) continue;
                         if (!LegalDatesFor(b).Contains(dateA)) continue;
 
-                        var delta = SwapDelta(agentEntries, CityOf, a, b, dateA, dateB);
+                        var delta = SwapDelta(agentEntries, ClusterOf, a, b, dateA, dateB);
                         if (delta < 0)
                         {
                             var now = DateTime.UtcNow;
@@ -161,12 +176,13 @@ public static class VisitPlanCityOptimizer
         }
 
         await db.SaveChangesAsync();
-        var fragmentationAfter = TotalFragmentation(entries, CityOf, AgentKeyOf);
+        var fragmentationAfter = TotalFragmentation(entries, ClusterOf, AgentKeyOf);
         return new CityOptimizationResult(swapsApplied, fragmentationBefore, fragmentationAfter, agentsAffected.Count);
     }
 
-    /// <summary>Sum, across every (agent, day), of the number of DISTINCT cities visited that day -
-    /// the quantity the optimizer minimizes. Entries with no city on file don't participate.</summary>
+    /// <summary>Sum, across every (agent, day), of the number of DISTINCT location clusters visited
+    /// that day - the quantity the optimizer minimizes (a "cluster" is a city-group's shared key, or a
+    /// plain city for one in no group - see ClusterOf). Entries with no city on file don't participate.</summary>
     private static int TotalFragmentation(List<VisitPlanEntry> entries, Func<VisitPlanEntry, string?> cityOf, Func<VisitPlanEntry, string?> agentKeyOf) =>
         entries
             .Where(e => e.PlannedDate.HasValue && !string.IsNullOrWhiteSpace(cityOf(e)) && !string.IsNullOrWhiteSpace(agentKeyOf(e)))

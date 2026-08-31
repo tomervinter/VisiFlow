@@ -1,0 +1,13 @@
+# Build output
+bin/
+obj/
+
+# Local SQLite database (dev data - never commit real/local data)
+data/
+
+# IDE
+.vs/
+*.user
+
+# OS
+Thumbs.db

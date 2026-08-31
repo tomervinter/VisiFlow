@@ -1,0 +1,834 @@
+<title>VisiFlow - אזור סוכן</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<style>
+  :root {
+    --navy: #0F172A;
+    --brand: #1E40AF;
+    --brand-hover: #1c3a9e;
+    --electric: #3B82F6;
+    --ice: #EFF6FF;
+    --offwhite: #F8FAFC;
+    --white: #FFFFFF;
+    --border: #dfe7f3;
+    --text: #0F172A;
+    --text-muted: #5b6b85;
+    --good-bg: #e3f4ea;
+    --good-fg: #1a7f4f;
+    --crit-bg: #fce8e6;
+    --crit-fg: #b3372c;
+    --warn-bg: #fef3c7;
+    --warn-fg: #92640a;
+    --card-border: #b9c8e0;
+    --shadow: 0 1px 2px rgba(15,23,42,0.05), 0 4px 16px rgba(15,23,42,0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --navy: #0a0f1e;
+      --brand: #3B82F6;
+      --brand-hover: #5a99f8;
+      --electric: #60a5fa;
+      --ice: #16243d;
+      --offwhite: #0c1424;
+      --white: #121b2e;
+      --border: #253352;
+      --text: #e7edf7;
+      --text-muted: #93a6c2;
+      --good-bg: #12301f;
+      --good-fg: #6fd39c;
+      --crit-bg: #391a17;
+      --crit-fg: #f0968a;
+      --warn-bg: #3a2e0d;
+      --warn-fg: #f0c96a;
+      --card-border: #3a4b70;
+      --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 8px 24px rgba(0,0,0,0.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  /* Responsive root size (not one fixed px) - scales with the actual device's viewport width instead
+     of assuming one screen size, clamped so it never gets uncomfortably small (17px floor) or
+     oversized on a tablet-width screen (22px ceiling). 4.6vw lands close to 20px on a typical ~430px
+     phone. Combined with the individually-enlarged rules below (the smallest sizes needed more than
+     the root scale alone would give them) and the trimmed side padding (so cards use the full phone
+     width instead of leaving margin unused), this is meant to read like a real phone app. */
+  html { font-size: clamp(17px, 4.6vw, 22px); }
+  html, body {
+    /* Hard safety net: nothing in this app should ever be scrollable sideways - a single overlong
+       word or a miscalculated width in a future change would otherwise force horizontal drag/scroll
+       on a phone, which is exactly what this is meant to prevent. `clip`, not `hidden` - `hidden` on
+       one axis forces the OTHER axis's computed overflow to `auto` (CSS Overflow spec), which turns
+       html AND body each into their own independent scroll container and breaks .topbar's
+       position:sticky (it ends up stuck to the wrong one of the two, not to whichever one the user is
+       actually scrolling). `clip` doesn't trigger that - overflow-y stays `visible` on both, so the
+       window itself remains the one and only scroll container, which is what sticky needs. */
+    overflow-x: clip; max-width: 100vw;
+  }
+  body {
+    direction: rtl; font-family: "Segoe UI", Arial, "Noto Sans Hebrew", sans-serif;
+    background: var(--offwhite); color: var(--text); margin: 0; min-height: 100vh;
+  }
+  /* Capped to the same phone-width column as .content (not just full-bleed on narrow screens) so
+     the whole app always reads as a phone screen, even when opened in a wide desktop browser - on
+     an actual phone this max-width never kicks in, the content already fills the real screen. */
+  .topbar {
+    position: sticky; top: 0; z-index: 10; background: var(--navy); color: white;
+    padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    box-shadow: var(--shadow); max-width: 520px; margin: 0 auto;
+  }
+  .topbar .title { font-weight: 700; font-size: 1.15rem; }
+  .topbar .sub { font-size: 0.86rem; color: rgba(255,255,255,0.7); }
+  .topbar button {
+    background: rgba(255,255,255,0.12); border: none; color: white; padding: 8px 14px;
+    border-radius: 8px; font-size: 0.86rem; font-family: inherit; cursor: pointer;
+  }
+  .content { max-width: 520px; margin: 0 auto; padding: 14px 10px 60px; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  .identify-box {
+    background: var(--white); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: var(--shadow); padding: 28px 20px; margin-top: 40px; text-align: center;
+  }
+  .identify-box .mark {
+    width: 52px; height: 52px; border-radius: 14px; background: var(--brand); margin: 0 auto 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .identify-box .mark svg { width: 28px; height: 28px; stroke: white; }
+  .identify-box h1 { font-size: 1.35rem; margin: 0 0 8px; }
+  .identify-box p { font-size: 1rem; color: var(--text-muted); margin: 0 0 20px; }
+  .identify-box input {
+    width: 100%; padding: 15px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--offwhite); color: var(--text); font-size: 1.2rem; text-align: center;
+    font-family: inherit; letter-spacing: 0.05em; margin-bottom: 14px;
+  }
+  .identify-box input:focus { outline: 2px solid var(--electric); outline-offset: 1px; }
+  .btn-block {
+    width: 100%; padding: 16px; border-radius: 10px; border: none; background: var(--brand);
+    color: white; font-size: 1.1rem; font-weight: 700; font-family: inherit; cursor: pointer;
+  }
+  .btn-block:active { background: var(--brand-hover); }
+  .identify-msg { font-size: 0.92rem; color: var(--crit-fg); margin-top: 12px; min-height: 1.2em; }
+
+  .date-bar {
+    display: flex; align-items: center; gap: 10px; background: var(--white); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; box-shadow: var(--shadow);
+  }
+  .date-bar label { font-size: 0.92rem; color: var(--text-muted); font-weight: 600; flex-shrink: 0; }
+  .date-bar input[type=date] {
+    flex: 1; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--offwhite); color: var(--text); font-family: inherit; font-size: 1rem;
+  }
+  .day-banner {
+    background: var(--ice); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px;
+    font-size: 1rem; color: var(--brand); font-weight: 600; text-align: center;
+  }
+  .empty-state { text-align: center; color: var(--text-muted); padding: 40px 20px; font-size: 1.05rem; }
+  .loading-state { text-align: center; color: var(--text-muted); padding: 24px 20px; font-size: 1rem; }
+
+  .customer-card {
+    background: var(--white); border: 2px solid var(--card-border); border-radius: 14px;
+    box-shadow: var(--shadow); padding: 15px 14px; margin-bottom: 16px;
+  }
+  .customer-card .cc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+  .customer-card .cc-name { font-weight: 700; font-size: 1.2rem; }
+  .customer-card .cc-number { font-size: 0.88rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .customer-card .cc-sales { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.92rem; color: var(--text-muted); margin-bottom: 12px; }
+  .customer-card .cc-admin-note {
+    background: var(--warn-bg); color: var(--warn-fg); border-radius: 8px; padding: 9px 11px;
+    font-size: 0.9rem; line-height: 1.4; margin-bottom: 12px; word-break: break-word;
+  }
+  .customer-card .cc-admin-note b { font-weight: 700; }
+  .customer-card .cc-sales b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .cc-trend { font-size: 0.86rem; font-weight: 700; margin-inline-start: 4px; }
+  .cc-trend.up { color: var(--good-fg); }
+  .cc-trend.down { color: var(--crit-fg); }
+  .cc-info-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px;
+    background: var(--offwhite); border-radius: 10px; padding: 12px; margin-bottom: 12px;
+  }
+  .cc-info-item { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .cc-info-label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
+  .cc-info-value { font-size: 0.94rem; color: var(--text); font-weight: 600; overflow-wrap: break-word; }
+  .cc-never { color: var(--text-muted); font-weight: 400; }
+  .cc-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .cc-action-btn {
+    flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 12px 8px; border-radius: 9px; border: 1.5px solid var(--border); background: var(--offwhite);
+    color: var(--text); font-size: 0.92rem; font-weight: 700; font-family: inherit; text-decoration: none; cursor: pointer;
+    transition: background .12s, border-color .12s;
+  }
+  .cc-action-btn.tel-btn { border-color: var(--brand); color: var(--brand); background: var(--ice); }
+  .cc-action-btn.tel-btn:active { background: var(--brand); color: white; }
+  .cc-action-btn.waze-btn { border-color: #05C8F7; color: #04a6cc; background: #e6faff; }
+  .cc-action-btn.waze-btn:active { background: #05C8F7; color: white; }
+  .cc-visit-row { display: flex; gap: 10px; }
+  .cc-visit-btn {
+    flex: 1; padding: 16px 6px; border-radius: 10px; border: none;
+    color: white; font-size: 1.05rem; font-weight: 700; font-family: inherit; cursor: pointer;
+    box-shadow: 0 2px 6px rgba(15,23,42,0.15);
+    transition: transform .08s, box-shadow .12s, filter .12s;
+  }
+  .cc-visit-btn:active { transform: scale(0.97); box-shadow: 0 1px 3px rgba(15,23,42,0.15); }
+  .cc-visit-btn.visited-btn { background: var(--good-fg); }
+  .cc-visit-btn.visited-btn:hover, .cc-visit-btn.visited-btn.chosen { filter: brightness(1.08); }
+  .cc-visit-btn.notvisited-btn { background: var(--crit-fg); }
+  .cc-visit-btn.notvisited-btn:hover, .cc-visit-btn.notvisited-btn.chosen { filter: brightness(1.08); }
+  .cc-status-badge {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 12px 12px; border-radius: 9px; font-size: 0.96rem; font-weight: 600;
+  }
+  .cc-status-badge.visited { background: var(--good-bg); color: var(--good-fg); }
+  .cc-status-badge.notvisited { background: var(--crit-bg); color: var(--crit-fg); }
+  .cc-status-badge button { background: transparent; border: none; text-decoration: underline; color: inherit; font-family: inherit; font-size: 0.9rem; cursor: pointer; }
+  .cc-reason-row { display: flex; gap: 8px; margin-top: 8px; }
+  .cc-reason-row select {
+    flex: 1; padding: 10px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--offwhite); color: var(--text); font-family: inherit; font-size: 0.94rem;
+  }
+  .cc-reason-row button {
+    padding: 10px 16px; border-radius: 8px; border: none; background: var(--crit-fg); color: white;
+    font-family: inherit; font-size: 0.94rem; font-weight: 700; cursor: pointer;
+  }
+  .cc-msg { font-size: 0.88rem; margin-top: 6px; }
+  .cc-msg.error { color: var(--crit-fg); }
+
+  .cc-resched-q { margin: 0 0 8px; font-size: 0.94rem; font-weight: 600; color: var(--text); }
+  .cc-resched-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .cc-resched-btn {
+    flex: 1 1 auto; padding: 10px 8px; border-radius: 8px; border: 1.5px solid var(--brand); background: var(--white);
+    color: var(--brand); font-size: 0.88rem; font-weight: 700; font-family: inherit; cursor: pointer;
+  }
+  .cc-resched-btn:active { background: var(--brand); color: white; }
+  .cc-resched-btn.secondary { border-color: var(--border); color: var(--text-muted); }
+  .cc-resched-btn.secondary:active { background: var(--border); color: var(--text); }
+  .cc-resched-date-input {
+    width: 100%; margin-top: 8px; padding: 10px 10px; border-radius: 8px; border: 1px solid var(--electric);
+    background: var(--white); color: var(--text); font-family: inherit; font-size: 0.94rem;
+  }
+
+  /* Fixed bottom-sheet, independent of any card's position/stacking context - see the HTML comment
+     above the markup for why this replaced injecting the prompt inline into the card. */
+  .resched-modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.5); z-index: 100;
+    align-items: flex-end; justify-content: center; padding: 0;
+  }
+  .resched-modal-overlay.open { display: flex; }
+  .resched-modal-box {
+    background: var(--white); border-radius: 16px 16px 0 0; box-shadow: var(--shadow);
+    width: 100%; max-width: 520px; padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+    box-sizing: border-box;
+  }
+
+  /* ---- toolbar / collapsible settings drawer (search + date range) ---- */
+  .toolbar-row { margin-bottom: 10px; }
+  .btn-toolbar {
+    width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 11px; border-radius: 10px; border: 1px solid var(--border); background: var(--white);
+    color: var(--brand); font-size: 0.94rem; font-weight: 700; font-family: inherit; cursor: pointer;
+    box-shadow: var(--shadow);
+  }
+  .btn-toolbar:active { background: var(--ice); }
+  .settings-drawer {
+    background: var(--white); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); padding: 14px; margin-bottom: 12px;
+  }
+  .drawer-section { margin-bottom: 14px; }
+  .drawer-section:last-child { margin-bottom: 0; }
+  .drawer-section > label { display: block; font-size: 0.86rem; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; }
+  #agentSearchInput {
+    width: 100%; padding: 11px 12px; border-radius: 9px; border: 1px solid var(--border);
+    background: var(--offwhite); color: var(--text); font-family: inherit; font-size: 0.96rem;
+  }
+  #agentSearchInput:focus { outline: 2px solid var(--electric); outline-offset: 1px; }
+  .search-results { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow-y: auto; }
+  .search-result-item {
+    padding: 9px 10px; border-radius: 8px; background: var(--offwhite); border: 1px solid var(--border);
+    cursor: pointer; transition: background .12s;
+  }
+  .search-result-item:active { background: var(--ice); }
+  .search-result-name { font-size: 0.92rem; font-weight: 700; color: var(--text); }
+  .search-result-num { font-weight: 400; color: var(--text-muted); font-size: 0.84rem; }
+  .search-result-dates { font-size: 0.82rem; color: var(--brand); margin-top: 2px; }
+  .search-empty { font-size: 0.86rem; color: var(--text-muted); padding: 6px 2px; }
+  .range-quick-btns { display: flex; gap: 8px; margin-bottom: 10px; }
+  .range-btn {
+    flex: 1; padding: 10px 6px; border-radius: 9px; border: 1.5px solid var(--border); background: var(--offwhite);
+    color: var(--text); font-size: 0.88rem; font-weight: 700; font-family: inherit; cursor: pointer;
+  }
+  .range-btn.active { border-color: var(--brand); background: var(--brand); color: white; }
+  .date-group-header {
+    font-size: 0.92rem; font-weight: 700; color: var(--brand); background: var(--ice);
+    border-radius: 8px; padding: 8px 12px; margin: 14px 0 8px;
+  }
+  .date-group-header:first-child { margin-top: 0; }
+</style>
+
+<div class="topbar">
+  <div>
+    <div class="title">VisiFlow</div>
+    <div class="sub" id="topbarSub">אזור סוכן</div>
+  </div>
+  <button type="button" id="btnSwitchAgent" style="display:none;">החלפת סוכן</button>
+</div>
+
+<div class="content">
+
+  <!-- ===================== IDENTIFY SCREEN ===================== -->
+  <div class="screen active" id="screenIdentify">
+    <div class="identify-box">
+      <div class="mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg>
+      </div>
+      <h1>כניסת סוכן</h1>
+      <p>הזינו תעודת זהות כדי לראות את רשימת הלקוחות שלכם.</p>
+      <input type="text" id="agentIdInput" inputmode="numeric" placeholder="תעודת זהות" autocomplete="off" />
+      <button type="button" class="btn-block" id="btnIdentify">כניסה</button>
+      <div class="identify-msg" id="identifyMsg"></div>
+    </div>
+  </div>
+
+  <!-- ===================== CUSTOMER LIST SCREEN ===================== -->
+  <div class="screen" id="screenList">
+    <div class="toolbar-row">
+      <button type="button" class="btn-toolbar" id="btnToggleDrawer">🔍 חיפוש ותאריכים</button>
+    </div>
+    <div class="settings-drawer" id="settingsDrawer" style="display:none;">
+      <div class="drawer-section">
+        <label for="agentSearchInput">חיפוש לקוח (שם או מספר)</label>
+        <input type="text" id="agentSearchInput" placeholder="הקלידו לפחות 2 תווים..." autocomplete="off" />
+        <div class="search-results" id="agentSearchResults"></div>
+      </div>
+      <div class="drawer-section">
+        <label>טווח תצוגה</label>
+        <div class="range-quick-btns">
+          <button type="button" class="range-btn active" data-range="today">היום</button>
+          <button type="button" class="range-btn" data-range="week">השבוע</button>
+          <button type="button" class="range-btn" data-range="month">החודש</button>
+        </div>
+        <div class="date-bar" style="margin-bottom:0;">
+          <label for="visitDateInput">תאריך ספציפי</label>
+          <input type="date" id="visitDateInput" />
+        </div>
+      </div>
+    </div>
+    <div class="day-banner" id="dayBanner"></div>
+    <div class="loading-state" id="loadingState" style="display:none;">טוען...</div>
+    <div id="customerCards"></div>
+    <div class="empty-state" id="emptyState" style="display:none;">אין ביקורים מתוכננים לתאריך זה.</div>
+  </div>
+
+</div>
+
+<!-- Reschedule prompt - a fixed bottom-sheet, not something injected inline into the card that was
+     just marked "לא ביקרתי". An element appended deep inside a long, scrolling card list depends on
+     that card's exact position and stacking context to actually be visible - reported as working on
+     desktop but invisible on a real phone, which a fixed-position overlay sidesteps entirely: it's
+     always anchored to the viewport itself, never to wherever the triggering card happened to land. -->
+<div class="resched-modal-overlay" id="reschedModalOverlay">
+  <div class="resched-modal-box">
+    <div class="cc-status-badge notvisited" id="reschedModalReasonBadge"></div>
+    <p class="cc-resched-q">להזיז את הפגישה למועד אחר?</p>
+    <div class="cc-resched-actions">
+      <button type="button" class="cc-resched-btn" data-resched="tomorrow">📅 למחר</button>
+      <button type="button" class="cc-resched-btn" data-resched="pick">🗓️ תאריך אחר</button>
+      <button type="button" class="cc-resched-btn secondary" data-resched="skip">לא כרגע</button>
+    </div>
+    <input type="date" class="cc-resched-date-input" id="reschedModalDateInput" style="display:none;" />
+    <div class="cc-msg" id="reschedModalMsg"></div>
+  </div>
+</div>
+
+<script>
+const AGENT_ID_KEY = "visiflowAgentIdNumber";
+let agentVisits = [];
+let reasonsByCompany = {}; // companyId -> [{Id, Text}]
+let selectedDate = todayIso();
+let viewMode = "day"; // "day" | "week" | "month" - which range of days the list currently shows
+
+function fmtCurrency(n) { return n == null ? "—" : "₪" + Math.round(n).toLocaleString("he-IL"); }
+function todayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function isoDate(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function weekRangeOf(dateIso) {
+  const d = new Date(dateIso + "T00:00:00");
+  const start = new Date(d); start.setDate(d.getDate() - d.getDay());
+  const end = new Date(start); end.setDate(start.getDate() + 6);
+  return { start: isoDate(start), end: isoDate(end) };
+}
+function monthRangeOf(dateIso) {
+  const d = new Date(dateIso + "T00:00:00");
+  const start = new Date(d.getFullYear(), d.getMonth(), 1);
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return { start: isoDate(start), end: isoDate(end) };
+}
+
+// Same preset list/labels as the "תקן ביקורים ללקוח" screen in the admin app, so a customer's
+// standard reads the same way here as it does there instead of a raw decimal.
+const AGENT_FREQ_PRESETS = [
+  { label: "5 פעמים בשבוע", value: 5 }, { label: "4 פעמים בשבוע", value: 4 }, { label: "3 פעמים בשבוע", value: 3 },
+  { label: "פעמיים בשבוע", value: 2 }, { label: "פעם בשבוע", value: 1 }, { label: "פעם בשבועיים", value: 0.5 },
+  { label: "פעם ב-3 שבועות", value: 0.333333 }, { label: "פעם בחודש", value: 0.233333 },
+  { label: "פעם ברבעון", value: 0.076923 }, { label: "פעם בחצי שנה", value: 0.038462 }, { label: "פעם בשנה", value: 0.019178 }
+];
+function fmtFrequency(val) {
+  if (val == null) return `<span class="cc-never">לא הוגדר</span>`;
+  const preset = AGENT_FREQ_PRESETS.find(p => Math.abs(p.value - Number(val)) < 0.0005);
+  return preset ? preset.label : `${Number(val).toFixed(2)} ביקורים/שבוע`;
+}
+function fmtSalesTrend(current, previous) {
+  if (previous == null || Number(previous) === 0) return "";
+  const pct = Math.round((Number(current || 0) - Number(previous)) / Number(previous) * 100);
+  return `<span class="cc-trend ${pct >= 0 ? "up" : "down"}">${pct >= 0 ? "▲" : "▼"} ${Math.abs(pct)}%</span>`;
+}
+function fmtLastVisit(c) {
+  if (!c.LastVisitDate) return `<span class="cc-never">מעולם לא ביקר</span>`;
+  const d = new Date(c.LastVisitDate).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const days = c.DaysSinceLastVisit;
+  return `${d}${days != null ? ` (לפני ${days} ימים)` : ""}`;
+}
+const DIST_DAY_LABELS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+function fmtDistDays(c) {
+  if (!c.DistDefined) return `<span class="cc-never">לא הוגדרו</span>`;
+  const flags = [c.DistSunday, c.DistMonday, c.DistTuesday, c.DistWednesday, c.DistThursday, c.DistFriday, c.DistSaturday];
+  const active = DIST_DAY_LABELS.filter((_, i) => flags[i]);
+  return active.length ? active.join(", ") : `<span class="cc-never">אין ימי הפצה החודש</span>`;
+}
+
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === id));
+}
+
+async function fetchReasonsForCompany(companyId) {
+  if (reasonsByCompany[companyId]) return reasonsByCompany[companyId];
+  try {
+    const res = await fetch(`/api/nonvisitreasons?companyId=${companyId}`);
+    reasonsByCompany[companyId] = res.ok ? await res.json() : [];
+  } catch { reasonsByCompany[companyId] = []; }
+  return reasonsByCompany[companyId];
+}
+
+function renderCustomerCard(c) {
+  const wazeUrl = c.Address ? `https://waze.com/ul?q=${encodeURIComponent(c.Address)}&navigate=yes` : null;
+  const telUrl = c.Phone ? `tel:${c.Phone.replace(/[^0-9+]/g, "")}` : null;
+  // Keyed by PlanEntryId (unique per row always), not CustomerNumber - in week/month view the SAME
+  // customer can legitimately appear on several different dates, so CustomerNumber alone would no
+  // longer uniquely identify one card's DOM elements or which entry an action button applies to.
+  const key = c.PlanEntryId;
+
+  let statusHtml;
+  if (c.Outcome === "Visited") {
+    statusHtml = `<div class="cc-status-badge visited"><span>✓ סומן כ"ביקרתי"</span><button type="button" data-action="change-status" data-key="${key}">שינוי</button></div>`;
+  } else if (c.Outcome === "NotVisited") {
+    statusHtml = `<div class="cc-status-badge notvisited"><span>✗ לא ביקרתי - ${c.ReasonText || ""}</span><button type="button" data-action="change-status" data-key="${key}">שינוי</button></div>`;
+  } else {
+    statusHtml = `
+      <div class="cc-visit-row">
+        <button type="button" class="cc-visit-btn visited-btn" data-action="mark-visited" data-key="${key}">✓ ביקרתי</button>
+        <button type="button" class="cc-visit-btn notvisited-btn" data-action="show-reason" data-key="${key}">✗ לא ביקרתי</button>
+      </div>
+      <div class="cc-reason-row" data-reason-row="${key}" style="display:none;">
+        <select data-reason-select="${key}"></select>
+        <button type="button" data-action="confirm-notvisited" data-key="${key}">אישור</button>
+      </div>
+      <div class="cc-msg" data-msg="${key}"></div>`;
+  }
+
+  return `
+    <div class="customer-card" data-card="${key}">
+      <div class="cc-head">
+        <div>
+          <div class="cc-name">${c.CustomerName}</div>
+          <div class="cc-number">מספר לקוח ${c.CustomerNumber}${viewMode !== "day" ? ` · ${formatBannerDate(c.PlannedDate.slice(0, 10))}` : ""}</div>
+        </div>
+      </div>
+      ${c.AdminNote ? `<div class="cc-admin-note">📌 <b>הערה מהמנהל:</b> ${c.AdminNote}</div>` : ""}
+      <div class="cc-sales">
+        <span>מכר השנה: <b>${fmtCurrency(c.SalesYtdCurrentYear)}</b></span>
+        <span>מכר אשתקד: <b>${fmtCurrency(c.SalesYtdPreviousYear)}</b></span>
+        ${fmtSalesTrend(c.SalesYtdCurrentYear, c.SalesYtdPreviousYear)}
+      </div>
+      <div class="cc-info-grid">
+        <div class="cc-info-item"><span class="cc-info-label">ביקור אחרון</span><span class="cc-info-value">${fmtLastVisit(c)}</span></div>
+        <div class="cc-info-item"><span class="cc-info-label">תקן ביקורים</span><span class="cc-info-value">${fmtFrequency(c.RequiredVisitsPerWeek)}</span></div>
+        <div class="cc-info-item" style="grid-column:1 / -1;"><span class="cc-info-label">ימי הפצה</span><span class="cc-info-value">${fmtDistDays(c)}</span></div>
+      </div>
+      <div class="cc-actions">
+        ${telUrl ? `<a class="cc-action-btn tel-btn" href="${telUrl}">📞 ${c.Phone}</a>` : ""}
+        ${wazeUrl ? `<a class="cc-action-btn waze-btn" href="${wazeUrl}" target="_blank" rel="noopener">🧭 ניווט ב-Waze</a>` : ""}
+      </div>
+      <div class="cc-status-area" data-status-area="${key}">${statusHtml}</div>
+    </div>`;
+}
+
+async function renderCustomerCards() {
+  const container = document.getElementById("customerCards");
+  document.getElementById("emptyState").style.display = agentVisits.length === 0 ? "block" : "none";
+
+  if (viewMode === "day") {
+    container.innerHTML = agentVisits.map(renderCustomerCard).join("");
+  } else {
+    // Week/month view: group cards under a date header, one section per day that actually has visits.
+    const byDate = new Map();
+    agentVisits.forEach(c => {
+      const dateKey = c.PlannedDate.slice(0, 10);
+      if (!byDate.has(dateKey)) byDate.set(dateKey, []);
+      byDate.get(dateKey).push(c);
+    });
+    const sortedDates = [...byDate.keys()].sort();
+    container.innerHTML = sortedDates.map(dateKey =>
+      `<div class="date-group-header">${formatBannerDate(dateKey)}</div>` + byDate.get(dateKey).map(renderCustomerCard).join("")
+    ).join("");
+  }
+
+  // Populate reason selects for cards that need them (not-yet-marked customers).
+  const companiesNeeded = [...new Set(agentVisits.filter(c => !c.Outcome).map(c => c.CompanyId))];
+  await Promise.all(companiesNeeded.map(fetchReasonsForCompany));
+  agentVisits.filter(c => !c.Outcome).forEach(c => {
+    const select = container.querySelector(`[data-reason-select="${c.PlanEntryId}"]`);
+    // A blank placeholder first, selected by default (native <select> otherwise auto-selects the
+    // first real option) - the agent must actively pick a reason instead of silently submitting
+    // whatever happened to be first in the list.
+    if (select) select.innerHTML = `<option value="" selected disabled>בחרו סיבה...</option>` +
+      (reasonsByCompany[c.CompanyId] || []).map(r => `<option value="${r.Id}">${r.Text}</option>`).join("");
+  });
+}
+
+function formatBannerDate(dateIso) {
+  const d = new Date(dateIso + "T00:00:00");
+  return d.toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" });
+}
+
+async function loadAgentVisitPlan(agentIdNumber, dateIso) {
+  const res = await fetch(`/api/agent/visitplan?agentIdNumber=${encodeURIComponent(agentIdNumber)}&date=${encodeURIComponent(dateIso)}`);
+  if (!res.ok) throw new Error(await res.text());
+  agentVisits = await res.json();
+}
+async function loadAgentVisitPlanRange(agentIdNumber, startIso, endIso) {
+  const res = await fetch(`/api/agent/visitplan/range?agentIdNumber=${encodeURIComponent(agentIdNumber)}&startDate=${startIso}&endDate=${endIso}`);
+  if (!res.ok) throw new Error(await res.text());
+  agentVisits = await res.json();
+}
+
+function currentBannerText() {
+  if (viewMode === "day") return `רשימת ביקורים ל-${formatBannerDate(selectedDate)}`;
+  if (viewMode === "week") { const r = weekRangeOf(selectedDate); return `ביקורים לשבוע: ${formatBannerDate(r.start)} - ${formatBannerDate(r.end)}`; }
+  const monthLabel = new Date(selectedDate + "T00:00:00").toLocaleDateString("he-IL", { month: "long", year: "numeric" });
+  return `ביקורים לחודש ${monthLabel}`;
+}
+
+async function refreshList() {
+  const agentIdNumber = localStorage.getItem(AGENT_ID_KEY);
+  if (!agentIdNumber) return;
+  // Preserved by default so re-rendering the list after an in-place action (mark visited, reschedule)
+  // doesn't kick the agent back to the top of the page - clearing #customerCards below collapses the
+  // page height for a moment, which would otherwise force the scroll position down to 0. Call sites
+  // that are genuine navigation (date/range picked, search result jumped to) explicitly scroll back
+  // to the top themselves right after calling this, since landing on new content there SHOULD reset.
+  const scrollY = window.scrollY;
+  document.getElementById("loadingState").style.display = "block";
+  document.getElementById("customerCards").innerHTML = "";
+  document.getElementById("emptyState").style.display = "none";
+  try {
+    if (viewMode === "day") {
+      await loadAgentVisitPlan(agentIdNumber, selectedDate);
+    } else {
+      const r = viewMode === "week" ? weekRangeOf(selectedDate) : monthRangeOf(selectedDate);
+      await loadAgentVisitPlanRange(agentIdNumber, r.start, r.end);
+    }
+  } catch {
+    agentVisits = [];
+  }
+  document.getElementById("loadingState").style.display = "none";
+  document.getElementById("dayBanner").textContent = currentBannerText();
+  await renderCustomerCards();
+  window.scrollTo(0, scrollY);
+}
+
+async function identify(agentIdNumber) {
+  const msg = document.getElementById("identifyMsg");
+  msg.textContent = "";
+  selectedDate = todayIso();
+  viewMode = "day";
+  document.getElementById("visitDateInput").value = selectedDate;
+  try {
+    await loadAgentVisitPlan(agentIdNumber, selectedDate);
+  } catch {
+    msg.textContent = "שגיאת תקשורת עם השרת";
+    return;
+  }
+  localStorage.setItem(AGENT_ID_KEY, agentIdNumber);
+  document.getElementById("topbarSub").textContent = agentVisits[0] ? (agentVisits[0].AgentName || "") : "";
+  document.getElementById("dayBanner").textContent = currentBannerText();
+  document.getElementById("btnSwitchAgent").style.display = "";
+  showScreen("screenList");
+  await renderCustomerCards();
+}
+
+function setActiveRangeBtn(range) {
+  document.querySelectorAll(".range-btn").forEach(b => b.classList.toggle("active", b.dataset.range === range));
+}
+
+document.getElementById("visitDateInput").addEventListener("change", (e) => {
+  if (!e.target.value) return;
+  selectedDate = e.target.value;
+  viewMode = "day";
+  setActiveRangeBtn(null); // a specific picked date isn't any of the quick-range buttons
+  refreshList().then(() => window.scrollTo(0, 0));
+});
+
+document.getElementById("btnToggleDrawer").addEventListener("click", () => {
+  const drawer = document.getElementById("settingsDrawer");
+  drawer.style.display = drawer.style.display === "none" ? "block" : "none";
+});
+
+document.querySelectorAll(".range-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const range = btn.dataset.range;
+    setActiveRangeBtn(range);
+    if (range === "today") {
+      selectedDate = todayIso();
+      document.getElementById("visitDateInput").value = selectedDate;
+      viewMode = "day";
+    } else {
+      viewMode = range; // "week" | "month"
+    }
+    refreshList().then(() => window.scrollTo(0, 0));
+  });
+});
+
+let agentSearchDebounce = null;
+document.getElementById("agentSearchInput").addEventListener("input", (e) => {
+  clearTimeout(agentSearchDebounce);
+  const q = e.target.value.trim();
+  const resultsEl = document.getElementById("agentSearchResults");
+  if (q.length < 2) { resultsEl.innerHTML = ""; return; }
+  agentSearchDebounce = setTimeout(async () => {
+    const agentIdNumber = localStorage.getItem(AGENT_ID_KEY);
+    if (!agentIdNumber) return;
+    try {
+      const res = await fetch(`/api/agent/visitplan/search?agentIdNumber=${encodeURIComponent(agentIdNumber)}&query=${encodeURIComponent(q)}`);
+      renderSearchResults(res.ok ? await res.json() : []);
+    } catch {
+      resultsEl.innerHTML = `<div class="search-empty">שגיאת תקשורת</div>`;
+    }
+  }, 300);
+});
+
+function renderSearchResults(results) {
+  const el = document.getElementById("agentSearchResults");
+  if (results.length === 0) { el.innerHTML = `<div class="search-empty">אין תוצאות</div>`; return; }
+  // Group by customer - one search hit per customer, listing every date they're scheduled on.
+  const byCustomer = new Map();
+  results.forEach(r => {
+    if (!byCustomer.has(r.CustomerNumber)) byCustomer.set(r.CustomerNumber, { name: r.CustomerName, dates: [] });
+    byCustomer.get(r.CustomerNumber).dates.push(r.PlannedDate.slice(0, 10));
+  });
+  el.innerHTML = [...byCustomer.entries()].map(([num, info]) => `
+    <div class="search-result-item" data-jump-date="${info.dates[0]}">
+      <div class="search-result-name">${info.name} <span class="search-result-num">(${num})</span></div>
+      <div class="search-result-dates">${info.dates.map(formatBannerDate).join(" · ")}</div>
+    </div>`).join("");
+}
+
+document.getElementById("agentSearchResults").addEventListener("click", (e) => {
+  const item = e.target.closest("[data-jump-date]");
+  if (!item) return;
+  selectedDate = item.dataset.jumpDate;
+  viewMode = "day";
+  document.getElementById("visitDateInput").value = selectedDate;
+  setActiveRangeBtn(null);
+  document.getElementById("settingsDrawer").style.display = "none";
+  document.getElementById("agentSearchInput").value = "";
+  document.getElementById("agentSearchResults").innerHTML = "";
+  refreshList().then(() => window.scrollTo(0, 0));
+});
+
+document.getElementById("btnIdentify").addEventListener("click", () => {
+  const v = document.getElementById("agentIdInput").value.trim();
+  if (!v) return;
+  identify(v);
+});
+document.getElementById("agentIdInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("btnIdentify").click();
+});
+document.getElementById("btnSwitchAgent").addEventListener("click", () => {
+  localStorage.removeItem(AGENT_ID_KEY);
+  agentVisits = [];
+  document.getElementById("agentIdInput").value = "";
+  document.getElementById("btnSwitchAgent").style.display = "none";
+  document.getElementById("topbarSub").textContent = "אזור סוכן";
+  showScreen("screenIdentify");
+});
+
+// Identified by PlanEntryId ("key" throughout this section) rather than CustomerNumber - week/month
+// view can legitimately show the same customer more than once (different dates), so only the plan
+// entry's own id disambiguates which row an action applies to. VisitDate/isEarly are derived from
+// that specific entry's own PlannedDate, not the global day-view selectedDate, so acting on a card
+// from a week/month list always records against the date the card is actually showing.
+async function submitVisit(planEntryId, outcome, reasonId) {
+  const customer = agentVisits.find(c => String(c.PlanEntryId) === String(planEntryId));
+  if (!customer) throw new Error("entry not found");
+  const visitDate = customer.PlannedDate.slice(0, 10);
+  const isEarly = outcome === "Visited" && visitDate > todayIso();
+  const body = {
+    CompanyId: customer.CompanyId, CustomerNumber: customer.CustomerNumber, VisitDate: visitDate,
+    AgentName: customer.AgentName, Outcome: outcome, NonVisitReasonId: reasonId,
+    Notes: isEarly ? `הפגישה הוקדמה - בוצעה בפועל ב-${formatBannerDate(todayIso())} עבור תאריך מתוכנן ${formatBannerDate(visitDate)}` : null
+  };
+  const res = await fetch("/api/customervisits", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+document.getElementById("customerCards").addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-action]");
+  if (!btn) return;
+  const action = btn.dataset.action;
+  const key = btn.dataset.key;
+
+  if (action === "show-reason") {
+    document.querySelector(`[data-reason-row="${key}"]`).style.display = "flex";
+    return;
+  }
+  if (action === "change-status") {
+    const customer = agentVisits.find(c => String(c.PlanEntryId) === String(key));
+    if (customer) { customer.Outcome = null; customer.ReasonText = null; }
+    await renderCustomerCards();
+    return;
+  }
+  if (action === "mark-visited") {
+    try {
+      await submitVisit(key, "Visited", null);
+      await refreshList();
+    } catch {
+      const msgEl = document.querySelector(`[data-msg="${key}"]`);
+      if (msgEl) { msgEl.className = "cc-msg error"; msgEl.textContent = "שגיאה בשמירה - נסו שוב"; }
+    }
+    return;
+  }
+  if (action === "confirm-notvisited") {
+    const select = document.querySelector(`[data-reason-select="${key}"]`);
+    const reasonId = Number(select.value);
+    if (!reasonId) {
+      // The reason select has no pre-picked default (on purpose - the agent must actively choose),
+      // so a click on "אישור" before picking one needs to say so out loud instead of silently doing
+      // nothing, which otherwise looks exactly like the button - and the reschedule prompt after it -
+      // is broken.
+      const msgEl = document.querySelector(`[data-msg="${key}"]`);
+      if (msgEl) { msgEl.className = "cc-msg error"; msgEl.textContent = "יש לבחור סיבה לפני האישור"; }
+      select.focus();
+      return;
+    }
+    const reasonText = select.selectedOptions[0] ? select.selectedOptions[0].textContent : "";
+    try {
+      await submitVisit(key, "NotVisited", reasonId);
+    } catch {
+      const msgEl = document.querySelector(`[data-msg="${key}"]`);
+      if (msgEl) { msgEl.className = "cc-msg error"; msgEl.textContent = "שגיאה בשמירה - נסו שוב"; }
+      return;
+    }
+    showReschedulePrompt(key, reasonText);
+  }
+});
+
+// Shown right after the agent submits a "לא ביקרתי" outcome - lets them immediately move the plan
+// entry to a new date (tomorrow, or any date they pick) instead of it just sitting stuck on today's
+// list. The move is recorded server-side (VisitPlanEntry.ManuallyModifiedNote) so the admin's
+// "תוכנית ביקורים" screen shows that the agent - not the algorithm - moved it, and why.
+//
+// A fixed bottom-sheet (see reschedModalOverlay's CSS/HTML) - not something injected inline into the
+// card, which was reported as visible on desktop but not on a real phone. Two module-level vars carry
+// which entry/reason the open modal is currently acting on, since its buttons are static markup
+// (rendered once, reused for every card) rather than rebuilt per-card with their own data-key.
+let reschedModalKey = null;
+let reschedModalReasonText = "";
+
+function showReschedulePrompt(key, reasonText) {
+  // Update the card itself to the plain "not visited" state (matches renderCustomerCard's own
+  // c.Outcome === "NotVisited" branch) - no inline resched controls anymore, those live in the modal.
+  const area = document.querySelector(`[data-status-area="${key}"]`);
+  if (area) {
+    area.innerHTML = `<div class="cc-status-badge notvisited"><span>✗ לא ביקרתי - ${reasonText}</span><button type="button" data-action="change-status" data-key="${key}">שינוי</button></div>`;
+  }
+
+  reschedModalKey = key;
+  reschedModalReasonText = reasonText || "";
+  document.getElementById("reschedModalReasonBadge").innerHTML = `<span>✗ לא ביקרתי - ${reasonText}</span>`;
+  const dateInput = document.getElementById("reschedModalDateInput");
+  dateInput.style.display = "none";
+  dateInput.value = "";
+  const entry = agentVisits.find(c => String(c.PlanEntryId) === String(key));
+  dateInput.min = entry ? entry.PlannedDate.slice(0, 10) : selectedDate;
+  document.getElementById("reschedModalMsg").textContent = "";
+  document.getElementById("reschedModalOverlay").classList.add("open");
+}
+
+function closeReschedModal() {
+  document.getElementById("reschedModalOverlay").classList.remove("open");
+  reschedModalKey = null;
+}
+
+document.getElementById("reschedModalOverlay").addEventListener("click", (e) => {
+  // Backdrop click (not the box itself) counts as "לא כרגע" - closes without moving anything.
+  if (e.target.id === "reschedModalOverlay") closeReschedModal();
+});
+
+document.getElementById("reschedModalOverlay").addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-resched]");
+  if (!btn || !reschedModalKey) return;
+  const action = btn.dataset.resched;
+  if (action === "skip") { closeReschedModal(); return; }
+  if (action === "tomorrow") {
+    const entry = agentVisits.find(c => String(c.PlanEntryId) === String(reschedModalKey));
+    const base = entry ? entry.PlannedDate.slice(0, 10) : selectedDate;
+    await doReschedule(reschedModalKey, addDaysIso(base, 1), reschedModalReasonText);
+    return;
+  }
+  if (action === "pick") {
+    const dateInput = document.getElementById("reschedModalDateInput");
+    dateInput.style.display = "block";
+    dateInput.focus();
+    if (dateInput.showPicker) { try { dateInput.showPicker(); } catch { /* not supported */ } }
+  }
+});
+
+document.getElementById("reschedModalDateInput").addEventListener("change", async (e) => {
+  if (!e.target.value || !reschedModalKey) return;
+  await doReschedule(reschedModalKey, e.target.value, reschedModalReasonText);
+});
+
+function addDaysIso(iso, days) {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+async function doReschedule(planEntryId, newDateIso, reasonText) {
+  if (!planEntryId) { closeReschedModal(); await refreshList(); return; }
+  try {
+    const res = await fetch(`/api/visitplan/entries/${planEntryId}/reschedule`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ NewDate: newDateIso, Source: "Agent", ReasonText: reasonText || null })
+    });
+    if (!res.ok) throw new Error(await res.text());
+  } catch {
+    const msgEl = document.getElementById("reschedModalMsg");
+    if (msgEl) { msgEl.className = "cc-msg error"; msgEl.textContent = "שגיאה בהזזת הפגישה - נסו שוב"; }
+    return;
+  }
+  closeReschedModal();
+  await refreshList();
+}
+
+(function init() {
+  // Always land on the login screen by default (it's already shown by default in the HTML/CSS) -
+  // pre-fill the last-used ID as a convenience only, never auto-submit it. The agent must explicitly
+  // press "כניסה" every time, even on the same phone as last time.
+  const remembered = localStorage.getItem(AGENT_ID_KEY);
+  if (remembered) {
+    document.getElementById("agentIdInput").value = remembered;
+  }
+})();
+</script>

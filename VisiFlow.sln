@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{53938805-ECE9-48E9-A050-376096381E48}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VisiFlow.Data", "src\VisiFlow.Data\VisiFlow.Data.csproj", "{CCBAB4A0-B1D9-48FC-BCA9-06B2936BD4D8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VisiFlow.Api", "src\VisiFlow.Api\VisiFlow.Api.csproj", "{12055A6D-7569-4251-9B27-FB582E04B640}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CCBAB4A0-B1D9-48FC-BCA9-06B2936BD4D8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CCBAB4A0-B1D9-48FC-BCA9-06B2936BD4D8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CCBAB4A0-B1D9-48FC-BCA9-06B2936BD4D8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CCBAB4A0-B1D9-48FC-BCA9-06B2936BD4D8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{12055A6D-7569-4251-9B27-FB582E04B640}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{12055A6D-7569-4251-9B27-FB582E04B640}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{12055A6D-7569-4251-9B27-FB582E04B640}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{12055A6D-7569-4251-9B27-FB582E04B640}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{CCBAB4A0-B1D9-48FC-BCA9-06B2936BD4D8} = {53938805-ECE9-48E9-A050-376096381E48}
+		{12055A6D-7569-4251-9B27-FB582E04B640} = {53938805-ECE9-48E9-A050-376096381E48}
+	EndGlobalSection
+EndGlobal

@@ -19,4 +19,10 @@ COPY --from=build /app .
 ENV ASPNETCORE_URLS=http://0.0.0.0:10000
 EXPOSE 10000
 
+# ASP.NET Core watches appsettings.json for live changes via inotify by default - Render's free-tier
+# containers have a very low inotify instance limit that this immediately exhausts, crashing the app
+# on startup (confirmed against a real deploy: "configured user limit (128) on the number of inotify
+# instances has been reached"). Config hot-reload isn't needed here, so just turn it off.
+ENV DOTNET_hostBuilder__reloadConfigOnChange=false
+
 ENTRYPOINT ["sh", "-c", "ASPNETCORE_URLS=http://0.0.0.0:${PORT:-10000} dotnet VisiFlow.Api.dll"]

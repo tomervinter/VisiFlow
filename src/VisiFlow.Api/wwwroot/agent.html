@@ -125,6 +125,25 @@
   .empty-state { text-align: center; color: var(--text-muted); padding: 40px 20px; font-size: 1.05rem; }
   .loading-state { text-align: center; color: var(--text-muted); padding: 24px 20px; font-size: 1rem; }
 
+  /* Compact list row (screenList) - tap to open the full card below (screenDetail). */
+  .customer-row {
+    display: flex; align-items: center; gap: 10px; background: var(--white); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: background .12s;
+  }
+  .customer-row:active { background: var(--ice); }
+  .cl-row-main { flex: 1; min-width: 0; }
+  .cl-row-name { font-weight: 700; font-size: 1.02rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cl-row-sub { font-size: 0.82rem; color: var(--text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cl-row-note { font-size: 0.78rem; color: var(--warn-fg); margin-top: 2px; }
+  .cl-status-dot {
+    flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 0.95rem; font-weight: 700;
+  }
+  .cl-status-dot.visited { background: var(--good-bg); color: var(--good-fg); }
+  .cl-status-dot.notvisited { background: var(--crit-bg); color: var(--crit-fg); }
+  .cl-status-dot.pending { background: var(--offwhite); border: 1.5px dashed var(--border); }
+  .cl-row-arrow { flex-shrink: 0; color: var(--text-muted); font-size: 1.2rem; }
+
   .customer-card {
     background: var(--white); border: 2px solid var(--card-border); border-radius: 14px;
     box-shadow: var(--shadow); padding: 15px 14px; margin-bottom: 16px;
@@ -322,6 +341,12 @@
     <div class="empty-state" id="emptyState" style="display:none;">אין ביקורים מתוכננים לתאריך זה.</div>
   </div>
 
+  <!-- ===================== CUSTOMER DETAIL SCREEN ===================== -->
+  <div class="screen" id="screenDetail">
+    <button type="button" class="btn-toolbar" id="btnBackToList" style="margin-bottom:10px;">→ חזרה לרשימה</button>
+    <div id="customerDetail"></div>
+  </div>
+
 </div>
 
 <!-- Reschedule prompt - a fixed bottom-sheet, not something injected inline into the card that was
@@ -467,14 +492,34 @@ function renderCustomerCard(c) {
     </div>`;
 }
 
-async function renderCustomerCards() {
+// Compact one-line row for the list screen - tapping it opens the full renderCustomerCard() detail
+// (screenDetail) below. Kept deliberately minimal (name, number/date, a status dot) - all the sales
+// info, actions, etc. only need to exist once, in the detail view.
+function renderCustomerRow(c) {
+  const key = c.PlanEntryId;
+  const statusDot = c.Outcome === "Visited" ? `<span class="cl-status-dot visited">✓</span>`
+    : c.Outcome === "NotVisited" ? `<span class="cl-status-dot notvisited">✗</span>`
+    : `<span class="cl-status-dot pending"></span>`;
+  return `
+    <div class="customer-row" data-row-key="${key}">
+      <div class="cl-row-main">
+        <div class="cl-row-name">${c.CustomerName}</div>
+        <div class="cl-row-sub">מספר לקוח ${c.CustomerNumber}${viewMode !== "day" ? ` · ${formatBannerDate(c.PlannedDate.slice(0, 10))}` : ""}</div>
+        ${c.AdminNote ? `<div class="cl-row-note">📌 ${c.AdminNote}</div>` : ""}
+      </div>
+      ${statusDot}
+      <span class="cl-row-arrow">‹</span>
+    </div>`;
+}
+
+function renderCustomerList() {
   const container = document.getElementById("customerCards");
   document.getElementById("emptyState").style.display = agentVisits.length === 0 ? "block" : "none";
 
   if (viewMode === "day") {
-    container.innerHTML = agentVisits.map(renderCustomerCard).join("");
+    container.innerHTML = agentVisits.map(renderCustomerRow).join("");
   } else {
-    // Week/month view: group cards under a date header, one section per day that actually has visits.
+    // Week/month view: group rows under a date header, one section per day that actually has visits.
     const byDate = new Map();
     agentVisits.forEach(c => {
       const dateKey = c.PlannedDate.slice(0, 10);
@@ -483,21 +528,34 @@ async function renderCustomerCards() {
     });
     const sortedDates = [...byDate.keys()].sort();
     container.innerHTML = sortedDates.map(dateKey =>
-      `<div class="date-group-header">${formatBannerDate(dateKey)}</div>` + byDate.get(dateKey).map(renderCustomerCard).join("")
+      `<div class="date-group-header">${formatBannerDate(dateKey)}</div>` + byDate.get(dateKey).map(renderCustomerRow).join("")
     ).join("");
   }
+}
 
-  // Populate reason selects for cards that need them (not-yet-marked customers).
-  const companiesNeeded = [...new Set(agentVisits.filter(c => !c.Outcome).map(c => c.CompanyId))];
-  await Promise.all(companiesNeeded.map(fetchReasonsForCompany));
-  agentVisits.filter(c => !c.Outcome).forEach(c => {
+// Which customer's full card is currently open on screenDetail (PlanEntryId) - null when the agent
+// is on the list screen instead.
+let selectedDetailKey = null;
+
+async function showCustomerDetail(key) {
+  selectedDetailKey = key;
+  await renderCustomerDetail();
+  showScreen("screenDetail");
+  window.scrollTo(0, 0);
+}
+
+async function renderCustomerDetail() {
+  const container = document.getElementById("customerDetail");
+  const c = agentVisits.find(x => String(x.PlanEntryId) === String(selectedDetailKey));
+  if (!c) { container.innerHTML = ""; return; }
+  container.innerHTML = renderCustomerCard(c);
+  if (!c.Outcome) {
+    // Same "blank placeholder first" reasoning as the old card-list version - see renderCustomerList.
+    await fetchReasonsForCompany(c.CompanyId);
     const select = container.querySelector(`[data-reason-select="${c.PlanEntryId}"]`);
-    // A blank placeholder first, selected by default (native <select> otherwise auto-selects the
-    // first real option) - the agent must actively pick a reason instead of silently submitting
-    // whatever happened to be first in the list.
     if (select) select.innerHTML = `<option value="" selected disabled>בחרו סיבה...</option>` +
       (reasonsByCompany[c.CompanyId] || []).map(r => `<option value="${r.Id}">${r.Text}</option>`).join("");
-  });
+  }
 }
 
 function formatBannerDate(dateIso) {
@@ -547,7 +605,10 @@ async function refreshList() {
   }
   document.getElementById("loadingState").style.display = "none";
   document.getElementById("dayBanner").textContent = currentBannerText();
-  await renderCustomerCards();
+  renderCustomerList();
+  // Keep an open detail view in sync too (e.g. after marking visited/rescheduling from there) -
+  // agentVisits is already fresh at this point, renderCustomerDetail just re-reads from it.
+  if (document.getElementById("screenDetail").classList.contains("active")) await renderCustomerDetail();
   window.scrollTo(0, scrollY);
 }
 
@@ -568,7 +629,7 @@ async function identify(agentIdNumber) {
   document.getElementById("dayBanner").textContent = currentBannerText();
   document.getElementById("btnSwitchAgent").style.display = "";
   showScreen("screenList");
-  await renderCustomerCards();
+  renderCustomerList();
 }
 
 function setActiveRangeBtn(range) {
@@ -687,7 +748,18 @@ async function submitVisit(planEntryId, outcome, reasonId) {
   return res.json();
 }
 
-document.getElementById("customerCards").addEventListener("click", async (e) => {
+document.getElementById("customerCards").addEventListener("click", (e) => {
+  const row = e.target.closest("[data-row-key]");
+  if (!row) return;
+  showCustomerDetail(row.dataset.rowKey);
+});
+document.getElementById("btnBackToList").addEventListener("click", () => {
+  selectedDetailKey = null;
+  showScreen("screenList");
+  window.scrollTo(0, 0);
+});
+
+document.getElementById("customerDetail").addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-action]");
   if (!btn) return;
   const action = btn.dataset.action;
@@ -700,7 +772,7 @@ document.getElementById("customerCards").addEventListener("click", async (e) => 
   if (action === "change-status") {
     const customer = agentVisits.find(c => String(c.PlanEntryId) === String(key));
     if (customer) { customer.Outcome = null; customer.ReasonText = null; }
-    await renderCustomerCards();
+    await renderCustomerDetail();
     return;
   }
   if (action === "mark-visited") {

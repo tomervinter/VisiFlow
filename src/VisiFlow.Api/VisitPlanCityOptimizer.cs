@@ -15,12 +15,16 @@ public record CityOptimizationResult(int SwapsApplied, int FragmentationBefore, 
 /// an entry that was already placed by a human (ManuallyModifiedAt set).
 ///
 /// Two passes, run in order:
-/// 1. Direct consolidation - for each agent+city-cluster+week that spans more than one day, moves
-///    every eligible entry directly onto whichever day already has the most of that cluster's visits
-///    that week, as long as the move is legal for that customer (see below) and the target day still
-///    has spare daily capacity (VisitPlanWeights). Unlike a swap, this needs no "trade partner" - it's
-///    what actually satisfies "put every visit to the same city that week on the same day", which a
-///    pairwise swap alone can't guarantee (nothing to swap with = nothing moves, even with room to spare).
+/// 1. Direct consolidation, in two priority TIERS - for each agent+group+week that spans more than one
+///    day, moves every eligible entry directly onto whichever day already has the most of that group's
+///    visits that week, as long as the move is legal for that customer (see below) and the target day
+///    still has spare daily capacity (VisitPlanWeights). Unlike a swap, this needs no "trade partner" -
+///    it's what actually satisfies "put every visit to the same city that week on the same day", which
+///    a pairwise swap alone can't guarantee (nothing to swap with = nothing moves, even with room to
+///    spare). Tier A groups by the exact city; tier B (run second, on tier A's now-settled dates) groups
+///    by the admin-defined "nearby cities" cluster (CityGroup) instead - so two visits to the literal
+///    same city always get consolidated before a merely-nearby cluster-mate gets a say in which day
+///    "wins", rather than the two kinds of grouping competing on equal footing.
 /// 2. Pairwise swap local-search (same agent, different cities, each side's new date legal for the
 ///    other's customer) - repeatedly finds a swap that strictly reduces the total count of
 ///    distinct-city-per-agent-per-day pairs, until no improving swap remains or a pass cap is hit.
@@ -112,6 +116,11 @@ public static class VisitPlanCityOptimizer
                 distByCustomer.TryGetValue(entry.CustomerNumber, out var dd);
                 var distDays = dd == null ? new List<DayOfWeek>() : VisitPlanGenerator.ActiveWeekdays(dd);
                 var myEntries = entriesByCustomer[entry.CustomerNumber];
+                // A customer's OTHER entries this month (their other weekly occurrences) already own
+                // their own dates - never propose one of those as "legal" for this entry too, or two of
+                // this customer's own visits could end up landing on the very same day.
+                var occupiedByOtherEntries = myEntries.Where(x => x.Id != entry.Id && x.PlannedDate.HasValue)
+                    .Select(x => x.PlannedDate!.Value).ToHashSet();
 
                 if (distDays.Count > 0)
                 {
@@ -120,6 +129,7 @@ public static class VisitPlanCityOptimizer
                     var canonical = new HashSet<DateTime>();
                     for (var i = 0; i < effectiveCount; i++)
                         canonical.Add(VisitPlanGenerator.CandidatesNearOccurrence(occurrences[i], monthStart, DayTypeOf).First());
+                    canonical.ExceptWith(occupiedByOtherEntries);
 
                     // On its exact canonical (2-days-before-delivery, or fallback) target: stay strict,
                     // never move it off the one date the generator itself would have chosen.
@@ -134,6 +144,7 @@ public static class VisitPlanCityOptimizer
                     foreach (var occ in occurrences)
                         foreach (var c in VisitPlanGenerator.CandidatesNearOccurrence(occ, monthStart, DayTypeOf))
                             widened.Add(c);
+                    widened.ExceptWith(occupiedByOtherEntries);
                     return widened;
                 }
 
@@ -148,50 +159,63 @@ public static class VisitPlanCityOptimizer
                 return legal;
             }
 
-            // ---- Pass 1: direct same-day consolidation within an (city-cluster, week) group ----
+            // ---- Pass 1: direct same-day consolidation, in two tiers ----
             // Tracks each day's live occupancy (ALL of the agent's entries, including manually-moved
             // ones - they still take up a capacity slot even though they can't themselves be moved) so
-            // a move here never pushes a day over its daily capacity.
+            // a move here never pushes a day over its daily capacity. Shared across both tiers below.
             var occupancy = agentEntries.Where(e => e.PlannedDate.HasValue)
                 .GroupBy(e => e.PlannedDate!.Value.Date).ToDictionary(g => g.Key, g => g.Count());
             var eligibleIds = eligible.Select(e => e.Id).ToHashSet();
-            // Grouped from ALL of the agent's entries (not just eligible ones) - a manually-moved entry
-            // still legitimately anchors which day is "the" day for its cluster/week, even though it
-            // can't be moved itself. Biggest groups first, so they get first claim on shared capacity
-            // when two clusters in the same week are both competing for room on the same target day.
-            var consolidationGroups = agentEntries
-                .Where(e => e.PlannedDate.HasValue && !string.IsNullOrWhiteSpace(CityOf(e)))
-                .GroupBy(e => (Cluster: ClusterOf(e), Week: VisitPlanGenerator.WeekStartOf(e.PlannedDate!.Value)))
-                .Where(g => g.Select(e => e.PlannedDate!.Value.Date).Distinct().Count() > 1)
-                .OrderByDescending(g => g.Count())
-                .ToList();
 
-            foreach (var group in consolidationGroups)
+            // Consolidates by whatever grouping key groupOf hands back (exact city, or admin-defined
+            // cluster) + week. Grouped from ALL of the agent's entries (not just eligible ones) - a
+            // manually-moved entry still legitimately anchors which day is "the" day for its group, even
+            // though it can't be moved itself. Biggest groups first, so they get first claim on shared
+            // capacity when two groups in the same week are both competing for room on the same day.
+            void RunConsolidationTier(Func<VisitPlanEntry, string?> groupOf)
             {
-                // Target = the day already used by the most of this cluster's visits this week (ties
-                // -> earliest) - minimizes how many entries actually need to move.
-                var targetDay = group.GroupBy(e => e.PlannedDate!.Value.Date)
-                    .OrderByDescending(dg => dg.Count()).ThenBy(dg => dg.Key)
-                    .First().Key;
-                var targetCapacity = VisitPlanGenerator.CapacityFor(DayTypeOf(targetDay), weights);
+                var groups = agentEntries
+                    .Where(e => e.PlannedDate.HasValue && !string.IsNullOrWhiteSpace(CityOf(e)))
+                    .GroupBy(e => (Group: groupOf(e), Week: VisitPlanGenerator.WeekStartOf(e.PlannedDate!.Value)))
+                    .Where(g => g.Select(e => e.PlannedDate!.Value.Date).Distinct().Count() > 1)
+                    .OrderByDescending(g => g.Count())
+                    .ToList();
 
-                foreach (var entry in group.Where(e => e.PlannedDate!.Value.Date != targetDay).OrderBy(e => e.PlannedDate))
+                foreach (var group in groups)
                 {
-                    if (!eligibleIds.Contains(entry.Id)) continue; // manually-moved - anchor only, never itself moved
-                    if (occupancy.GetValueOrDefault(targetDay) >= targetCapacity) { notConsolidated++; continue; }
-                    if (!LegalDatesFor(entry).Contains(targetDay)) { notConsolidated++; continue; }
+                    // Target = the day already used by the most of this group's visits this week (ties
+                    // -> earliest) - minimizes how many entries actually need to move.
+                    var targetDay = group.GroupBy(e => e.PlannedDate!.Value.Date)
+                        .OrderByDescending(dg => dg.Count()).ThenBy(dg => dg.Key)
+                        .First().Key;
+                    var targetCapacity = VisitPlanGenerator.CapacityFor(DayTypeOf(targetDay), weights);
 
-                    var oldDate = entry.PlannedDate!.Value.Date;
-                    var city = CityOf(entry)!;
-                    occupancy[oldDate] = occupancy.GetValueOrDefault(oldDate) - 1;
-                    occupancy[targetDay] = occupancy.GetValueOrDefault(targetDay) + 1;
-                    entry.PlannedDate = targetDay;
-                    entry.CityOptimizedAt = DateTime.UtcNow;
-                    entry.CityOptimizedNote = $"רוכז לפי עיר ({city}) - הוזז מ-{oldDate:dd/MM} ל-{targetDay:dd/MM}";
-                    swapsApplied++;
-                    agentsAffected.Add(agentGroup.Key);
+                    foreach (var entry in group.Where(e => e.PlannedDate!.Value.Date != targetDay).OrderBy(e => e.PlannedDate))
+                    {
+                        if (!eligibleIds.Contains(entry.Id)) continue; // manually-moved - anchor only, never itself moved
+                        if (occupancy.GetValueOrDefault(targetDay) >= targetCapacity) { notConsolidated++; continue; }
+                        if (!LegalDatesFor(entry).Contains(targetDay)) { notConsolidated++; continue; }
+
+                        var oldDate = entry.PlannedDate!.Value.Date;
+                        var city = CityOf(entry)!;
+                        occupancy[oldDate] = occupancy.GetValueOrDefault(oldDate) - 1;
+                        occupancy[targetDay] = occupancy.GetValueOrDefault(targetDay) + 1;
+                        entry.PlannedDate = targetDay;
+                        entry.CityOptimizedAt = DateTime.UtcNow;
+                        entry.CityOptimizedNote = $"רוכז לפי עיר ({city}) - הוזז מ-{oldDate:dd/MM} ל-{targetDay:dd/MM}";
+                        swapsApplied++;
+                        agentsAffected.Add(agentGroup.Key);
+                    }
                 }
             }
+            // Tier A: exact city first - two visits to the literal same city always take priority over
+            // merely-nearby ones, per the admin's request (an agent's own city shouldn't split across
+            // days just because a cluster-mate pulled the "majority day" a different way).
+            RunConsolidationTier(CityOf);
+            // Tier B: admin-defined "nearby cities" clusters, run on top of tier A's now-more-settled
+            // dates - only kicks in for genuinely different cities that share a group; a city with no
+            // group has ClusterOf == CityOf, so it has nothing left to do here (already handled above).
+            RunConsolidationTier(ClusterOf);
 
             // ---- Pass 2: pairwise swap local-search (unchanged) ----
             var passes = 0;

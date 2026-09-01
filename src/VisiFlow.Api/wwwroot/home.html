@@ -437,6 +437,8 @@
   .btn.danger { background: var(--crit-bg); border-color: var(--crit-fg); color: var(--crit-fg); }
   .btn.danger:hover { background: var(--crit-fg); color: white; }
   .btn.small { padding: 6px 12px; font-size: 0.78rem; }
+  .btn.large { padding: 16px 36px; font-size: 1.05rem; border-radius: 10px; box-shadow: var(--shadow); }
+  .btn.large:hover { box-shadow: 0 6px 18px rgba(15,23,42,0.16); }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .export-excel-btn {
     display: inline-flex; align-items: center; gap: 6px;
@@ -1345,7 +1347,6 @@
           <h2 style="margin:0;">תוכנית הביקורים</h2>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
             <span class="badge accent" id="vpCount"></span>
-            <button type="button" class="btn primary small" id="btnOpenGenerateModal">+ יצירת תוכנית ביקורים</button>
             <button type="button" class="btn small" id="btnToggleVpAdvanced">⚙️ הגדרות מתקדמות</button>
           </div>
         </div>
@@ -1410,7 +1411,6 @@
           </div>
         </div>
         <div class="controls">
-          <div class="search"><input type="text" id="vpSearch" placeholder="חיפוש לפי מספר לקוח, שם, סוכן..." /></div>
           <select id="vpAgentFilter"><option value="">כל הסוכנים</option></select>
           <button type="button" class="btn small" id="btnClearVpFilters">נקה סינון</button>
           <button type="button" class="btn small" id="btnShowUnscheduled" style="display:none;"></button>
@@ -1424,6 +1424,11 @@
           <button type="button" class="btn danger small" id="btnDeleteAllVp" style="margin-inline-start:auto;">&#128465; מחיקת כל התוכנית לחודש הנבחר</button>
           <span class="form-msg" id="vpDeleteMsg"></span>
         </div>
+
+        <div style="text-align:center;margin:20px 0;">
+          <button type="button" class="btn primary large" id="btnOpenGenerateModal">+ יצירת תוכנית ביקורים</button>
+        </div>
+
         <div class="table-wrap">
           <table id="vpTable"></table>
         </div>
@@ -1975,7 +1980,6 @@ function navigateToVisitPlanFiltered({ year, month, search, channel, agent, cust
   if (month) document.getElementById("vpMonthSelect").value = String(month);
   document.getElementById("vpChannelFilter").value = channel || "";
   document.getElementById("vpAgentFilter").value = agent || "";
-  document.getElementById("vpSearch").value = search || "";
   vpTable.setPredicate("channel", channel ? entry => entry.Channel === channel : null);
   vpTable.setPredicate("agent", agent ? entry => entry.AgentIdNumber === agent : null);
   // For dashboard metrics that pick out a specific SET of customers (e.g. "neglected 30+ days")
@@ -3704,7 +3708,6 @@ const vpTable = createDataTable({
     { key: "priority", label: "ציון עדיפות", width: "52px", text: e => e.PriorityScore, sortValue: e => e.PriorityScore, render: e => `<span class="badge accent" style="font-weight:700;">${e.PriorityScore}</span>` }
   ],
   getRows: () => liveVpEntries,
-  searchInputId: "vpSearch",
   entityLabel: "ביקורים מתוכננים"
 });
 
@@ -3796,7 +3799,6 @@ document.getElementById("vpAgentFilter").addEventListener("change", (e) => {
 let vpShowingUnscheduledOnly = false;
 
 document.getElementById("btnClearVpFilters").addEventListener("click", () => {
-  document.getElementById("vpSearch").value = "";
   document.getElementById("vpChannelFilter").value = "";
   document.getElementById("vpAgentFilter").value = "";
   vpTable.setPredicate("channel", null);

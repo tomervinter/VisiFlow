@@ -261,6 +261,7 @@
     box-shadow: var(--shadow);
   }
   .btn-toolbar:active { background: var(--ice); }
+  .btn-toolbar-compact { width: auto; padding: 8px 14px; font-size: 0.82rem; }
   .settings-drawer {
     background: var(--white); border: 1px solid var(--border); border-radius: 12px;
     box-shadow: var(--shadow); padding: 14px; margin-bottom: 12px;
@@ -324,7 +325,7 @@
   <div class="screen" id="screenList">
     <div class="toolbar-row" style="display:flex;gap:8px;">
       <button type="button" class="btn-toolbar" id="btnToggleDrawer" style="flex:1;">🔍 חיפוש ותאריכים</button>
-      <button type="button" class="btn-toolbar" id="btnExpandAll" style="flex:0 0 auto;padding-inline:14px;">פתח הכל</button>
+      <button type="button" class="btn-toolbar btn-toolbar-compact" id="btnExpandAll" style="flex:0 0 auto;">פתח הכל</button>
     </div>
     <div class="settings-drawer" id="settingsDrawer" style="display:none;">
       <div class="drawer-section">
@@ -502,8 +503,9 @@ let expandedKeys = new Set();
 
 // Compact row for the list screen - tapping anywhere on it expands/collapses the full
 // renderCustomerCard() detail (unchanged) right below it, in place. Sub-line is deliberately ONE
-// combined line (number · address · date) rather than one line each, to add that info without
-// growing the collapsed row's height much.
+// combined line (address · date) rather than one line each, to add that info without growing the
+// collapsed row's height much - the customer number already lives in the expanded card itself, no
+// need to repeat it on the closed row too.
 function renderCustomerRow(c) {
   const key = c.PlanEntryId;
   // expandedKeys is built from dataset.rowKey (always a string) - compare as a string here too,
@@ -512,7 +514,7 @@ function renderCustomerRow(c) {
   const statusDot = c.Outcome === "Visited" ? `<span class="cl-status-dot visited">✓</span>`
     : c.Outcome === "NotVisited" ? `<span class="cl-status-dot notvisited">✗</span>`
     : `<span class="cl-status-dot pending"></span>`;
-  const subParts = [`מספר לקוח ${c.CustomerNumber}`];
+  const subParts = [];
   if (c.Address) subParts.push(c.Address);
   subParts.push(formatBannerDate(c.PlannedDate.slice(0, 10)));
   const toggleLabel = isExpanded ? `<span>▲</span><span>סגירה</span>` : `<span>▼</span><span>פתיחה</span>`;
@@ -534,6 +536,10 @@ function renderCustomerRow(c) {
 async function renderCustomerList() {
   const container = document.getElementById("customerCards");
   document.getElementById("emptyState").style.display = agentVisits.length === 0 ? "block" : "none";
+  // Keep the "פתח הכל"/"סגור הכל" label honest even when a row was toggled individually (not through
+  // that button) - only reads "סגור הכל" while every visible row really is expanded.
+  const allExpanded = agentVisits.length > 0 && agentVisits.every(c => expandedKeys.has(String(c.PlanEntryId)));
+  document.getElementById("btnExpandAll").textContent = allExpanded ? "סגור הכל" : "פתח הכל";
 
   if (viewMode === "day") {
     container.innerHTML = agentVisits.map(renderCustomerRow).join("");
@@ -661,7 +667,12 @@ document.getElementById("btnToggleDrawer").addEventListener("click", () => {
 });
 
 document.getElementById("btnExpandAll").addEventListener("click", async () => {
-  agentVisits.forEach(c => expandedKeys.add(String(c.PlanEntryId)));
+  // Same toggle-by-current-state idea as each row's own open/close button - "פתח הכל" becomes "סגור
+  // הכל" once everything visible is already expanded, instead of staying a one-way action. The
+  // button's own label is kept in sync by renderCustomerList() itself, not set here.
+  const allAlreadyExpanded = agentVisits.length > 0 && agentVisits.every(c => expandedKeys.has(String(c.PlanEntryId)));
+  if (allAlreadyExpanded) agentVisits.forEach(c => expandedKeys.delete(String(c.PlanEntryId)));
+  else agentVisits.forEach(c => expandedKeys.add(String(c.PlanEntryId)));
   await renderCustomerList();
 });
 

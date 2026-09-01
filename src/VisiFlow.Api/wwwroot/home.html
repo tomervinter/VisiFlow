@@ -446,6 +446,14 @@
   }
   .export-excel-btn:hover { background: #185c37; border-color: #185c37; }
   .export-excel-btn svg { flex-shrink: 0; }
+  /* Same structural language as .export-excel-btn (icon + bold + solid color) so the two buttons read
+     as one family in the table toolbar, just brand blue instead of Excel's green. */
+  .select-all-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--brand); border-color: var(--brand); color: white; font-weight: 700;
+  }
+  .select-all-btn:hover { background: var(--brand-hover); border-color: var(--brand-hover); }
+  .select-all-btn svg { flex-shrink: 0; }
 
   .field { display: flex; flex-direction: column; gap: 5px; }
   .field label { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); }
@@ -1422,7 +1430,7 @@
         <!-- Group 2: bulk selection + what to do with it, danger action pushed to the row's far end. -->
         <div class="controls">
           <span class="vs-selected-count" id="vpSelectedCount" style="display:none;"></span>
-          <button type="button" class="btn small" id="btnSelectAllVp">בחירת כל הנתונים</button>
+          <button type="button" class="btn small select-all-btn" id="btnSelectAllVp"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="16" height="16" rx="3"/><path d="m6 10 3 3 5-6"/></svg> בחירת כל הנתונים</button>
           <button type="button" class="btn small" id="btnClearVpSelection" style="display:none;">ניקוי בחירה</button>
           <button type="button" class="btn primary small" id="btnMoveVpSelectedToNextMonth" style="display:none;">📅 העברה לתחילת החודש הבא</button>
           <button type="button" class="btn danger small" id="btnDeleteVpSelected" style="display:none;">&#128465; מחיקת נבחרים</button>
@@ -3716,6 +3724,16 @@ const vpTable = createDataTable({
   getRows: () => liveVpEntries,
   entityLabel: "ביקורים מתוכננים"
 });
+
+// createDataTable() above already built and inserted a toolbar (filtered-count + "ייצוא לאקסל") right
+// before #vpTable - move "בחירת כל הנתונים" and the danger delete-all-plan button into that same row
+// instead of leaving them in the selection-actions row, per the admin's request. Append order matters
+// here: each appendChild lands further toward the row's LEFT edge (RTL flex-start flow), so this
+// order puts select-all immediately left of the export button, with delete-all past that.
+document.getElementById("btnDeleteAllVp").removeAttribute("style"); // drop the old row's margin-inline-start:auto, meaningless here
+const vpTableToolbar = document.querySelector("#vpTable").previousElementSibling;
+vpTableToolbar.appendChild(document.getElementById("btnSelectAllVp"));
+vpTableToolbar.appendChild(document.getElementById("btnDeleteAllVp"));
 
 /* ---- manual date editing: click the planned-date cell to swap it for a real <input type=date>,
    picking a value calls the shared reschedule endpoint (Source="Admin") and re-fetches the table -

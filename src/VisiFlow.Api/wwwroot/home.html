@@ -368,6 +368,9 @@
      between them; this packs them tightly one after another instead, growing the row as more of the
      selection-conditional buttons become visible instead of redistributing existing gaps. */
   .table-toolbar.table-toolbar-packed { justify-content: flex-start; gap: 8px; }
+  /* Thin separator between logical groups of controls packed into one toolbar row (e.g. "select
+     customers" vs. "set + apply a standard to the selection") - a visual step-break, not a full column. */
+  .toolbar-step-divider { align-self: stretch; width: 1px; background: var(--border); margin: 2px 4px; }
   .filtered-count-stat { display: inline-block; margin-bottom: 0; border-color: var(--electric); }
   .filtered-count-stat .n { color: var(--electric); }
 
@@ -689,11 +692,6 @@
   #distTable th[data-key], #distTable td { padding-left: 6px; padding-right: 6px; }
 
   /* ---- visit standards (per-customer weekly quota) ---- */
-  .vs-action-bar {
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    background: var(--ice); border: 1px solid var(--border); border-radius: 10px;
-    padding: 12px 16px; margin-bottom: 16px;
-  }
   .vs-selected-count { font-weight: 700; font-size: 0.88rem; color: var(--brand); white-space: nowrap; }
   .vs-row-check, .vl-row-check { width: 16px; height: 16px; cursor: pointer; }
 
@@ -1294,8 +1292,18 @@
           עם תקן נמוך משבועי (למשל פעם ברבעון) ישובץ בתוכנית הביקורים רק בחודש שבו הוא באמת "מגיע
           התור" שלו לפי מועד הביקור האחרון בפועל - לא בכל חודש.
         </p>
-        <div class="vs-action-bar">
+        <!-- Relocated into the table's own toolbar row (next to "ייצוא לאקסל") by JS right after
+             vsTable is created - defined here just as their initial template markup. Ordered (in DOM
+             order, which reads right-to-left in this RTL layout) to tell the actual 2-step story:
+             select customers first, then set + apply the standard to that selection - with a thin
+             divider between the two groups so the row doesn't read as one undifferentiated pile of
+             controls despite being visually packed into a single line. -->
+        <div class="controls">
           <span class="vs-selected-count" id="vsSelectedCount">לא נבחרו לקוחות</span>
+          <button type="button" class="btn small select-all-btn" id="btnSelectAllVsFiltered" style="display:none;"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="16" height="16" rx="3"/><path d="m6 10 3 3 5-6"/></svg> בחירת כל הלקוחות המסוננים</button>
+          <button type="button" class="btn small select-all-btn" id="btnSelectAllVsCustomers"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="16" height="16" rx="3"/><path d="m6 10 3 3 5-6"/></svg> בחירת כל הלקוחות</button>
+          <button type="button" class="btn small" id="btnClearVsSelection" disabled>ניקוי בחירה</button>
+          <span class="toolbar-step-divider" aria-hidden="true"></span>
           <div class="field" style="flex-direction:row;align-items:center;gap:8px;">
             <label for="vsFrequencyPreset" style="margin:0;">תדירות:</label>
             <select id="vsFrequencyPreset" style="width:150px;"></select>
@@ -1306,18 +1314,7 @@
           </div>
           <button type="button" class="btn primary small" id="btnApplyVisitStandard" disabled>החלת תקן על הנבחרים</button>
           <button type="button" class="btn small" id="btnClearVisitStandard" disabled>ניקוי תקן לנבחרים</button>
-          <button type="button" class="btn small" id="btnClearVsSelection" disabled>ניקוי בחירה</button>
           <span class="form-msg" id="vsMsg"></span>
-        </div>
-
-        <!-- Relocated into the table's own toolbar row (next to "ייצוא לאקסל") by JS right after
-             vsTable is created - defined here just as their initial template markup. -->
-        <div class="controls">
-          <select id="vsChannelFilter"><option value="">כל הערוצים</option></select>
-          <select id="vsAgentFilter"><option value="">כל הסוכנים</option></select>
-          <button type="button" class="btn small select-all-btn" id="btnSelectAllVsFiltered" style="display:none;"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="16" height="16" rx="3"/><path d="m6 10 3 3 5-6"/></svg> בחירת כל הלקוחות המסוננים</button>
-          <button type="button" class="btn small select-all-btn" id="btnSelectAllVsCustomers"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="16" height="16" rx="3"/><path d="m6 10 3 3 5-6"/></svg> בחירת כל הלקוחות</button>
-          <button type="button" class="btn small" id="btnClearVsSelection2">נקה בחירה</button>
         </div>
         <div class="table-wrap">
           <table id="vsTable"></table>
@@ -3191,44 +3188,33 @@ const vsTable = createDataTable({
 });
 
 // createDataTable() above already built a toolbar (filtered-count + "ייצוא לאקסל") right before
-// #vsTable - move the filters and selection actions into that same row, per the admin's request.
+// #vsTable - move the whole select-customers-then-set-a-standard flow into that same row, per the
+// admin's request. Append order matters (RTL flex-start flow - each element lands further left, i.e.
+// later in reading order): selection controls first, then the divider, then the standard-setting
+// controls, so the packed row still tells the 2-step story left-to-right... right-to-left.
 const vsTableToolbar = document.querySelector("#vsTable").previousElementSibling;
 vsTableToolbar.classList.add("table-toolbar-packed");
-vsTableToolbar.appendChild(document.getElementById("vsChannelFilter"));
-vsTableToolbar.appendChild(document.getElementById("vsAgentFilter"));
+vsTableToolbar.appendChild(document.getElementById("vsSelectedCount"));
 vsTableToolbar.appendChild(document.getElementById("btnSelectAllVsFiltered"));
 vsTableToolbar.appendChild(document.getElementById("btnSelectAllVsCustomers"));
-vsTableToolbar.appendChild(document.getElementById("btnClearVsSelection2"));
+vsTableToolbar.appendChild(document.getElementById("btnClearVsSelection"));
+vsTableToolbar.appendChild(document.querySelector(".toolbar-step-divider"));
+vsTableToolbar.appendChild(document.querySelector('label[for="vsFrequencyPreset"]').parentElement);
+vsTableToolbar.appendChild(document.querySelector('label[for="vsVisitsInput"]').parentElement);
+vsTableToolbar.appendChild(document.getElementById("btnApplyVisitStandard"));
+vsTableToolbar.appendChild(document.getElementById("btnClearVisitStandard"));
+vsTableToolbar.appendChild(document.getElementById("vsMsg"));
 
-// Dropdown filters (channel/agent) as a faster alternative to the per-column free-text filter row -
-// pick an exact value from what's actually present, rather than typing a partial match.
-function populateVsFilterDropdowns() {
-  const channelSel = document.getElementById("vsChannelFilter");
-  const agentSel = document.getElementById("vsAgentFilter");
-  const channels = [...new Set(liveCustomers.map(c => c.Channel).filter(Boolean))].sort();
-  const prevChannel = channelSel.value, prevAgent = agentSel.value;
-  channelSel.innerHTML = `<option value="">כל הערוצים</option>` + channels.map(ch => `<option value="${ch}">${ch}</option>`).join("");
-  agentSel.innerHTML = `<option value="">כל הסוכנים</option>` + agentDropdownOptionsHtml(liveCustomers, "AgentIdNumber", "AgentName");
-  if (channels.includes(prevChannel)) channelSel.value = prevChannel;
-  agentSel.value = prevAgent;
-}
 // "בחירת כל הלקוחות המסוננים" only makes sense once some filter has actually narrowed the table -
 // otherwise it's a confusing duplicate of "בחירת כל הלקוחות" right next to it. A cheap, engine-agnostic
 // way to tell "is anything filtered" without reaching into createDataTable's private state: the
-// visible row count is strictly less than the full loaded set only when a column filter, dropdown, or
-// predicate is actually narrowing it.
+// visible row count is strictly less than the full loaded set only when a column filter is actually
+// narrowing it (channel/agent dropdown filters were dropped in favor of the table's own per-column
+// filter row, so that's the only filtering mechanism left here).
 function updateVsFilteredButtonVisibility() {
   const isFiltered = vsTable.getVisibleRows().length < liveCustomers.length;
   document.getElementById("btnSelectAllVsFiltered").style.display = isFiltered ? "" : "none";
 }
-document.getElementById("vsChannelFilter").addEventListener("change", (e) => {
-  vsTable.setPredicate("channel", e.target.value ? c => c.Channel === e.target.value : null);
-  updateVsFilteredButtonVisibility();
-});
-document.getElementById("vsAgentFilter").addEventListener("change", (e) => {
-  vsTable.setPredicate("agent", e.target.value ? c => c.AgentIdNumber === e.target.value : null);
-  updateVsFilteredButtonVisibility();
-});
 // Column filter-row inputs (built by createDataTable) fire "input" and re-render on their own - just
 // piggyback on that same event, delegated, to keep the select-all-filtered button in sync with them too.
 document.getElementById("vsTable").addEventListener("input", (e) => {
@@ -3245,7 +3231,6 @@ function updateVsActionBar() {
 
 function refreshVsView() {
   updateVsActionBar();
-  populateVsFilterDropdowns();
   vsTable.refresh();
   updateVsFilteredButtonVisibility();
 }
@@ -3271,7 +3256,6 @@ function clearVsSelection() {
   refreshVsView();
 }
 document.getElementById("btnClearVsSelection").addEventListener("click", clearVsSelection);
-document.getElementById("btnClearVsSelection2").addEventListener("click", clearVsSelection);
 
 async function applyVisitStandardToSelection(visitsPerWeek) {
   const companyId = selectedCompanyId();

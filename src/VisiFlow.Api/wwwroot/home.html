@@ -434,6 +434,8 @@
   .badge.good { background: var(--good-bg); color: var(--good-fg); border-color: transparent; }
   .badge.crit { background: var(--crit-bg); color: var(--crit-fg); border-color: transparent; }
   .badge.warn { background: var(--warn-bg); color: var(--warn-fg); border-color: transparent; }
+  .btn-icon-badge { cursor: pointer; font-family: inherit; }
+  .btn-icon-badge:hover { filter: brightness(0.95); }
 
   .btn {
     border: 1px solid var(--border); background: var(--offwhite); color: var(--text);
@@ -1177,7 +1179,7 @@
         </div>
         <div class="form-actions">
           <button type="button" class="btn primary" id="btnGeneratePlan">יצירת תוכנית</button>
-          <button type="button" class="btn" id="btnCancelGenerateModal">ביטול</button>
+          <button type="button" class="btn" id="btnCancelGenerateModal">סגירה</button>
         </div>
         <span class="form-msg" id="vpGenerateMsg" style="display:block;margin-top:10px;text-align:center;"></span>
       </div>
@@ -2736,10 +2738,11 @@ let liveReasons = [];
 function renderReasonsList() {
   document.getElementById("reasonsEmpty").style.display = liveReasons.length === 0 ? "block" : "none";
   document.getElementById("reasonsList").innerHTML = liveReasons.map((r, i) => `
-    <div class="editable-row" data-id="${r.Id}">
+    <div class="editable-row" data-id="${r.Id}" style="${r.IsActive ? "" : "opacity:0.55;"}">
       <span class="reason-index">${i + 1}</span>
       <input type="text" value="${String(r.Text).replace(/"/g, "&quot;")}" data-id="${r.Id}" />
       <span class="saved-tick">נשמר &#10003;</span>
+      <button type="button" class="btn-icon-badge badge${r.IsActive ? " good" : ""}" data-action="toggle-reason-active" data-id="${r.Id}" data-active="${r.IsActive}" title="${r.IsActive ? "לחצו להקפאה - תפסיק להיות זמינה לבחירה חדשה" : "לחצו להפשרה - תחזור להיות זמינה לבחירה חדשה"}">${r.IsActive ? "פעיל" : "מוקפא"}</button>
       <button type="button" class="btn-icon" data-action="delete-reason" data-id="${r.Id}" title="מחיקה">&#128465;</button>
     </div>
   `).join("");
@@ -2795,6 +2798,22 @@ document.getElementById("reasonsList").addEventListener("click", async (e) => {
   msg.className = "form-msg"; msg.textContent = "";
   try {
     const res = await fetch(`/api/nonvisitreasons/${btn.dataset.id}`, { method: "DELETE" });
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await res.text(); return; }
+    await refreshReasonsView();
+  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+});
+
+document.getElementById("reasonsList").addEventListener("click", async (e) => {
+  const btn = e.target.closest('[data-action="toggle-reason-active"]');
+  if (!btn) return;
+  const msg = document.getElementById("reasonsMsg");
+  msg.className = "form-msg"; msg.textContent = "";
+  const nextActive = btn.dataset.active !== "true"; // flip
+  try {
+    const res = await fetch(`/api/nonvisitreasons/${btn.dataset.id}/active`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ IsActive: nextActive })
+    });
     if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await res.text(); return; }
     await refreshReasonsView();
   } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }

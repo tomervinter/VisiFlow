@@ -438,7 +438,7 @@ function showScreen(id) {
 async function fetchReasonsForCompany(companyId) {
   if (reasonsByCompany[companyId]) return reasonsByCompany[companyId];
   try {
-    const res = await fetch(`/api/nonvisitreasons?companyId=${companyId}`);
+    const res = await fetch(`/api/nonvisitreasons?companyId=${companyId}&activeOnly=true`);
     reasonsByCompany[companyId] = res.ok ? await res.json() : [];
   } catch { reasonsByCompany[companyId] = []; }
   return reasonsByCompany[companyId];

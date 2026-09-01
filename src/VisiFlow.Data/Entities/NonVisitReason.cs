@@ -11,4 +11,7 @@ public class NonVisitReason
     public string Text { get; set; } = null!;
     /// <summary>סדר הצגה ברשימה.</summary>
     public int SortOrder { get; set; }
+    /// <summary>כשכבוי - הסיבה לא מוצעת לבחירה חדשה בממשק הסוכן, אבל נשארת קיימת (לא נמחקת) כדי
+    /// שביקורים ישנים שכבר משתמשים בה ימשיכו להציג את הנוסח שלה כרגיל. ברירת מחדל true.</summary>
+    public bool IsActive { get; set; } = true;
 }

@@ -125,24 +125,33 @@
   .empty-state { text-align: center; color: var(--text-muted); padding: 40px 20px; font-size: 1.05rem; }
   .loading-state { text-align: center; color: var(--text-muted); padding: 24px 20px; font-size: 1rem; }
 
-  /* Compact list row (screenList) - tap to open the full card below (screenDetail). */
+  /* Compact list row (screenList) - tap anywhere on the row to expand/collapse the full card inline
+     right below it (renderCustomerCard, unchanged), instead of navigating to a separate screen. The
+     row itself (not the expanded card below it) is the toggle target - see the click delegation. */
   .customer-row {
-    display: flex; align-items: center; gap: 10px; background: var(--white); border: 1px solid var(--border);
-    border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: background .12s;
+    display: flex; align-items: center; gap: 8px; background: var(--white); border: 1px solid var(--border);
+    border-radius: 12px; padding: 8px 12px; cursor: pointer; transition: background .12s;
   }
   .customer-row:active { background: var(--ice); }
+  .customer-row-wrap { margin-bottom: 6px; }
+  .customer-row-wrap.expanded .customer-row { border-radius: 12px 12px 0 0; border-bottom: none; }
+  .cl-row-detail { border: 1px solid var(--card-border); border-top: none; border-radius: 0 0 12px 12px; padding: 0 2px 2px; }
+  .cl-row-detail .customer-card { margin-bottom: 0; border-radius: 0 0 10px 10px; border-top: none; }
   .cl-row-main { flex: 1; min-width: 0; }
-  .cl-row-name { font-weight: 700; font-size: 1.02rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cl-row-sub { font-size: 0.82rem; color: var(--text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cl-row-note { font-size: 0.78rem; color: var(--warn-fg); margin-top: 2px; }
+  .cl-row-name { font-weight: 700; font-size: 0.98rem; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cl-row-sub { font-size: 0.76rem; line-height: 1.25; color: var(--text-muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cl-row-note { font-size: 0.72rem; line-height: 1.25; color: var(--warn-fg); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cl-status-dot {
-    flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center;
-    justify-content: center; font-size: 0.95rem; font-weight: 700;
+    flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 0.86rem; font-weight: 700;
   }
   .cl-status-dot.visited { background: var(--good-bg); color: var(--good-fg); }
   .cl-status-dot.notvisited { background: var(--crit-bg); color: var(--crit-fg); }
   .cl-status-dot.pending { background: var(--offwhite); border: 1.5px dashed var(--border); }
-  .cl-row-arrow { flex-shrink: 0; color: var(--text-muted); font-size: 1.2rem; }
+  .cl-row-toggle {
+    flex-shrink: 0; font-size: 0.76rem; font-weight: 700; color: var(--brand);
+    display: flex; align-items: center; gap: 3px; white-space: nowrap;
+  }
 
   .customer-card {
     background: var(--white); border: 2px solid var(--card-border); border-radius: 14px;
@@ -313,8 +322,9 @@
 
   <!-- ===================== CUSTOMER LIST SCREEN ===================== -->
   <div class="screen" id="screenList">
-    <div class="toolbar-row">
-      <button type="button" class="btn-toolbar" id="btnToggleDrawer">🔍 חיפוש ותאריכים</button>
+    <div class="toolbar-row" style="display:flex;gap:8px;">
+      <button type="button" class="btn-toolbar" id="btnToggleDrawer" style="flex:1;">🔍 חיפוש ותאריכים</button>
+      <button type="button" class="btn-toolbar" id="btnExpandAll" style="flex:0 0 auto;padding-inline:14px;">פתח הכל</button>
     </div>
     <div class="settings-drawer" id="settingsDrawer" style="display:none;">
       <div class="drawer-section">
@@ -339,12 +349,6 @@
     <div class="loading-state" id="loadingState" style="display:none;">טוען...</div>
     <div id="customerCards"></div>
     <div class="empty-state" id="emptyState" style="display:none;">אין ביקורים מתוכננים לתאריך זה.</div>
-  </div>
-
-  <!-- ===================== CUSTOMER DETAIL SCREEN ===================== -->
-  <div class="screen" id="screenDetail">
-    <button type="button" class="btn-toolbar" id="btnBackToList" style="margin-bottom:10px;">→ חזרה לרשימה</button>
-    <div id="customerDetail"></div>
   </div>
 
 </div>
@@ -492,27 +496,42 @@ function renderCustomerCard(c) {
     </div>`;
 }
 
-// Compact one-line row for the list screen - tapping it opens the full renderCustomerCard() detail
-// (screenDetail) below. Kept deliberately minimal (name, number/date, a status dot) - all the sales
-// info, actions, etc. only need to exist once, in the detail view.
+// PlanEntryIds currently expanded inline (accordion state) - persists across re-renders so an
+// in-place action (mark visited, reschedule) doesn't collapse the row the agent is looking at.
+let expandedKeys = new Set();
+
+// Compact row for the list screen - tapping anywhere on it expands/collapses the full
+// renderCustomerCard() detail (unchanged) right below it, in place. Sub-line is deliberately ONE
+// combined line (number · address · date) rather than one line each, to add that info without
+// growing the collapsed row's height much.
 function renderCustomerRow(c) {
   const key = c.PlanEntryId;
+  // expandedKeys is built from dataset.rowKey (always a string) - compare as a string here too,
+  // otherwise a numeric PlanEntryId here vs. its string form there never match in the Set.
+  const isExpanded = expandedKeys.has(String(key));
   const statusDot = c.Outcome === "Visited" ? `<span class="cl-status-dot visited">✓</span>`
     : c.Outcome === "NotVisited" ? `<span class="cl-status-dot notvisited">✗</span>`
     : `<span class="cl-status-dot pending"></span>`;
+  const subParts = [`מספר לקוח ${c.CustomerNumber}`];
+  if (c.Address) subParts.push(c.Address);
+  subParts.push(formatBannerDate(c.PlannedDate.slice(0, 10)));
+  const toggleLabel = isExpanded ? `<span>▲</span><span>סגירה</span>` : `<span>▼</span><span>פתיחה</span>`;
   return `
-    <div class="customer-row" data-row-key="${key}">
-      <div class="cl-row-main">
-        <div class="cl-row-name">${c.CustomerName}</div>
-        <div class="cl-row-sub">מספר לקוח ${c.CustomerNumber}${viewMode !== "day" ? ` · ${formatBannerDate(c.PlannedDate.slice(0, 10))}` : ""}</div>
-        ${c.AdminNote ? `<div class="cl-row-note">📌 ${c.AdminNote}</div>` : ""}
+    <div class="customer-row-wrap${isExpanded ? " expanded" : ""}" data-wrap-key="${key}">
+      <div class="customer-row" data-row-key="${key}">
+        <div class="cl-row-main">
+          <div class="cl-row-name">${c.CustomerName}</div>
+          <div class="cl-row-sub">${subParts.join(" · ")}</div>
+          ${c.AdminNote ? `<div class="cl-row-note">📌 ${c.AdminNote}</div>` : ""}
+        </div>
+        ${statusDot}
+        <span class="cl-row-toggle">${toggleLabel}</span>
       </div>
-      ${statusDot}
-      <span class="cl-row-arrow">‹</span>
+      ${isExpanded ? `<div class="cl-row-detail">${renderCustomerCard(c)}</div>` : ""}
     </div>`;
 }
 
-function renderCustomerList() {
+async function renderCustomerList() {
   const container = document.getElementById("customerCards");
   document.getElementById("emptyState").style.display = agentVisits.length === 0 ? "block" : "none";
 
@@ -531,31 +550,23 @@ function renderCustomerList() {
       `<div class="date-group-header">${formatBannerDate(dateKey)}</div>` + byDate.get(dateKey).map(renderCustomerRow).join("")
     ).join("");
   }
-}
 
-// Which customer's full card is currently open on screenDetail (PlanEntryId) - null when the agent
-// is on the list screen instead.
-let selectedDetailKey = null;
-
-async function showCustomerDetail(key) {
-  selectedDetailKey = key;
-  await renderCustomerDetail();
-  showScreen("screenDetail");
-  window.scrollTo(0, 0);
-}
-
-async function renderCustomerDetail() {
-  const container = document.getElementById("customerDetail");
-  const c = agentVisits.find(x => String(x.PlanEntryId) === String(selectedDetailKey));
-  if (!c) { container.innerHTML = ""; return; }
-  container.innerHTML = renderCustomerCard(c);
-  if (!c.Outcome) {
-    // Same "blank placeholder first" reasoning as the old card-list version - see renderCustomerList.
-    await fetchReasonsForCompany(c.CompanyId);
+  // Populate reason selects for whichever expanded cards need them (not-yet-marked customers) - same
+  // "blank placeholder first" reasoning as the old single-screen card list had.
+  const expandedUnmarked = agentVisits.filter(c => expandedKeys.has(String(c.PlanEntryId)) && !c.Outcome);
+  const companiesNeeded = [...new Set(expandedUnmarked.map(c => c.CompanyId))];
+  await Promise.all(companiesNeeded.map(fetchReasonsForCompany));
+  expandedUnmarked.forEach(c => {
     const select = container.querySelector(`[data-reason-select="${c.PlanEntryId}"]`);
     if (select) select.innerHTML = `<option value="" selected disabled>בחרו סיבה...</option>` +
       (reasonsByCompany[c.CompanyId] || []).map(r => `<option value="${r.Id}">${r.Text}</option>`).join("");
-  }
+  });
+}
+
+async function toggleRowExpanded(key) {
+  key = String(key);
+  if (expandedKeys.has(key)) expandedKeys.delete(key); else expandedKeys.add(key);
+  await renderCustomerList();
 }
 
 function formatBannerDate(dateIso) {
@@ -605,10 +616,9 @@ async function refreshList() {
   }
   document.getElementById("loadingState").style.display = "none";
   document.getElementById("dayBanner").textContent = currentBannerText();
-  renderCustomerList();
-  // Keep an open detail view in sync too (e.g. after marking visited/rescheduling from there) -
-  // agentVisits is already fresh at this point, renderCustomerDetail just re-reads from it.
-  if (document.getElementById("screenDetail").classList.contains("active")) await renderCustomerDetail();
+  // Whichever rows are in expandedKeys stay expanded and get their fresh content - e.g. marking a
+  // visit from an expanded row shows the update there instead of collapsing it.
+  await renderCustomerList();
   window.scrollTo(0, scrollY);
 }
 
@@ -629,7 +639,8 @@ async function identify(agentIdNumber) {
   document.getElementById("dayBanner").textContent = currentBannerText();
   document.getElementById("btnSwitchAgent").style.display = "";
   showScreen("screenList");
-  renderCustomerList();
+  expandedKeys = new Set();
+  await renderCustomerList();
 }
 
 function setActiveRangeBtn(range) {
@@ -647,6 +658,11 @@ document.getElementById("visitDateInput").addEventListener("change", (e) => {
 document.getElementById("btnToggleDrawer").addEventListener("click", () => {
   const drawer = document.getElementById("settingsDrawer");
   drawer.style.display = drawer.style.display === "none" ? "block" : "none";
+});
+
+document.getElementById("btnExpandAll").addEventListener("click", async () => {
+  agentVisits.forEach(c => expandedKeys.add(String(c.PlanEntryId)));
+  await renderCustomerList();
 });
 
 document.querySelectorAll(".range-btn").forEach(btn => {
@@ -748,18 +764,16 @@ async function submitVisit(planEntryId, outcome, reasonId) {
   return res.json();
 }
 
+// Row click toggles expand/collapse in place - only clicks on the row header itself (not inside an
+// already-expanded card's own content, which sits in a sibling element, not inside .customer-row)
+// match [data-row-key], so this never fires for clicks on the card's own buttons/links/select.
 document.getElementById("customerCards").addEventListener("click", (e) => {
   const row = e.target.closest("[data-row-key]");
   if (!row) return;
-  showCustomerDetail(row.dataset.rowKey);
-});
-document.getElementById("btnBackToList").addEventListener("click", () => {
-  selectedDetailKey = null;
-  showScreen("screenList");
-  window.scrollTo(0, 0);
+  toggleRowExpanded(row.dataset.rowKey);
 });
 
-document.getElementById("customerDetail").addEventListener("click", async (e) => {
+document.getElementById("customerCards").addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-action]");
   if (!btn) return;
   const action = btn.dataset.action;
@@ -772,7 +786,7 @@ document.getElementById("customerDetail").addEventListener("click", async (e) =>
   if (action === "change-status") {
     const customer = agentVisits.find(c => String(c.PlanEntryId) === String(key));
     if (customer) { customer.Outcome = null; customer.ReasonText = null; }
-    await renderCustomerDetail();
+    await renderCustomerList();
     return;
   }
   if (action === "mark-visited") {

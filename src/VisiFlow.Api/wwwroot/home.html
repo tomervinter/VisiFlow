@@ -1144,6 +1144,26 @@
       </div>
     </div>
 
+    <div class="modal-overlay" id="vpGenerateModalOverlay">
+      <div class="modal-box" style="max-width:380px;">
+        <h3>יצירת תוכנית ביקורים</h3>
+        <p class="desc" style="text-align:center;">בחרו חודש (חייב קובץ לקוחות טעון משלו) ולחצו ליצירה.</p>
+        <div class="field" style="margin-bottom:14px;">
+          <div class="month-picker" style="justify-content:center;">
+            <label for="vpYearSelect">שנה:</label>
+            <select id="vpYearSelect"></select>
+            <label for="vpMonthSelect">חודש:</label>
+            <select id="vpMonthSelect"></select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn primary" id="btnGeneratePlan">יצירת תוכנית</button>
+          <button type="button" class="btn" id="btnCancelGenerateModal">ביטול</button>
+        </div>
+        <span class="form-msg" id="vpGenerateMsg" style="display:block;margin-top:10px;text-align:center;"></span>
+      </div>
+    </div>
+
     <!-- ===================== VISIT LOG ===================== -->
     <div class="view" id="view-visitlog">
       <section class="panel">
@@ -1321,30 +1341,20 @@
     <!-- ===================== VISIT PLAN ===================== -->
     <div class="view" id="view-visitplan">
       <section class="panel">
-        <h2>בניית תוכנית ביקורים</h2>
-        <p class="desc">
-          בחרו חודש (חייב קובץ לקוחות טעון משלו) ולחצו "יצירת תוכנית". משקלי חשיבות, קיבולת יומית
-          ואופטימיזציה לפי עיר הן הגדרות אופציונליות (יש להן ברירת מחדל) - מוסתרות כברירת מחדל,
-          נפתחות בלחיצה על "הגדרות מתקדמות" למטה. פירוט מלא נמצא ב<a href="#" id="lnkVpGuide">הדרכה</a>.
-        </p>
-
-        <div class="vp-build-col vp-build-col-action" style="margin-bottom:14px;">
-          <h3 class="vp-build-col-title">יצירת תוכנית ביקורים</h3>
-          <div class="month-picker">
-            <label for="vpYearSelect">שנה:</label>
-            <select id="vpYearSelect"></select>
-            <label for="vpMonthSelect">חודש:</label>
-            <select id="vpMonthSelect"></select>
-          </div>
-          <div class="vp-build-col-foot">
-            <button type="button" class="btn primary" id="btnGeneratePlan">יצירת תוכנית</button>
-            <span class="form-msg" id="vpGenerateMsg"></span>
+        <div class="head" style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:10px;">
+          <h2 style="margin:0;">תוכנית הביקורים</h2>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span class="badge accent" id="vpCount"></span>
+            <button type="button" class="btn primary small" id="btnOpenGenerateModal">+ יצירת תוכנית ביקורים</button>
+            <button type="button" class="btn small" id="btnToggleVpAdvanced">⚙️ הגדרות מתקדמות</button>
           </div>
         </div>
+        <p class="desc">
+          ממוינת כברירת מחדל לפי תאריך מתוכנן (מהקרוב לרחוק). לקוח שלא ניתן היה לשבץ בקיבולת הזמינה
+          מסומן בהתאם. פירוט מלא נמצא ב<a href="#" id="lnkVpGuide">הדרכה</a>.
+        </p>
 
-        <button type="button" class="btn-toolbar" id="btnToggleVpAdvanced">⚙️ הגדרות מתקדמות (משקלים, קיבולת, אופטימיזציה לפי עיר)</button>
-
-        <div class="vp-build-grid" id="vpAdvancedSettings" style="display:none;">
+        <div class="vp-build-grid" id="vpAdvancedSettings" style="display:none;margin-bottom:14px;">
           <div class="vp-build-col">
             <h3 class="vp-build-col-title">משקלי חשיבות</h3>
             <p class="vp-build-col-desc">כמה כל פרמטר משפיע על סדר העדיפויות. ברירת מחדל: 20% לכל אחד - הסה"כ חייב להיות בדיוק 100%.</p>
@@ -1377,21 +1387,14 @@
 
           <div class="vp-build-col vp-build-col-action">
             <h3 class="vp-build-col-title">אופטימיזציה לפי עיר</h3>
-            <p class="vp-build-col-desc">מסדר מחדש בין תאריכים חוקיים כדי לרכז ביקורים של אותו סוכן באותה עיר לאותו יום, על התוכנית של החודש שנבחר למעלה. <a href="#" id="lnkManageCityGroups">ניהול אשכולות ערים קרובות</a></p>
+            <p class="vp-build-col-desc">מסדר מחדש בין תאריכים חוקיים כדי לרכז ביקורים של אותו סוכן באותה עיר לאותו יום, על התוכנית של החודש שנבחר בטבלה למטה. <a href="#" id="lnkManageCityGroups">ניהול אשכולות ערים קרובות</a></p>
             <div class="vp-build-col-foot">
               <button type="button" class="btn" id="btnOptimizeByCity">📍 אופטימיזציה</button>
               <span class="form-msg" id="vpOptimizeMsg"></span>
             </div>
           </div>
         </div>
-      </section>
 
-      <section class="panel">
-        <div class="head" style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
-          <h2>תוכנית הביקורים</h2>
-          <span class="badge accent" id="vpCount"></span>
-        </div>
-        <p class="desc">ממוינת כברירת מחדל לפי תאריך מתוכנן (מהקרוב לרחוק). לקוח שלא ניתן היה לשבץ בקיבולת הזמינה מסומן בהתאם.</p>
         <div class="pill-filter-bar">
           <div class="pill-filter">
             <label for="vpChannelFilter">ערוץ מכר:</label>
@@ -3984,6 +3987,23 @@ btnConfirmDeleteVp.addEventListener("click", async () => {
     setTimeout(closeDeleteVpModal, 900);
   } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; btnConfirmDeleteVp.disabled = false; }
 });
+
+const vpGenerateModal = document.getElementById("vpGenerateModalOverlay");
+function closeVpGenerateModal() { vpGenerateModal.classList.remove("open"); }
+document.getElementById("btnOpenGenerateModal").addEventListener("click", () => {
+  // Default the popup to whatever month the table is currently showing (or, if none, whatever
+  // vpSelectedYearMonth's own default already picked) - the likeliest month someone opening this
+  // actually means to generate, without them having to reselect it every time.
+  const tableYm = vpTableSelectedYearMonth();
+  if (tableYm) {
+    document.getElementById("vpYearSelect").value = String(tableYm.year);
+    document.getElementById("vpMonthSelect").value = String(tableYm.month);
+  }
+  document.getElementById("vpGenerateMsg").textContent = "";
+  vpGenerateModal.classList.add("open");
+});
+document.getElementById("btnCancelGenerateModal").addEventListener("click", closeVpGenerateModal);
+vpGenerateModal.addEventListener("click", (e) => { if (e.target === vpGenerateModal) closeVpGenerateModal(); });
 
 async function generateVpPlan(companyId, ym, confirmClearExisting) {
   return fetch("/api/visitplan/generate", {

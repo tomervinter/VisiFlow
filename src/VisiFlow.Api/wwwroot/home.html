@@ -556,6 +556,13 @@
   .form-msg.error { color: var(--crit-fg); }
   .form-msg.success { color: var(--good-fg); }
   .form-msg.warning { color: var(--warn-fg); }
+  .form-msg-dismiss {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; margin-inline-start: 6px; border-radius: 50%;
+    border: none; background: transparent; color: inherit; opacity: 0.6;
+    cursor: pointer; font-size: 0.78rem; line-height: 1; vertical-align: middle; padding: 0;
+  }
+  .form-msg-dismiss:hover { opacity: 1; background: rgba(0,0,0,0.08); }
 
   .vp-steps { margin: 0; padding-inline-start: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 0.88rem; color: var(--text); }
   .vp-steps strong { color: var(--brand); }
@@ -1011,33 +1018,27 @@
       </section>
 
       <section class="panel">
-        <div class="head" style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
-          <h2>בסיס הלקוחות</h2>
+        <div class="head" style="display:flex;align-items:center;margin-bottom:4px;">
+          <h2 style="margin:0;">בסיס הלקוחות</h2>
+          <div style="flex:1;display:flex;justify-content:center;align-items:center;gap:10px;">
+            <div class="pill-filter">
+              <label for="customersYearSelect">שנה:</label>
+              <select id="customersYearSelect"></select>
+            </div>
+            <div class="pill-filter">
+              <label for="customersMonthSelect">חודש:</label>
+              <select id="customersMonthSelect"></select>
+            </div>
+          </div>
           <span class="badge accent" id="customersCount"></span>
         </div>
-        <p class="desc">רשימת הלקוחות כפי שנטענה לחודש/שנה שנבחרו למטה.</p>
-        <div class="pill-filter-bar">
-          <div class="pill-filter">
-            <label for="customersChannelFilter">ערוץ מכר:</label>
-            <select id="customersChannelFilter"><option value="">כל הערוצים</option></select>
-          </div>
-          <div class="pill-filter">
-            <label for="customersYearSelect">שנה:</label>
-            <select id="customersYearSelect"></select>
-          </div>
-          <div class="pill-filter">
-            <label for="customersMonthSelect">חודש:</label>
-            <select id="customersMonthSelect"></select>
-          </div>
-        </div>
+        <p class="desc">רשימת הלקוחות כפי שנטענה לחודש/שנה שנבחרו למעלה.</p>
         <!-- Not shown - dashboard drill-downs (navigateToCustomersFiltered) still drive this
              programmatically as a free-text filter, so it stays in the DOM, just not visible. -->
         <input type="text" id="customersSearch" style="display:none" />
-        <!-- These are relocated into the table's own toolbar row (next to "ייצוא לאקסל") by JS right
-             after customersTable is created - defined here just as their initial template markup. -->
+        <!-- Relocated into the table's own toolbar row (next to "ייצוא לאקסל") by JS right after
+             customersTable is created - defined here just as their initial template markup. -->
         <div class="controls">
-          <select id="customersStatusFilter"><option value="">כל הסטטוסים</option><option value="Active">פעיל</option><option value="Inactive">לא פעיל</option></select>
-          <select id="customersAgentFilter"><option value="">כל הסוכנים</option></select>
           <button type="button" class="btn small" id="btnClearCustomersFilters">נקה סינון</button>
           <button type="button" class="btn danger small" id="btnDeleteAllCustomers">&#128465; מחיקת החודש הנבחר</button>
         </div>
@@ -1061,6 +1062,7 @@
         </form>
         <div class="editable-list" id="reasonsList"></div>
         <div class="empty" id="reasonsEmpty" style="display:none;">אין עדיין סיבות מוגדרות - הוסיפו סיבה ראשונה למעלה.</div>
+        <span class="form-msg" id="reasonsMsg" style="display:block;margin-top:8px;"></span>
       </section>
     </div>
 
@@ -1230,7 +1232,7 @@
     <!-- ===================== CUSTOMER DISTRIBUTION DAYS ===================== -->
     <div class="view" id="view-distributiondays">
       <section class="panel">
-        <h2>ימי הפצה ללקוח</h2>
+        <h2>טעינת ימי הפצה ללקוח</h2>
         <p class="desc">ימי ההפצה בדרך כלל קבועים - טענו קובץ אקסל רק לחודש שבו יש שינוי חד-פעמי.</p>
         <div class="controls" style="margin-bottom:0;">
           <div class="month-picker">
@@ -1272,8 +1274,6 @@
         <!-- Relocated into the table's own toolbar row (next to "ייצוא לאקסל") by JS right after
              distTable is created - defined here just as their initial template markup. -->
         <div class="controls">
-          <select id="distAgentFilter"><option value="">כל הסוכנים</option></select>
-          <button type="button" class="btn small" id="btnClearDistFilters">נקה סינון</button>
           <button type="button" class="btn danger small" id="btnDeleteAllDist">&#128465; מחיקת כל הנתונים</button>
         </div>
         <div class="table-wrap" id="distTableWrap">
@@ -1310,17 +1310,13 @@
           <span class="form-msg" id="vsMsg"></span>
         </div>
 
-        <div class="pill-filter-bar">
-          <div class="pill-filter">
-            <label for="vsChannelFilter">ערוץ מכר:</label>
-            <select id="vsChannelFilter"><option value="">כל הערוצים</option></select>
-          </div>
-        </div>
+        <!-- Relocated into the table's own toolbar row (next to "ייצוא לאקסל") by JS right after
+             vsTable is created - defined here just as their initial template markup. -->
         <div class="controls">
-          <div class="search"><input type="text" id="vsSearch" placeholder="חיפוש לפי מספר לקוח, שם, סוכן, ערוץ..." /></div>
+          <select id="vsChannelFilter"><option value="">כל הערוצים</option></select>
           <select id="vsAgentFilter"><option value="">כל הסוכנים</option></select>
-          <button type="button" class="btn small" id="btnSelectAllVsFiltered">בחירת כל הלקוחות המסוננים</button>
-          <button type="button" class="btn small" id="btnSelectAllVsCustomers">בחירת כל הלקוחות (ללא סינון)</button>
+          <button type="button" class="btn small select-all-btn" id="btnSelectAllVsFiltered" style="display:none;"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="16" height="16" rx="3"/><path d="m6 10 3 3 5-6"/></svg> בחירת כל הלקוחות המסוננים</button>
+          <button type="button" class="btn small select-all-btn" id="btnSelectAllVsCustomers"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="16" height="16" rx="3"/><path d="m6 10 3 3 5-6"/></svg> בחירת כל הלקוחות</button>
           <button type="button" class="btn small" id="btnClearVsSelection2">נקה בחירה</button>
         </div>
         <div class="table-wrap">
@@ -1940,9 +1936,6 @@ document.getElementById("companyForm").addEventListener("submit", async (e) => {
    no matching column anywhere (days-since-last-visit, plan compliance status) still use the modal,
    since there's no real screen to send them to. ---- */
 function navigateToCustomersFiltered({ status, channel, agent, search, customerNumbers } = {}) {
-  document.getElementById("customersStatusFilter").value = status || "";
-  document.getElementById("customersChannelFilter").value = channel || "";
-  document.getElementById("customersAgentFilter").value = agent || "";
   document.getElementById("customersSearch").value = search || "";
   customersTable.setPredicate("status", status ? c => c.Status === status : null);
   customersTable.setPredicate("channel", channel ? c => c.Channel === channel : null);
@@ -2586,39 +2579,14 @@ const customersTable = createDataTable({
 });
 
 // createDataTable() above already built a toolbar (filtered-count + "ייצוא לאקסל") right before
-// #customersTable - move the status/agent filters and their actions into that same row, per the
-// admin's request.
+// #customersTable - move the remaining filter actions into that same row, per the admin's request.
 const customersTableToolbar = document.querySelector("#customersTable").previousElementSibling;
 customersTableToolbar.classList.add("table-toolbar-packed");
-customersTableToolbar.appendChild(document.getElementById("customersStatusFilter"));
-customersTableToolbar.appendChild(document.getElementById("customersAgentFilter"));
 customersTableToolbar.appendChild(document.getElementById("btnClearCustomersFilters"));
 customersTableToolbar.appendChild(document.getElementById("btnDeleteAllCustomers"));
 
-function populateCustomersFilterDropdowns() {
-  const channelSel = document.getElementById("customersChannelFilter");
-  const agentSel = document.getElementById("customersAgentFilter");
-  const channels = [...new Set(liveCustomers.map(c => c.Channel).filter(Boolean))].sort();
-  const prevChannel = channelSel.value, prevAgent = agentSel.value;
-  channelSel.innerHTML = `<option value="">כל הערוצים</option>` + channels.map(ch => `<option value="${ch}">${ch}</option>`).join("");
-  agentSel.innerHTML = `<option value="">כל הסוכנים</option>` + agentDropdownOptionsHtml(liveCustomers, "AgentIdNumber", "AgentName");
-  if (channels.includes(prevChannel)) channelSel.value = prevChannel;
-  agentSel.value = prevAgent; // no-op if that id is no longer present - falls back to "כל הסוכנים"
-}
-document.getElementById("customersStatusFilter").addEventListener("change", (e) => {
-  customersTable.setPredicate("status", e.target.value ? c => c.Status === e.target.value : null);
-});
-document.getElementById("customersChannelFilter").addEventListener("change", (e) => {
-  customersTable.setPredicate("channel", e.target.value ? c => c.Channel === e.target.value : null);
-});
-document.getElementById("customersAgentFilter").addEventListener("change", (e) => {
-  customersTable.setPredicate("agent", e.target.value ? c => c.AgentIdNumber === e.target.value : null);
-});
 document.getElementById("btnClearCustomersFilters").addEventListener("click", () => {
   document.getElementById("customersSearch").value = "";
-  document.getElementById("customersStatusFilter").value = "";
-  document.getElementById("customersChannelFilter").value = "";
-  document.getElementById("customersAgentFilter").value = "";
   customersTable.setPredicate("status", null);
   customersTable.setPredicate("channel", null);
   customersTable.setPredicate("agent", null);
@@ -2663,7 +2631,6 @@ async function refreshCustomersView() {
   } catch { /* offline - keep last known data */ }
   document.getElementById("customersCount").textContent = `${liveCustomers.length} לקוחות`;
   document.getElementById("navCountCustomers").textContent = liveCustomers.length;
-  populateCustomersFilterDropdowns();
   customersTable.refresh();
 }
 VIEW_ACTIVATION_HOOKS["customers"] = refreshCustomersView;
@@ -2827,8 +2794,13 @@ document.getElementById("reasonsList").addEventListener("change", async (e) => {
 document.getElementById("reasonsList").addEventListener("click", async (e) => {
   const btn = e.target.closest('[data-action="delete-reason"]');
   if (!btn) return;
-  const res = await fetch(`/api/nonvisitreasons/${btn.dataset.id}`, { method: "DELETE" });
-  if (res.ok) await refreshReasonsView();
+  const msg = document.getElementById("reasonsMsg");
+  msg.className = "form-msg"; msg.textContent = "";
+  try {
+    const res = await fetch(`/api/nonvisitreasons/${btn.dataset.id}`, { method: "DELETE" });
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await res.text(); return; }
+    await refreshReasonsView();
+  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
 });
 
 /* ==================== VISIT LOG ==================== */
@@ -3007,23 +2979,10 @@ const distTable = createDataTable({
 });
 
 // createDataTable() above already built a toolbar (filtered-count + "ייצוא לאקסל") right before
-// #distTable - move the agent filter and its actions into that same row, per the admin's request.
+// #distTable - move the remaining action into that same row, per the admin's request.
 const distTableToolbar = document.querySelector("#distTable").previousElementSibling;
 distTableToolbar.classList.add("table-toolbar-packed");
-distTableToolbar.appendChild(document.getElementById("distAgentFilter"));
-distTableToolbar.appendChild(document.getElementById("btnClearDistFilters"));
 distTableToolbar.appendChild(document.getElementById("btnDeleteAllDist"));
-
-function populateDistAgentFilter() {
-  const joined = liveDistDays.map(d => customerLookup().get(d.CustomerNumber)).filter(Boolean);
-  const agentSel = document.getElementById("distAgentFilter");
-  const prevAgent = agentSel.value;
-  agentSel.innerHTML = `<option value="">כל הסוכנים</option>` + agentDropdownOptionsHtml(joined, "AgentIdNumber", "AgentName");
-  agentSel.value = prevAgent; // no-op if that id is no longer present - falls back to "כל הסוכנים"
-}
-document.getElementById("distAgentFilter").addEventListener("change", (e) => {
-  distTable.setPredicate("agent", e.target.value ? d => customerLookup().get(d.CustomerNumber)?.AgentIdNumber === e.target.value : null);
-});
 
 function distSelectedYearMonth() {
   const yearSel = document.getElementById("distYearSelect");
@@ -3042,13 +3001,6 @@ function distReportSelectedYearMonth() {
   return { year: Number(yearSel.value), month: Number(monthSel.value) };
 }
 
-document.getElementById("btnClearDistFilters").addEventListener("click", () => {
-  document.getElementById("distAgentFilter").value = "";
-  distTable.setPredicate("agent", null);
-  document.querySelectorAll('#distTable .filter-row input').forEach(input => { input.value = ""; input.dispatchEvent(new Event("input")); });
-  distTable.refresh();
-});
-
 async function refreshDistView() {
   const companyId = selectedCompanyId();
   const ym = distReportSelectedYearMonth();
@@ -3058,7 +3010,6 @@ async function refreshDistView() {
     if (res.ok) liveDistDays = await res.json();
   } catch { /* offline */ }
   document.getElementById("distCount").textContent = `${liveDistDays.length} לקוחות`;
-  populateDistAgentFilter();
   distTable.refresh();
 }
 VIEW_ACTIVATION_HOOKS["distributiondays"] = refreshDistView;
@@ -3236,9 +3187,18 @@ const vsTable = createDataTable({
     { key: "visitStandard", label: "תקן ביקורים נוכחי", text: c => c.RequiredVisitsPerWeek ?? "", sortValue: c => c.RequiredVisitsPerWeek, render: c => fmtVisitsPerWeek(c.RequiredVisitsPerWeek) }
   ],
   getRows: () => liveCustomers,
-  searchInputId: "vsSearch",
   entityLabel: "לקוחות"
 });
+
+// createDataTable() above already built a toolbar (filtered-count + "ייצוא לאקסל") right before
+// #vsTable - move the filters and selection actions into that same row, per the admin's request.
+const vsTableToolbar = document.querySelector("#vsTable").previousElementSibling;
+vsTableToolbar.classList.add("table-toolbar-packed");
+vsTableToolbar.appendChild(document.getElementById("vsChannelFilter"));
+vsTableToolbar.appendChild(document.getElementById("vsAgentFilter"));
+vsTableToolbar.appendChild(document.getElementById("btnSelectAllVsFiltered"));
+vsTableToolbar.appendChild(document.getElementById("btnSelectAllVsCustomers"));
+vsTableToolbar.appendChild(document.getElementById("btnClearVsSelection2"));
 
 // Dropdown filters (channel/agent) as a faster alternative to the per-column free-text filter row -
 // pick an exact value from what's actually present, rather than typing a partial match.
@@ -3252,11 +3212,27 @@ function populateVsFilterDropdowns() {
   if (channels.includes(prevChannel)) channelSel.value = prevChannel;
   agentSel.value = prevAgent;
 }
+// "בחירת כל הלקוחות המסוננים" only makes sense once some filter has actually narrowed the table -
+// otherwise it's a confusing duplicate of "בחירת כל הלקוחות" right next to it. A cheap, engine-agnostic
+// way to tell "is anything filtered" without reaching into createDataTable's private state: the
+// visible row count is strictly less than the full loaded set only when a column filter, dropdown, or
+// predicate is actually narrowing it.
+function updateVsFilteredButtonVisibility() {
+  const isFiltered = vsTable.getVisibleRows().length < liveCustomers.length;
+  document.getElementById("btnSelectAllVsFiltered").style.display = isFiltered ? "" : "none";
+}
 document.getElementById("vsChannelFilter").addEventListener("change", (e) => {
   vsTable.setPredicate("channel", e.target.value ? c => c.Channel === e.target.value : null);
+  updateVsFilteredButtonVisibility();
 });
 document.getElementById("vsAgentFilter").addEventListener("change", (e) => {
   vsTable.setPredicate("agent", e.target.value ? c => c.AgentIdNumber === e.target.value : null);
+  updateVsFilteredButtonVisibility();
+});
+// Column filter-row inputs (built by createDataTable) fire "input" and re-render on their own - just
+// piggyback on that same event, delegated, to keep the select-all-filtered button in sync with them too.
+document.getElementById("vsTable").addEventListener("input", (e) => {
+  if (e.target.closest(".filter-row")) updateVsFilteredButtonVisibility();
 });
 
 function updateVsActionBar() {
@@ -3271,6 +3247,7 @@ function refreshVsView() {
   updateVsActionBar();
   populateVsFilterDropdowns();
   vsTable.refresh();
+  updateVsFilteredButtonVisibility();
 }
 VIEW_ACTIVATION_HOOKS["visitstandards"] = refreshVsView;
 
@@ -3651,6 +3628,13 @@ function fmtVpScorePct(v) { return `${Math.round((v || 0) * 100)}%`; }
 
 let vpSelected = new Set(); // VisitPlanEntry.Id -> selected for bulk delete
 
+// City -> cluster key, rebuilt on every refreshVpTable() from /api/citygroups - mirrors
+// VisitPlanCityOptimizer.ClusterOf() server-side, so the table's default sort groups a city together
+// with its admin-defined "nearby cities" the same way the optimizer itself treats them as one
+// location. A city in no group maps to itself (its own singleton cluster).
+let vpCityToCluster = new Map();
+function vpClusterKeyOf(city) { return city ? (vpCityToCluster.get(city) || city) : ""; }
+
 const vpTable = createDataTable({
   tableId: "vpTable",
   initialSort: { key: "plannedDate", dir: 1 },
@@ -3660,7 +3644,11 @@ const vpTable = createDataTable({
       render: e => `<input type="checkbox" class="vp-row-check" data-id="${e.Id}"${vpSelected.has(e.Id) ? " checked" : ""} />`
     },
     {
-      key: "plannedDate", label: "תאריך מתוכנן (לחצו לשינוי)", width: "95px", text: e => e.PlannedDate || "", sortValue: e => e.PlannedDate || "9999",
+      key: "plannedDate", label: "תאריך מתוכנן (לחצו לשינוי)", width: "95px", text: e => e.PlannedDate || "",
+      // Primary: date. Secondary: city cluster (so an admin-defined group of nearby cities sorts as
+      // one block within the day, per the admin's request), tertiary: the raw city name within that
+      // cluster - all folded into one string key since sortedFilteredRows() only compares one value.
+      sortValue: e => `${e.PlannedDate || "9999"}_${vpClusterKeyOf(e.City)}_${e.City || ""}`,
       render: e => `<span class="mono vp-date-cell" data-plan-id="${e.Id}" data-current-date="${e.PlannedDate ? e.PlannedDate.slice(0, 10) : ""}" title="ציון יום הפצה: ${fmtVpScorePct(e.DistributionScore)} | לחצו לקביעת תאריך ידנית">
         ${e.PlannedDate ? fmtDate(e.PlannedDate) : `<span class="badge crit">לא שובץ</span>`} <span class="vp-date-edit-icon">✏️</span>
       </span>`
@@ -3851,6 +3839,12 @@ async function refreshVpTable() {
     const res = await fetch(`/api/visitplan?companyId=${companyId}&year=${ym.year}&month=${ym.month}`);
     if (res.ok) liveVpEntries = await res.json();
   } catch { /* offline */ }
+  try {
+    const groupsRes = await fetch(`/api/citygroups?companyId=${companyId}`);
+    const groups = groupsRes.ok ? await groupsRes.json() : [];
+    vpCityToCluster = new Map();
+    for (const g of groups) for (const city of g.Cities) vpCityToCluster.set(city, `__group_${g.Id}`);
+  } catch { /* offline - keep last known clustering */ }
   document.getElementById("vpCount").textContent = `${liveVpEntries.length} ביקורים מתוכננים`;
   updateVpSelectionBar();
   vpTable.setPredicate("unscheduled", null);
@@ -4028,10 +4022,14 @@ document.getElementById("btnOptimizeByCity").addEventListener("click", async () 
       msg.className = "form-msg"; msg.textContent = "לא נמצאו שיפורים אפשריים - התוכנית כבר מרוכזת ככל שניתן לפי האילוצים הקיימים.";
     } else {
       msg.className = "form-msg success";
-      msg.textContent = `בוצעו ${result.SwapsApplied} העברות בין ${result.AgentsAffected} סוכנים. ריכוז ימי-עיר ירד מ-${result.FragmentationBefore} ל-${result.FragmentationAfter}.`;
+      let text = `בוצעו ${result.SwapsApplied} העברות בין ${result.AgentsAffected} סוכנים. ריכוז ימי-עיר ירד מ-${result.FragmentationBefore} ל-${result.FragmentationAfter}.`;
       if (result.NotConsolidated > 0) {
-        msg.textContent += ` (${result.NotConsolidated} פגישות לא ניתן היה לרכז - קיבולת יומית מלאה או אילוץ יום הפצה.)`;
+        text += ` (${result.NotConsolidated} פגישות לא ניתן היה לרכז - קיבולת יומית מלאה או אילוץ יום הפצה.)`;
       }
+      // Dismissible - this note can get long and isn't actionable once read, so let the admin close
+      // it explicitly instead of it just sitting there until the next optimize run overwrites it.
+      msg.innerHTML = `<span>${text}</span><button type="button" class="form-msg-dismiss" title="סגירה">&#10005;</button>`;
+      msg.querySelector(".form-msg-dismiss").addEventListener("click", () => { msg.innerHTML = ""; msg.className = "form-msg"; });
     }
     await refreshVpTable();
   } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }

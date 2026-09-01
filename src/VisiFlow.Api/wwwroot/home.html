@@ -367,7 +367,7 @@
      toolbar) - space-between spreads a handful of buttons across the whole row width with big gaps
      between them; this packs them tightly one after another instead, growing the row as more of the
      selection-conditional buttons become visible instead of redistributing existing gaps. */
-  .table-toolbar.vp-toolbar-packed { justify-content: flex-start; gap: 8px; }
+  .table-toolbar.table-toolbar-packed { justify-content: flex-start; gap: 8px; }
   .filtered-count-stat { display: inline-block; margin-bottom: 0; border-color: var(--electric); }
   .filtered-count-stat .n { color: var(--electric); }
 
@@ -708,7 +708,7 @@
   .cal-panel-centered { display: flex; flex-direction: column; align-items: center; text-align: center; }
   .cal-view-heading { font-size: 1.15rem; margin: 0 0 12px; }
   .cal-grid-wrap { max-width: 460px; width: 100%; margin: 0 auto; }
-  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
   .cal-weekday-label { text-align: center; font-size: 0.74rem; font-weight: 700; color: var(--text-muted); padding-bottom: 4px; }
   .cal-day {
     aspect-ratio: 1 / 0.82; border-radius: 8px; border: 1px solid transparent; cursor: pointer;
@@ -1030,8 +1030,12 @@
             <select id="customersMonthSelect"></select>
           </div>
         </div>
+        <!-- Not shown - dashboard drill-downs (navigateToCustomersFiltered) still drive this
+             programmatically as a free-text filter, so it stays in the DOM, just not visible. -->
+        <input type="text" id="customersSearch" style="display:none" />
+        <!-- These are relocated into the table's own toolbar row (next to "ייצוא לאקסל") by JS right
+             after customersTable is created - defined here just as their initial template markup. -->
         <div class="controls">
-          <div class="search"><input type="text" id="customersSearch" placeholder="חיפוש לפי מספר לקוח, שם, סוכן..." /></div>
           <select id="customersStatusFilter"><option value="">כל הסטטוסים</option><option value="Active">פעיל</option><option value="Inactive">לא פעיל</option></select>
           <select id="customersAgentFilter"><option value="">כל הסוכנים</option></select>
           <button type="button" class="btn small" id="btnClearCustomersFilters">נקה סינון</button>
@@ -1205,12 +1209,14 @@
           </div>
           <button type="button" class="btn small" id="btnClearVlFilters">נקה סינון</button>
         </div>
+        <!-- Not shown - dashboard drill-downs (navigateToVisitLogFiltered) still drive this
+             programmatically as a free-text filter, so it stays in the DOM, just not visible. -->
+        <input type="text" id="vlSearch" style="display:none" />
+        <!-- These are relocated into the table's own toolbar row (next to "ייצוא לאקסל") by JS right
+             after vlTable is created - defined here just as their initial template markup. -->
         <div class="controls">
-          <div class="search"><input type="text" id="vlSearch" placeholder="חיפוש לפי מספר לקוח, שם, סוכן..." /></div>
           <button type="button" class="btn small" id="btnSelectAllVl">בחירת כל הנתונים</button>
           <button type="button" class="btn small" id="btnClearVlSelection" disabled>נקה בחירה</button>
-        </div>
-        <div class="controls" style="margin-top:0;">
           <span class="vs-selected-count" id="vlSelectedCount">לא נבחרו שורות</span>
           <button type="button" class="btn danger small" id="btnDeleteVlSelected" disabled>&#128465; מחיקת הנתונים</button>
           <span class="form-msg" id="vlDeleteMsg"></span>
@@ -1255,10 +1261,6 @@
         <p class="desc">בחרו כאן איזה חודש להציג (בלי קשר לחודש שנבחר למעלה לצורך טעינה), ולסנן לפי ערוץ/סוכן/חיפוש חופשי.</p>
         <div class="pill-filter-bar">
           <div class="pill-filter">
-            <label for="distChannelFilter">ערוץ מכר:</label>
-            <select id="distChannelFilter"><option value="">כל הערוצים</option></select>
-          </div>
-          <div class="pill-filter">
             <label for="distReportYearSelect">שנה:</label>
             <select id="distReportYearSelect"></select>
           </div>
@@ -1267,8 +1269,9 @@
             <select id="distReportMonthSelect"></select>
           </div>
         </div>
+        <!-- Relocated into the table's own toolbar row (next to "ייצוא לאקסל") by JS right after
+             distTable is created - defined here just as their initial template markup. -->
         <div class="controls">
-          <div class="search"><input type="text" id="distSearch" placeholder="חיפוש לפי מספר לקוח, שם, סוכן, ערוץ..." /></div>
           <select id="distAgentFilter"><option value="">כל הסוכנים</option></select>
           <button type="button" class="btn small" id="btnClearDistFilters">נקה סינון</button>
           <button type="button" class="btn danger small" id="btnDeleteAllDist">&#128465; מחיקת כל הנתונים</button>
@@ -1356,12 +1359,9 @@
     <!-- ===================== VISIT PLAN ===================== -->
     <div class="view" id="view-visitplan">
       <section class="panel">
-        <div class="head" style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:10px;">
-          <h2 style="margin:0;">תוכנית הביקורים</h2>
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <span class="badge accent" id="vpCount"></span>
-            <button type="button" class="btn small" id="btnToggleVpAdvanced">⚙️ הגדרות מתקדמות</button>
-          </div>
+        <div class="head" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px;">
+          <span class="badge accent" id="vpCount"></span>
+          <button type="button" class="btn small" id="btnToggleVpAdvanced">⚙️ הגדרות מתקדמות</button>
         </div>
 
         <div class="vp-build-grid" id="vpAdvancedSettings" style="display:none;margin-bottom:14px;">
@@ -2585,6 +2585,16 @@ const customersTable = createDataTable({
   entityLabel: "לקוחות"
 });
 
+// createDataTable() above already built a toolbar (filtered-count + "ייצוא לאקסל") right before
+// #customersTable - move the status/agent filters and their actions into that same row, per the
+// admin's request.
+const customersTableToolbar = document.querySelector("#customersTable").previousElementSibling;
+customersTableToolbar.classList.add("table-toolbar-packed");
+customersTableToolbar.appendChild(document.getElementById("customersStatusFilter"));
+customersTableToolbar.appendChild(document.getElementById("customersAgentFilter"));
+customersTableToolbar.appendChild(document.getElementById("btnClearCustomersFilters"));
+customersTableToolbar.appendChild(document.getElementById("btnDeleteAllCustomers"));
+
 function populateCustomersFilterDropdowns() {
   const channelSel = document.getElementById("customersChannelFilter");
   const agentSel = document.getElementById("customersAgentFilter");
@@ -2858,6 +2868,16 @@ const vlTable = createDataTable({
   entityLabel: "ביקורים"
 });
 
+// createDataTable() above already built a toolbar (filtered-count + "ייצוא לאקסל") right before
+// #vlTable - move the selection-action buttons into that same row, per the admin's request.
+const vlTableToolbar = document.querySelector("#vlTable").previousElementSibling;
+vlTableToolbar.classList.add("table-toolbar-packed");
+vlTableToolbar.appendChild(document.getElementById("btnSelectAllVl"));
+vlTableToolbar.appendChild(document.getElementById("btnClearVlSelection"));
+vlTableToolbar.appendChild(document.getElementById("vlSelectedCount"));
+vlTableToolbar.appendChild(document.getElementById("btnDeleteVlSelected"));
+vlTableToolbar.appendChild(document.getElementById("vlDeleteMsg"));
+
 function populateVlFilterDropdowns() {
   const yearSel = document.getElementById("vlYearFilter");
   const monthSel = document.getElementById("vlMonthFilter");
@@ -2983,8 +3003,26 @@ const distTable = createDataTable({
     }))
   ],
   getRows: () => liveDistDays,
-  searchInputId: "distSearch",
   entityLabel: "לקוחות"
+});
+
+// createDataTable() above already built a toolbar (filtered-count + "ייצוא לאקסל") right before
+// #distTable - move the agent filter and its actions into that same row, per the admin's request.
+const distTableToolbar = document.querySelector("#distTable").previousElementSibling;
+distTableToolbar.classList.add("table-toolbar-packed");
+distTableToolbar.appendChild(document.getElementById("distAgentFilter"));
+distTableToolbar.appendChild(document.getElementById("btnClearDistFilters"));
+distTableToolbar.appendChild(document.getElementById("btnDeleteAllDist"));
+
+function populateDistAgentFilter() {
+  const joined = liveDistDays.map(d => customerLookup().get(d.CustomerNumber)).filter(Boolean);
+  const agentSel = document.getElementById("distAgentFilter");
+  const prevAgent = agentSel.value;
+  agentSel.innerHTML = `<option value="">כל הסוכנים</option>` + agentDropdownOptionsHtml(joined, "AgentIdNumber", "AgentName");
+  agentSel.value = prevAgent; // no-op if that id is no longer present - falls back to "כל הסוכנים"
+}
+document.getElementById("distAgentFilter").addEventListener("change", (e) => {
+  distTable.setPredicate("agent", e.target.value ? d => customerLookup().get(d.CustomerNumber)?.AgentIdNumber === e.target.value : null);
 });
 
 function distSelectedYearMonth() {
@@ -3004,29 +3042,8 @@ function distReportSelectedYearMonth() {
   return { year: Number(yearSel.value), month: Number(monthSel.value) };
 }
 
-function populateDistChannelAgentFilters() {
-  const lookup = customerLookup();
-  const joined = liveDistDays.map(d => lookup.get(d.CustomerNumber)).filter(Boolean);
-  const channelSel = document.getElementById("distChannelFilter");
-  const agentSel = document.getElementById("distAgentFilter");
-  const channels = [...new Set(joined.map(c => c.Channel).filter(Boolean))].sort();
-  const prevChannel = channelSel.value, prevAgent = agentSel.value;
-  channelSel.innerHTML = `<option value="">כל הערוצים</option>` + channels.map(ch => `<option value="${ch}">${ch}</option>`).join("");
-  agentSel.innerHTML = `<option value="">כל הסוכנים</option>` + agentDropdownOptionsHtml(joined, "AgentIdNumber", "AgentName");
-  if (channels.includes(prevChannel)) channelSel.value = prevChannel;
-  agentSel.value = prevAgent;
-}
-document.getElementById("distChannelFilter").addEventListener("change", (e) => {
-  distTable.setPredicate("channel", e.target.value ? d => customerLookup().get(d.CustomerNumber)?.Channel === e.target.value : null);
-});
-document.getElementById("distAgentFilter").addEventListener("change", (e) => {
-  distTable.setPredicate("agent", e.target.value ? d => customerLookup().get(d.CustomerNumber)?.AgentIdNumber === e.target.value : null);
-});
 document.getElementById("btnClearDistFilters").addEventListener("click", () => {
-  document.getElementById("distSearch").value = "";
-  document.getElementById("distChannelFilter").value = "";
   document.getElementById("distAgentFilter").value = "";
-  distTable.setPredicate("channel", null);
   distTable.setPredicate("agent", null);
   document.querySelectorAll('#distTable .filter-row input').forEach(input => { input.value = ""; input.dispatchEvent(new Event("input")); });
   distTable.refresh();
@@ -3041,7 +3058,7 @@ async function refreshDistView() {
     if (res.ok) liveDistDays = await res.json();
   } catch { /* offline */ }
   document.getElementById("distCount").textContent = `${liveDistDays.length} לקוחות`;
-  populateDistChannelAgentFilters();
+  populateDistAgentFilter();
   distTable.refresh();
 }
 VIEW_ACTIVATION_HOOKS["distributiondays"] = refreshDistView;
@@ -4012,6 +4029,9 @@ document.getElementById("btnOptimizeByCity").addEventListener("click", async () 
     } else {
       msg.className = "form-msg success";
       msg.textContent = `בוצעו ${result.SwapsApplied} העברות בין ${result.AgentsAffected} סוכנים. ריכוז ימי-עיר ירד מ-${result.FragmentationBefore} ל-${result.FragmentationAfter}.`;
+      if (result.NotConsolidated > 0) {
+        msg.textContent += ` (${result.NotConsolidated} פגישות לא ניתן היה לרכז - קיבולת יומית מלאה או אילוץ יום הפצה.)`;
+      }
     }
     await refreshVpTable();
   } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }

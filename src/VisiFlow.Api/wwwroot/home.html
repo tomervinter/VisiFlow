@@ -3943,6 +3943,7 @@ document.getElementById("btnOpenGenerateModal").addEventListener("click", () => 
     document.getElementById("vpMonthSelect").value = String(tableYm.month);
   }
   document.getElementById("vpGenerateMsg").textContent = "";
+  document.getElementById("btnGeneratePlan").disabled = false;
   vpGenerateModal.classList.add("open");
 });
 document.getElementById("btnCancelGenerateModal").addEventListener("click", closeVpGenerateModal);
@@ -3959,7 +3960,9 @@ document.getElementById("btnGeneratePlan").addEventListener("click", async () =>
   const companyId = selectedCompanyId();
   const ym = vpSelectedYearMonth();
   const msg = document.getElementById("vpGenerateMsg");
+  const btn = document.getElementById("btnGeneratePlan");
   if (!companyId || !ym) return;
+  btn.disabled = true;
   msg.className = "form-msg"; msg.textContent = "יוצר תוכנית...";
   try {
     let res = await generateVpPlan(companyId, ym, false);
@@ -3971,10 +3974,10 @@ document.getElementById("btnGeneratePlan").addEventListener("click", async () =>
         `כבר יש ${conflict.ExistingCount} ביקורים בתוכנית של ${ym.month}/${ym.year} (יכול לכלול ביקורים שהועברו מחודש קודם).\n\n` +
         `יצירת תוכנית חדשה תמחק את כל הביקורים הקיימים ותחליף אותם. להמשיך?`
       );
-      if (!proceed) { msg.className = "form-msg"; msg.textContent = "יצירת התוכנית בוטלה - הנתונים הקיימים לא נמחקו."; return; }
+      if (!proceed) { msg.className = "form-msg"; msg.textContent = "יצירת התוכנית בוטלה - הנתונים הקיימים לא נמחקו."; btn.disabled = false; return; }
       res = await generateVpPlan(companyId, ym, true);
     }
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; btn.disabled = false; return; }
     const result = await res.json();
     // Unscheduled > 0 is NOT a failure - the plan was created successfully, just not everyone fit in
     // the available daily capacity. Styled as a warning (not error/red) so a partial fit doesn't read
@@ -3984,9 +3987,11 @@ document.getElementById("btnGeneratePlan").addEventListener("click", async () =>
     msg.textContent = result.Unscheduled > 0
       ? `נוצרה תוכנית: ${result.Scheduled} ביקורים שובצו, ${result.Unscheduled} לא שובצו (אין קיבולת פנויה - אפשר להגדיל בשלב 2, או להשתמש בכפתור "לקוחות שלא שובצו" למטה).`
       : `נוצרה תוכנית: ${result.Scheduled} ביקורים שובצו.`;
+    // Stays disabled after a successful generation - re-enabled the next time the modal is opened
+    // (see btnOpenGenerateModal), so a stray extra click can't immediately wipe/regenerate it.
     syncVpTableFilterTo(ym);
     await refreshVpTable();
-  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; btn.disabled = false; }
 });
 
 document.getElementById("btnOptimizeByCity").addEventListener("click", async () => {

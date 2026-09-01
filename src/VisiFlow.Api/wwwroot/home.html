@@ -4024,7 +4024,7 @@ document.getElementById("btnGeneratePlan").addEventListener("click", async () =>
 
 document.getElementById("btnOptimizeByCity").addEventListener("click", async () => {
   const companyId = selectedCompanyId();
-  const ym = vpSelectedYearMonth();
+  const ym = vpTableSelectedYearMonth(); // the month shown in the table below, not the generate-plan popup's month
   const msg = document.getElementById("vpOptimizeMsg");
   if (!companyId || !ym) return;
   msg.className = "form-msg"; msg.textContent = "מבצע אופטימיזציה...";
@@ -4041,7 +4041,6 @@ document.getElementById("btnOptimizeByCity").addEventListener("click", async () 
       msg.className = "form-msg success";
       msg.textContent = `בוצעו ${result.SwapsApplied} העברות בין ${result.AgentsAffected} סוכנים. ריכוז ימי-עיר ירד מ-${result.FragmentationBefore} ל-${result.FragmentationAfter}.`;
     }
-    syncVpTableFilterTo(ym);
     await refreshVpTable();
   } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
 });

@@ -231,6 +231,17 @@
   }
   .dash-global-filter-bar .dash-mini-filter select:hover { border-color: var(--brand); }
   .dash-global-filter-bar .dash-mini-filter select:focus { outline: 2px solid var(--electric); outline-offset: 1px; }
+  .dash-global-filter-bar .dash-mini-filter input[type=date] {
+    font-size: 0.84rem; font-weight: 600; color: var(--brand); background: var(--ice);
+    padding: 6px 14px; border-radius: 999px; border: 1px solid transparent; cursor: pointer;
+    font-family: inherit; transition: border-color 0.12s, background 0.12s;
+  }
+  .dash-global-filter-bar .dash-mini-filter input[type=date]:hover { border-color: var(--brand); }
+  .dash-global-filter-bar .dash-mini-filter input[type=date]:focus { outline: 2px solid var(--electric); outline-offset: 1px; }
+  .dash-global-filter-bar .dash-mini-filter .btn-icon {
+    background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.9rem; padding: 4px;
+  }
+  .dash-global-filter-bar .dash-mini-filter .btn-icon:hover { color: var(--crit-fg); }
 
   /* Same pill/button look as the dashboard's global filter bar, generalized under its own class name
      so other screens (e.g. יומן ביקורים) can reuse it without depending on dashboard-specific markup. */
@@ -842,6 +853,11 @@
         <div class="dash-mini-filter">
           <label for="dashMonthSelect">חודש:</label>
           <select id="dashMonthSelect"></select>
+        </div>
+        <div class="dash-mini-filter">
+          <label for="dashDateFilter">תאריך ספציפי:</label>
+          <input type="date" id="dashDateFilter" />
+          <button type="button" class="btn-icon" id="btnClearDashDateFilter" title="נקה - חזרה להיום" style="display:none;">&#10005;</button>
         </div>
       </section>
 
@@ -2329,6 +2345,15 @@ document.getElementById("dashAgentMeetingCountsTable").addEventListener("click",
 });
 
 document.getElementById("dashGlobalChannelFilter").addEventListener("change", () => refreshDashboard());
+document.getElementById("dashDateFilter").addEventListener("change", (e) => {
+  document.getElementById("btnClearDashDateFilter").style.display = e.target.value ? "" : "none";
+  refreshDashboard();
+});
+document.getElementById("btnClearDashDateFilter").addEventListener("click", () => {
+  document.getElementById("dashDateFilter").value = "";
+  document.getElementById("btnClearDashDateFilter").style.display = "none";
+  refreshDashboard();
+});
 
 document.getElementById("dashAgentPerfChart").addEventListener("click", (e) => {
   const col = e.target.closest("[data-drill-agent-perf]");
@@ -2357,7 +2382,13 @@ async function refreshDashboard() {
     return;
   }
   const { year: selYear, month: selMonth } = dashSelectedYearMonth();
-  const today = new Date(); today.setHours(0, 0, 0, 0);
+  // "today" throughout this function is actually "the day the -today- KPIs/table are about" - real
+  // today by default, or whatever dashDateFilter is set to, so an admin can inspect any single day's
+  // planned/performed/postponed snapshot instead of only ever seeing the live current day.
+  const dateFilterValue = document.getElementById("dashDateFilter").value;
+  const today = dateFilterValue ? new Date(dateFilterValue + "T00:00:00") : new Date();
+  today.setHours(0, 0, 0, 0);
+  const isRealToday = !dateFilterValue;
   const isSameMonth = selYear === today.getFullYear() && selMonth === today.getMonth() + 1;
   let customers = [], visits = [], calendarDays = [], todayPlanEntries = [], selectedMonthPlanEntries = [];
   try {
@@ -2460,11 +2491,14 @@ async function refreshDashboard() {
   globalChannelSel.innerHTML = `<option value="">כל הערוצים</option>` + allChannels.map(ch => `<option value="${ch}">${ch}</option>`).join("");
   if (allChannels.includes(globalChannel)) globalChannelSel.value = globalChannel;
 
+  // "היום" only when this really is today - a picked dashDateFilter gets its own date spelled out in
+  // the label instead, so these cards never claim to be "today" when they're not.
+  const todayWord = isRealToday ? "היום" : fmtDate(todayIso);
   renderKpiGrid("dashKpiGrid", [
     { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel ? `בערוץ ${globalChannel}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים` },
-    { id: "plannedToday", value: fmtNumber(plannedTodayCount), label: "ביקורים מתוכננים להיום", sub: fmtDate(todayIso) },
-    { id: "visitsToday", value: fmtNumber(visitsToday.length), label: "ביקורים שבוצעו היום", sub: fmtDate(todayIso) },
-    { id: "postponedToday", value: fmtNumber(postponedToday.length), label: "ביקורים שנדחו היום", sub: fmtDate(todayIso) },
+    { id: "plannedToday", value: fmtNumber(plannedTodayCount), label: `ביקורים מתוכננים ל${todayWord}`, sub: fmtDate(todayIso) },
+    { id: "visitsToday", value: fmtNumber(visitsToday.length), label: `ביקורים שבוצעו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso) },
+    { id: "postponedToday", value: fmtNumber(postponedToday.length), label: `ביקורים שנדחו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso) },
     { id: "neglected", value: fmtNumber(neglected.length), label: "לקוחות שלא ביקרנו מעל 30 יום", sub: "לחצו לרשימה המלאה", tier: neglected.length === 0 ? "good" : (neglected.length > kpiCustomers.length * 0.2 ? "crit" : "warn") },
     { id: "decliningNeglected", value: fmtNumber(decliningNeglected.length), label: "יורדים במכר וללא ביקור מספק", sub: "ירידה במכר + לא ביקרנו מעל 30 יום", tier: decliningNeglected.length === 0 ? "good" : "crit" }
   ]);

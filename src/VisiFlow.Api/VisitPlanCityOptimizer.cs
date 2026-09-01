@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 // No namespace - matches VisitPlanGenerator.cs and Program.cs's implicit global namespace.
 
-public record CityOptimizationResult(int SwapsApplied, int FragmentationBefore, int FragmentationAfter, int AgentsAffected, int NotConsolidated);
+public record CityOptimizationResult(int SwapsApplied, int FragmentationBefore, int FragmentationAfter, int AgentsAffected, int NotConsolidated, int Displaced);
 
 /// <summary>
 /// Post-process pass over an ALREADY-GENERATED month's visit plan: reorders which day each visit
@@ -24,7 +24,11 @@ public record CityOptimizationResult(int SwapsApplied, int FragmentationBefore, 
 ///    spare). Tier A groups by the exact city; tier B (run second, on tier A's now-settled dates) groups
 ///    by the admin-defined "nearby cities" cluster (CityGroup) instead - so two visits to the literal
 ///    same city always get consolidated before a merely-nearby cluster-mate gets a say in which day
-///    "wins", rather than the two kinds of grouping competing on equal footing.
+///    "wins", rather than the two kinds of grouping competing on equal footing. If the target day is
+///    full, tries a single-hop EVICTION first (see TryEvict) - relocating one less-urgent (lower
+///    PriorityScore), non-anchor visit already on that day to a different legal day the same week -
+///    before giving up on the move entirely, per the admin's request to consolidate a city "at the
+///    expense of" a less important visit rather than only when room already happens to exist.
 /// 2. Pairwise swap local-search (same agent, different cities, each side's new date legal for the
 ///    other's customer) - repeatedly finds a swap that strictly reduces the total count of
 ///    distinct-city-per-agent-per-day pairs, until no improving swap remains or a pass cap is hit.
@@ -48,7 +52,7 @@ public static class VisitPlanCityOptimizer
         var entries = await db.VisitPlanEntries
             .Where(e => e.CompanyId == companyId && e.PlanYear == year && e.PlanMonth == month && e.PlannedDate != null)
             .ToListAsync();
-        if (entries.Count == 0) return new CityOptimizationResult(0, 0, 0, 0, 0);
+        if (entries.Count == 0) return new CityOptimizationResult(0, 0, 0, 0, 0, 0);
 
         var customerNumbers = entries.Select(e => e.CustomerNumber).Distinct().ToList();
         // The plan's own (year, month) is exactly the customer snapshot it was built from - entries
@@ -100,6 +104,7 @@ public static class VisitPlanCityOptimizer
 
         var swapsApplied = 0;
         var notConsolidated = 0;
+        var displaced = 0;
         var agentsAffected = new HashSet<string>();
 
         var byAgent = entries.Where(e => !string.IsNullOrWhiteSpace(AgentKeyOf(e))).GroupBy(e => AgentKeyOf(e)!).ToList();
@@ -181,6 +186,59 @@ public static class VisitPlanCityOptimizer
                     .OrderByDescending(g => g.Count())
                     .ToList();
 
+                // An entry moves at most once per tier - as a mover onto a target day, or as an evicted
+                // victim making room for one - so a group processed later in this same tier never
+                // re-touches something an earlier group already relocated (which would otherwise risk
+                // undoing that move, or double-counting it in CityOptimizedNote/the result counters).
+                var movedThisTier = new HashSet<int>();
+
+                // Tries to free one spot on targetDay by relocating some OTHER entry off it, so the
+                // consolidation move that's actually being attempted can proceed instead of giving up
+                // the moment the target day is full - per the admin's explicit request to consolidate a
+                // city "at the expense of" other visits, not just when there happens to be room. No
+                // PriorityScore floor against the mover: the entry needing to consolidate is very often
+                // ITSELF the lowest-priority one on the target day (that's typically why it got bumped
+                // off-canonical in the first place) - requiring a still-lower-priority victim would make
+                // eviction never fire for exactly the cases this exists to help. Picks the day's least
+                // urgent evictable entry instead, unconditionally.
+                // protectedGroupKey is the group currently being consolidated (never evict one of its own
+                // members - that would just replace one same-city visit with another and gain nothing).
+                bool TryEvict(DateTime targetDay, string? protectedGroupKey, string movingCity)
+                {
+                    var week = VisitPlanGenerator.WeekStartOf(targetDay);
+                    var onTargetDay = agentEntries.Where(e => e.PlannedDate?.Date == targetDay).ToList();
+                    int SameGroupCount(string? g) => onTargetDay.Count(e => groupOf(e) == g);
+
+                    var victimCandidates = onTargetDay
+                        .Where(e => eligibleIds.Contains(e.Id) && !movedThisTier.Contains(e.Id))
+                        .Where(e => groupOf(e) != protectedGroupKey) // never evict a member of the group we're consolidating
+                        .Where(e => SameGroupCount(groupOf(e)) != 2) // never break an already-consolidated pair back down to 1
+                        .OrderBy(e => e.PriorityScore).ThenBy(e => e.Id); // least-urgent-first, deterministic tie-break
+
+                    foreach (var victim in victimCandidates)
+                    {
+                        // Alternative day restricted to the SAME week, so a displacement stays local and
+                        // predictable rather than potentially bumping someone into a whole different week.
+                        var altDay = LegalDatesFor(victim)
+                            .Where(d => d != targetDay && VisitPlanGenerator.WeekStartOf(d) == week)
+                            .OrderBy(d => d)
+                            .FirstOrDefault(d => occupancy.GetValueOrDefault(d) < VisitPlanGenerator.CapacityFor(DayTypeOf(d), weights));
+                        if (altDay == default) continue;
+
+                        occupancy[targetDay] = occupancy.GetValueOrDefault(targetDay) - 1;
+                        occupancy[altDay] = occupancy.GetValueOrDefault(altDay) + 1;
+                        victim.PlannedDate = altDay;
+                        victim.CityOptimizedAt = DateTime.UtcNow;
+                        victim.CityOptimizedNote = $"הוזז כדי לפנות מקום לריכוז ביקורי {movingCity} - הוזז מ-{targetDay:dd/MM} ל-{altDay:dd/MM}";
+                        movedThisTier.Add(victim.Id);
+                        swapsApplied++;
+                        displaced++;
+                        agentsAffected.Add(agentGroup.Key);
+                        return true;
+                    }
+                    return false;
+                }
+
                 foreach (var group in groups)
                 {
                     // Target = the day already used by the most of this group's visits this week (ties
@@ -192,9 +250,10 @@ public static class VisitPlanCityOptimizer
 
                     foreach (var entry in group.Where(e => e.PlannedDate!.Value.Date != targetDay).OrderBy(e => e.PlannedDate))
                     {
-                        if (!eligibleIds.Contains(entry.Id)) continue; // manually-moved - anchor only, never itself moved
-                        if (occupancy.GetValueOrDefault(targetDay) >= targetCapacity) { notConsolidated++; continue; }
-                        if (!LegalDatesFor(entry).Contains(targetDay)) { notConsolidated++; continue; }
+                        if (!eligibleIds.Contains(entry.Id) || movedThisTier.Contains(entry.Id)) continue; // manually-moved, or already relocated earlier this tier
+                        if (!LegalDatesFor(entry).Contains(targetDay)) { notConsolidated++; continue; } // hard constraint - eviction can never rescue this
+                        if (occupancy.GetValueOrDefault(targetDay) >= targetCapacity
+                            && !TryEvict(targetDay, group.Key.Group, CityOf(entry)!)) { notConsolidated++; continue; }
 
                         var oldDate = entry.PlannedDate!.Value.Date;
                         var city = CityOf(entry)!;
@@ -203,6 +262,7 @@ public static class VisitPlanCityOptimizer
                         entry.PlannedDate = targetDay;
                         entry.CityOptimizedAt = DateTime.UtcNow;
                         entry.CityOptimizedNote = $"רוכז לפי עיר ({city}) - הוזז מ-{oldDate:dd/MM} ל-{targetDay:dd/MM}";
+                        movedThisTier.Add(entry.Id);
                         swapsApplied++;
                         agentsAffected.Add(agentGroup.Key);
                     }
@@ -261,7 +321,7 @@ public static class VisitPlanCityOptimizer
 
         await db.SaveChangesAsync();
         var fragmentationAfter = TotalFragmentation(entries, ClusterOf, AgentKeyOf);
-        return new CityOptimizationResult(swapsApplied, fragmentationBefore, fragmentationAfter, agentsAffected.Count, notConsolidated);
+        return new CityOptimizationResult(swapsApplied, fragmentationBefore, fragmentationAfter, agentsAffected.Count, notConsolidated, displaced);
     }
 
     /// <summary>Sum, across every (agent, day), of the number of DISTINCT location clusters visited

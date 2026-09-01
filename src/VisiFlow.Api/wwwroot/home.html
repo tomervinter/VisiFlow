@@ -4026,6 +4026,9 @@ document.getElementById("btnOptimizeByCity").addEventListener("click", async () 
     } else {
       msg.className = "form-msg success";
       let text = `בוצעו ${result.SwapsApplied} העברות בין ${result.AgentsAffected} סוכנים. ריכוז ימי-עיר ירד מ-${result.FragmentationBefore} ל-${result.FragmentationAfter}.`;
+      if (result.Displaced > 0) {
+        text += ` מתוכן ${result.Displaced} הוזזו כדי לפנות מקום לריכוז.`;
+      }
       if (result.NotConsolidated > 0) {
         text += ` (${result.NotConsolidated} פגישות לא ניתן היה לרכז - קיבולת יומית מלאה או אילוץ יום הפצה.)`;
       }

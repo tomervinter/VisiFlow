@@ -363,6 +363,11 @@
 
 
   .table-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  /* Scoped to the visit-plan table's toolbar only (added via JS, not shared with every other table's
+     toolbar) - space-between spreads a handful of buttons across the whole row width with big gaps
+     between them; this packs them tightly one after another instead, growing the row as more of the
+     selection-conditional buttons become visible instead of redistributing existing gaps. */
+  .table-toolbar.vp-toolbar-packed { justify-content: flex-start; gap: 8px; }
   .filtered-count-stat { display: inline-block; margin-bottom: 0; border-color: var(--electric); }
   .filtered-count-stat .n { color: var(--electric); }
 
@@ -3734,6 +3739,7 @@ const vpTable = createDataTable({
 // order puts select-all immediately left of the export button, with delete-all past that.
 document.getElementById("btnDeleteAllVp").removeAttribute("style"); // drop the old row's margin-inline-start:auto, meaningless here
 const vpTableToolbar = document.querySelector("#vpTable").previousElementSibling;
+vpTableToolbar.classList.add("vp-toolbar-packed");
 vpTableToolbar.appendChild(document.getElementById("btnSelectAllVp"));
 vpTableToolbar.appendChild(document.getElementById("btnDeleteAllVp"));
 // Same move for the selection-conditional group (hidden until a row is checked, see

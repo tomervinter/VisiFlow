@@ -1427,7 +1427,9 @@
           <button type="button" class="btn small" id="btnShowUnscheduled" style="display:none;"></button>
         </div>
 
-        <!-- Group 2: bulk selection + what to do with it, danger action pushed to the row's far end. -->
+        <!-- These elements are relocated into the table's own toolbar row (next to "ייצוא לאקסל") by
+             JS right after vpTable is created - defined here just as their initial template markup,
+             this div itself ends up empty once that runs. -->
         <div class="controls">
           <span class="vs-selected-count" id="vpSelectedCount" style="display:none;"></span>
           <button type="button" class="btn small select-all-btn" id="btnSelectAllVp"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="16" height="16" rx="3"/><path d="m6 10 3 3 5-6"/></svg> בחירת כל הנתונים</button>
@@ -3734,6 +3736,13 @@ document.getElementById("btnDeleteAllVp").removeAttribute("style"); // drop the 
 const vpTableToolbar = document.querySelector("#vpTable").previousElementSibling;
 vpTableToolbar.appendChild(document.getElementById("btnSelectAllVp"));
 vpTableToolbar.appendChild(document.getElementById("btnDeleteAllVp"));
+// Same move for the selection-conditional group (hidden until a row is checked, see
+// updateVpSelectionBar) - into the same toolbar row instead of the now-otherwise-empty group-2 div.
+vpTableToolbar.appendChild(document.getElementById("vpSelectedCount"));
+vpTableToolbar.appendChild(document.getElementById("btnMoveVpSelectedToNextMonth"));
+vpTableToolbar.appendChild(document.getElementById("btnDeleteVpSelected"));
+vpTableToolbar.appendChild(document.getElementById("btnClearVpSelection"));
+vpTableToolbar.appendChild(document.getElementById("vpDeleteMsg"));
 
 /* ---- manual date editing: click the planned-date cell to swap it for a real <input type=date>,
    picking a value calls the shared reschedule endpoint (Source="Admin") and re-fetches the table -

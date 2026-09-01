@@ -73,9 +73,6 @@ public static class VisitPlanGenerator
             DayOfWeek.Friday => WorkDayType.Half,
             _ => WorkDayType.Full
         };
-        // Admin-configurable per company (see VisitPlanWeights) - defaults to 8/4, adjustable from the
-        // "תוכנית ביקורים" screen when capacity is too tight to fit everyone and a re-run is needed.
-        int CapacityFor(WorkDayType t) => t switch { WorkDayType.Full => weights.FullDayCapacity, WorkDayType.Half => weights.HalfDayCapacity, _ => 0 };
 
         // ---- last visit date per customer (all-time, Visited outcomes only) ----
         var customerNumbers = customers.Select(c => c.CustomerNumber).ToList();
@@ -183,7 +180,7 @@ public static class VisitPlanGenerator
         int RemainingCapacity(string agent, DateTime date)
         {
             var key = (agent, date.Date);
-            if (!capacity.TryGetValue(key, out var cap)) { cap = CapacityFor(DayTypeOf(date)); capacity[key] = cap; }
+            if (!capacity.TryGetValue(key, out var cap)) { cap = CapacityFor(DayTypeOf(date), weights); capacity[key] = cap; }
             return cap;
         }
 
@@ -279,6 +276,13 @@ public static class VisitPlanGenerator
     /// enforcing "never visit the same customer twice in one week". Internal (not private) so
     /// VisitPlanCityOptimizer can reuse the exact same week-boundary definition.</summary>
     internal static DateTime WeekStartOf(DateTime date) => date.AddDays(-(int)date.DayOfWeek);
+
+    /// <summary>Admin-configurable per-company daily capacity (see VisitPlanWeights) for a given day
+    /// type - the same mapping GenerateAsync uses while placing new entries. Internal so
+    /// VisitPlanCityOptimizer can enforce the same capacity ceiling while moving already-placed
+    /// entries around.</summary>
+    internal static int CapacityFor(WorkDayType t, VisitPlanWeights weights) =>
+        t switch { WorkDayType.Full => weights.FullDayCapacity, WorkDayType.Half => weights.HalfDayCapacity, _ => 0 };
 
     internal static List<DayOfWeek> ActiveWeekdays(CustomerDistributionDay d)
     {

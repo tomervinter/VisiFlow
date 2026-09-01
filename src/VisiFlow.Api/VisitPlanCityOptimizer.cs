@@ -5,26 +5,33 @@ using Microsoft.EntityFrameworkCore;
 
 // No namespace - matches VisitPlanGenerator.cs and Program.cs's implicit global namespace.
 
-public record CityOptimizationResult(int SwapsApplied, int FragmentationBefore, int FragmentationAfter, int AgentsAffected);
+public record CityOptimizationResult(int SwapsApplied, int FragmentationBefore, int FragmentationAfter, int AgentsAffected, int NotConsolidated);
 
 /// <summary>
 /// Post-process pass over an ALREADY-GENERATED month's visit plan: reorders which day each visit
 /// lands on (within that customer's own already-valid date options) so an agent's same-city
 /// customers land on the same day as much as possible, reducing daily driving. Never touches
 /// PriorityScore, never adds/removes entries, never moves a visit between agents, and never moves
-/// an entry that was already placed by a human (ManuallyModifiedAt set) - it only swaps dates
-/// between pairs of entries belonging to the SAME agent.
+/// an entry that was already placed by a human (ManuallyModifiedAt set).
 ///
-/// "Legal date" for a candidate swap target is deliberately defined the same way the generator
-/// itself would have placed that customer: for a customer with distribution days on file, the exact
-/// set VisitPlanGenerator.PreferredDates would propose for their current visit count this month
-/// (so the distribution-day-minus-1/2 placement rule is never violated); for a customer with no
-/// distribution days, any working day in the month not already used by another of their own entries
-/// that same (Sun-Sat) week (the one hard rule that actually applied to them).
+/// Two passes, run in order:
+/// 1. Direct consolidation - for each agent+city-cluster+week that spans more than one day, moves
+///    every eligible entry directly onto whichever day already has the most of that cluster's visits
+///    that week, as long as the move is legal for that customer (see below) and the target day still
+///    has spare daily capacity (VisitPlanWeights). Unlike a swap, this needs no "trade partner" - it's
+///    what actually satisfies "put every visit to the same city that week on the same day", which a
+///    pairwise swap alone can't guarantee (nothing to swap with = nothing moves, even with room to spare).
+/// 2. Pairwise swap local-search (same agent, different cities, each side's new date legal for the
+///    other's customer) - repeatedly finds a swap that strictly reduces the total count of
+///    distinct-city-per-agent-per-day pairs, until no improving swap remains or a pass cap is hit.
+///    Capacity-neutral by construction (one entry out, one in), so needs no capacity check itself.
 ///
-/// Optimizes via local-search: repeatedly finds a pairwise swap (same agent, different cities, each
-/// side's new date legal for the other's customer) that strictly reduces the total count of
-/// distinct-city-per-agent-per-day pairs, until no improving swap remains or a pass cap is hit.
+/// "Legal date" for a candidate target is deliberately defined the same way the generator itself
+/// would have placed that customer: for a customer with distribution days on file, the exact set
+/// VisitPlanGenerator.PreferredDates would propose for their current visit count this month (so the
+/// distribution-day-minus-1/2 placement rule is never violated); for a customer with no distribution
+/// days, any working day in the month not already used by another of their own entries that same
+/// (Sun-Sat) week (the one hard rule that actually applied to them).
 /// </summary>
 public static class VisitPlanCityOptimizer
 {
@@ -37,7 +44,7 @@ public static class VisitPlanCityOptimizer
         var entries = await db.VisitPlanEntries
             .Where(e => e.CompanyId == companyId && e.PlanYear == year && e.PlanMonth == month && e.PlannedDate != null)
             .ToListAsync();
-        if (entries.Count == 0) return new CityOptimizationResult(0, 0, 0, 0);
+        if (entries.Count == 0) return new CityOptimizationResult(0, 0, 0, 0, 0);
 
         var customerNumbers = entries.Select(e => e.CustomerNumber).Distinct().ToList();
         // The plan's own (year, month) is exactly the customer snapshot it was built from - entries
@@ -58,6 +65,12 @@ public static class VisitPlanCityOptimizer
             foreach (var city in group.Cities.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 cityToCluster[city] = clusterKey;
         }
+
+        // Company-wide daily capacity (see VisitPlanWeights) - same numbers GenerateAsync placed
+        // entries against. Not persisted here if missing (this is a read for an existing plan, not
+        // plan creation) - just falls back to the same defaults VisitPlanWeights itself defaults to.
+        var weights = await db.VisitPlanWeights.FirstOrDefaultAsync(w => w.CompanyId == companyId)
+            ?? new VisitPlanWeights { FullDayCapacity = 8, HalfDayCapacity = 4 };
 
         var overrides = await db.WorkCalendarDays
             .Where(d => d.CompanyId == companyId && d.Date >= monthStart && d.Date <= monthEnd)
@@ -82,6 +95,7 @@ public static class VisitPlanCityOptimizer
         var fragmentationBefore = TotalFragmentation(entries, ClusterOf, AgentKeyOf);
 
         var swapsApplied = 0;
+        var notConsolidated = 0;
         var agentsAffected = new HashSet<string>();
 
         var byAgent = entries.Where(e => !string.IsNullOrWhiteSpace(AgentKeyOf(e))).GroupBy(e => AgentKeyOf(e)!).ToList();
@@ -134,6 +148,52 @@ public static class VisitPlanCityOptimizer
                 return legal;
             }
 
+            // ---- Pass 1: direct same-day consolidation within an (city-cluster, week) group ----
+            // Tracks each day's live occupancy (ALL of the agent's entries, including manually-moved
+            // ones - they still take up a capacity slot even though they can't themselves be moved) so
+            // a move here never pushes a day over its daily capacity.
+            var occupancy = agentEntries.Where(e => e.PlannedDate.HasValue)
+                .GroupBy(e => e.PlannedDate!.Value.Date).ToDictionary(g => g.Key, g => g.Count());
+            var eligibleIds = eligible.Select(e => e.Id).ToHashSet();
+            // Grouped from ALL of the agent's entries (not just eligible ones) - a manually-moved entry
+            // still legitimately anchors which day is "the" day for its cluster/week, even though it
+            // can't be moved itself. Biggest groups first, so they get first claim on shared capacity
+            // when two clusters in the same week are both competing for room on the same target day.
+            var consolidationGroups = agentEntries
+                .Where(e => e.PlannedDate.HasValue && !string.IsNullOrWhiteSpace(CityOf(e)))
+                .GroupBy(e => (Cluster: ClusterOf(e), Week: VisitPlanGenerator.WeekStartOf(e.PlannedDate!.Value)))
+                .Where(g => g.Select(e => e.PlannedDate!.Value.Date).Distinct().Count() > 1)
+                .OrderByDescending(g => g.Count())
+                .ToList();
+
+            foreach (var group in consolidationGroups)
+            {
+                // Target = the day already used by the most of this cluster's visits this week (ties
+                // -> earliest) - minimizes how many entries actually need to move.
+                var targetDay = group.GroupBy(e => e.PlannedDate!.Value.Date)
+                    .OrderByDescending(dg => dg.Count()).ThenBy(dg => dg.Key)
+                    .First().Key;
+                var targetCapacity = VisitPlanGenerator.CapacityFor(DayTypeOf(targetDay), weights);
+
+                foreach (var entry in group.Where(e => e.PlannedDate!.Value.Date != targetDay).OrderBy(e => e.PlannedDate))
+                {
+                    if (!eligibleIds.Contains(entry.Id)) continue; // manually-moved - anchor only, never itself moved
+                    if (occupancy.GetValueOrDefault(targetDay) >= targetCapacity) { notConsolidated++; continue; }
+                    if (!LegalDatesFor(entry).Contains(targetDay)) { notConsolidated++; continue; }
+
+                    var oldDate = entry.PlannedDate!.Value.Date;
+                    var city = CityOf(entry)!;
+                    occupancy[oldDate] = occupancy.GetValueOrDefault(oldDate) - 1;
+                    occupancy[targetDay] = occupancy.GetValueOrDefault(targetDay) + 1;
+                    entry.PlannedDate = targetDay;
+                    entry.CityOptimizedAt = DateTime.UtcNow;
+                    entry.CityOptimizedNote = $"רוכז לפי עיר ({city}) - הוזז מ-{oldDate:dd/MM} ל-{targetDay:dd/MM}";
+                    swapsApplied++;
+                    agentsAffected.Add(agentGroup.Key);
+                }
+            }
+
+            // ---- Pass 2: pairwise swap local-search (unchanged) ----
             var passes = 0;
             var improved = true;
             while (improved && passes < 20)
@@ -177,7 +237,7 @@ public static class VisitPlanCityOptimizer
 
         await db.SaveChangesAsync();
         var fragmentationAfter = TotalFragmentation(entries, ClusterOf, AgentKeyOf);
-        return new CityOptimizationResult(swapsApplied, fragmentationBefore, fragmentationAfter, agentsAffected.Count);
+        return new CityOptimizationResult(swapsApplied, fragmentationBefore, fragmentationAfter, agentsAffected.Count, notConsolidated);
     }
 
     /// <summary>Sum, across every (agent, day), of the number of DISTINCT location clusters visited

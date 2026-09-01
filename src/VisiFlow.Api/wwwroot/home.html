@@ -1363,10 +1363,6 @@
             <button type="button" class="btn small" id="btnToggleVpAdvanced">⚙️ הגדרות מתקדמות</button>
           </div>
         </div>
-        <p class="desc">
-          ממוינת כברירת מחדל לפי תאריך מתוכנן (מהקרוב לרחוק). לקוח שלא ניתן היה לשבץ בקיבולת הזמינה
-          מסומן בהתאם. פירוט מלא נמצא ב<a href="#" id="lnkVpGuide">הדרכה</a>.
-        </p>
 
         <div class="vp-build-grid" id="vpAdvancedSettings" style="display:none;margin-bottom:14px;">
           <div class="vp-build-col">
@@ -1401,17 +1397,18 @@
 
           <div class="vp-build-col vp-build-col-action">
             <h3 class="vp-build-col-title">אופטימיזציה לפי עיר</h3>
-            <p class="vp-build-col-desc">מסדר מחדש בין תאריכים חוקיים כדי לרכז ביקורים של אותו סוכן באותה עיר לאותו יום, על התוכנית של החודש שנבחר בטבלה למטה. <a href="#" id="lnkManageCityGroups">ניהול אשכולות ערים קרובות</a></p>
+            <p class="vp-build-col-desc">מסדר מחדש בין תאריכים חוקיים כדי לרכז ביקורים של אותו סוכן באותה עיר לאותו יום, על התוכנית של החודש שנבחר בטבלה למטה.</p>
+            <div class="vp-build-col-foot">
+              <button type="button" class="btn primary" id="lnkManageCityGroups">ניהול אשכולות ערים קרובות</button>
+            </div>
           </div>
         </div>
 
-        <!-- Group 1: filters (channel/year/month/agent, all the same pill style, plus the two
-             actions that act ON a filter - clear it, or toggle the unscheduled-only view). -->
+        <!-- Group 1: filters (year/month, same pill style, plus the two actions that act ON a
+             filter - clear it, or toggle the unscheduled-only view). Channel/agent filtering is done
+             via the table's own per-column filter row instead (see .filter-row), so no separate pill
+             for those here. -->
         <div class="pill-filter-bar">
-          <div class="pill-filter">
-            <label for="vpChannelFilter">ערוץ מכר:</label>
-            <select id="vpChannelFilter"><option value="">כל הערוצים</option></select>
-          </div>
           <div class="pill-filter">
             <label for="vpTableYearFilter">שנה:</label>
             <select id="vpTableYearFilter"></select>
@@ -1419,10 +1416,6 @@
           <div class="pill-filter">
             <label for="vpTableMonthFilter">חודש:</label>
             <select id="vpTableMonthFilter"></select>
-          </div>
-          <div class="pill-filter">
-            <label for="vpAgentFilter">סוכן:</label>
-            <select id="vpAgentFilter"><option value="">כל הסוכנים</option></select>
           </div>
           <button type="button" class="btn small" id="btnClearVpFilters">נקה סינון</button>
           <button type="button" class="btn small" id="btnShowUnscheduled" style="display:none;"></button>
@@ -1669,7 +1662,6 @@ function jumpToGuide(key) {
   }
 }
 document.getElementById("btnTopbarGuide").addEventListener("click", () => jumpToGuide(CURRENT_VIEW_KEY));
-document.getElementById("lnkVpGuide").addEventListener("click", (e) => { e.preventDefault(); jumpToGuide("visitplan"); });
 
 // Weights/capacity/city-optimization hidden by default (reported as overwhelming/scary for a screen
 // that most users only ever need for "pick a month, click generate") - collapsed behind this toggle,
@@ -1978,8 +1970,6 @@ function navigateToVisitLogFiltered({ search, date, outcome } = {}) {
 function navigateToVisitPlanFiltered({ year, month, search, channel, agent, customerNumbers } = {}) {
   if (year) document.getElementById("vpYearSelect").value = String(year);
   if (month) document.getElementById("vpMonthSelect").value = String(month);
-  document.getElementById("vpChannelFilter").value = channel || "";
-  document.getElementById("vpAgentFilter").value = agent || "";
   vpTable.setPredicate("channel", channel ? entry => entry.Channel === channel : null);
   vpTable.setPredicate("agent", agent ? entry => entry.AgentIdNumber === agent : null);
   // For dashboard metrics that pick out a specific SET of customers (e.g. "neglected 30+ days")
@@ -3794,30 +3784,9 @@ document.getElementById("vpTable").addEventListener("focusout", (e) => {
   saveVpNote(input.dataset.planId, input.value);
 });
 
-function populateVpChannelFilter() {
-  const sel = document.getElementById("vpChannelFilter");
-  const channels = [...new Set(liveVpEntries.map(e => e.Channel).filter(Boolean))].sort();
-  const prev = sel.value;
-  sel.innerHTML = `<option value="">כל הערוצים</option>` + channels.map(ch => `<option value="${ch}">${ch}</option>`).join("");
-  if (channels.includes(prev)) sel.value = prev;
-}
-function populateVpAgentFilter() {
-  const sel = document.getElementById("vpAgentFilter");
-  const prev = sel.value;
-  sel.innerHTML = `<option value="">כל הסוכנים</option>` + agentDropdownOptionsHtml(liveVpEntries, "AgentIdNumber", "AgentName");
-  sel.value = prev;
-}
-document.getElementById("vpChannelFilter").addEventListener("change", (e) => {
-  vpTable.setPredicate("channel", e.target.value ? entry => entry.Channel === e.target.value : null);
-});
-document.getElementById("vpAgentFilter").addEventListener("change", (e) => {
-  vpTable.setPredicate("agent", e.target.value ? entry => entry.AgentIdNumber === e.target.value : null);
-});
 let vpShowingUnscheduledOnly = false;
 
 document.getElementById("btnClearVpFilters").addEventListener("click", () => {
-  document.getElementById("vpChannelFilter").value = "";
-  document.getElementById("vpAgentFilter").value = "";
   vpTable.setPredicate("channel", null);
   vpTable.setPredicate("agent", null);
   vpTable.setPredicate("customerSet", null);
@@ -3866,8 +3835,6 @@ async function refreshVpTable() {
     if (res.ok) liveVpEntries = await res.json();
   } catch { /* offline */ }
   document.getElementById("vpCount").textContent = `${liveVpEntries.length} ביקורים מתוכננים`;
-  populateVpChannelFilter();
-  populateVpAgentFilter();
   updateVpSelectionBar();
   vpTable.setPredicate("unscheduled", null);
   updateUnscheduledButton();

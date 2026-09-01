@@ -1441,7 +1441,6 @@
           <button type="button" class="btn small" id="btnClearVpSelection" style="display:none;">ניקוי בחירה</button>
           <button type="button" class="btn primary small" id="btnMoveVpSelectedToNextMonth" style="display:none;">📅 העברה לתחילת החודש הבא</button>
           <button type="button" class="btn danger small" id="btnDeleteVpSelected" style="display:none;">&#128465; מחיקת נבחרים</button>
-          <button type="button" class="btn danger small" id="btnDeleteAllVp" style="margin-inline-start:auto;">&#128465; מחיקת כל התוכנית לחודש הנבחר</button>
           <span class="form-msg" id="vpDeleteMsg"></span>
         </div>
 
@@ -1621,26 +1620,6 @@
       <button type="button" class="btn danger" id="btnConfirmDeleteDist" disabled>מחיקת כל הנתונים</button>
       <button type="button" class="btn" id="btnCancelDeleteDist">ביטול</button>
       <span class="form-msg" id="deleteDistMsg"></span>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="deleteVpModalOverlay">
-  <div class="modal-box">
-    <h3>מחיקת תוכנית הביקורים לחודש הנבחר</h3>
-    <p class="desc" style="text-align:center;">
-      פעולה זו תמחק לצמיתות את <strong id="deleteVpMonthLabel"></strong> - כל השורות, כולל עריכות ידניות
-      ואופטימיזציות שבוצעו עליהן. חודשים אחרים לא יושפעו. הפעולה אינה ניתנת לביטול - ניתן ליצור את
-      התוכנית מחדש מאפס דרך "יצירת תוכנית". לאישור, הקלידו את המילה <strong>מחיקה</strong> בתיבה שלמטה.
-    </p>
-    <div class="field" style="margin-bottom:14px;">
-      <label for="deleteVpConfirmInput">הקלדת אישור</label>
-      <input type="text" id="deleteVpConfirmInput" placeholder="מחיקה" autocomplete="off" />
-    </div>
-    <div class="form-actions">
-      <button type="button" class="btn danger" id="btnConfirmDeleteVp" disabled>מחיקת התוכנית</button>
-      <button type="button" class="btn" id="btnCancelDeleteVp">ביטול</button>
-      <span class="form-msg" id="deleteVpMsg"></span>
     </div>
   </div>
 </div>
@@ -3733,15 +3712,13 @@ const vpTable = createDataTable({
 });
 
 // createDataTable() above already built and inserted a toolbar (filtered-count + "ייצוא לאקסל") right
-// before #vpTable - move "בחירת כל הנתונים" and the danger delete-all-plan button into that same row
-// instead of leaving them in the selection-actions row, per the admin's request. Append order matters
-// here: each appendChild lands further toward the row's LEFT edge (RTL flex-start flow), so this
-// order puts select-all immediately left of the export button, with delete-all past that.
-document.getElementById("btnDeleteAllVp").removeAttribute("style"); // drop the old row's margin-inline-start:auto, meaningless here
+// before #vpTable - move "בחירת כל הנתונים" into that same row instead of leaving it in the
+// selection-actions row, per the admin's request. Append order matters here: each appendChild lands
+// further toward the row's LEFT edge (RTL flex-start flow), so this order puts select-all immediately
+// left of the export button.
 const vpTableToolbar = document.querySelector("#vpTable").previousElementSibling;
 vpTableToolbar.classList.add("vp-toolbar-packed");
 vpTableToolbar.appendChild(document.getElementById("btnSelectAllVp"));
-vpTableToolbar.appendChild(document.getElementById("btnDeleteAllVp"));
 vpTableToolbar.appendChild(document.getElementById("btnShowUnscheduled"));
 // Same move for the selection-conditional group (hidden until a row is checked, see
 // updateVpSelectionBar) - into the same toolbar row instead of the now-otherwise-empty group-2 div.
@@ -3985,52 +3962,6 @@ document.getElementById("btnDeleteVpSelected").addEventListener("click", async (
     msg.className = "form-msg success"; msg.textContent = `נמחקו ${result.Deleted} שורות.`;
     await refreshVpTable();
   } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
-});
-
-/* ---- delete entire month's plan (danger button + type-to-confirm modal, same pattern as
-   distribution days' "מחיקת כל הנתונים") ---- */
-const deleteVpModal = document.getElementById("deleteVpModalOverlay");
-const deleteVpConfirmInput = document.getElementById("deleteVpConfirmInput");
-const btnConfirmDeleteVp = document.getElementById("btnConfirmDeleteVp");
-
-function openDeleteVpModal() {
-  const ym = vpSelectedYearMonth();
-  document.getElementById("deleteVpMonthLabel").textContent = ym ? `תוכנית הביקורים של ${HE_MONTHS[ym.month - 1]} ${ym.year}` : "תוכנית הביקורים לחודש הנבחר";
-  deleteVpConfirmInput.value = "";
-  btnConfirmDeleteVp.disabled = true;
-  document.getElementById("deleteVpMsg").textContent = "";
-  deleteVpModal.classList.add("open");
-}
-function closeDeleteVpModal() { deleteVpModal.classList.remove("open"); }
-
-document.getElementById("btnDeleteAllVp").addEventListener("click", () => {
-  const companyId = selectedCompanyId();
-  const ym = vpSelectedYearMonth();
-  if (!companyId || !ym) return;
-  openDeleteVpModal();
-});
-document.getElementById("btnCancelDeleteVp").addEventListener("click", closeDeleteVpModal);
-deleteVpModal.addEventListener("click", (e) => { if (e.target === deleteVpModal) closeDeleteVpModal(); });
-deleteVpConfirmInput.addEventListener("input", () => {
-  btnConfirmDeleteVp.disabled = deleteVpConfirmInput.value.trim() !== "מחיקה";
-});
-
-btnConfirmDeleteVp.addEventListener("click", async () => {
-  const companyId = selectedCompanyId();
-  const ym = vpSelectedYearMonth();
-  const msg = document.getElementById("deleteVpMsg");
-  if (!companyId || !ym) return;
-  btnConfirmDeleteVp.disabled = true;
-  msg.className = "form-msg"; msg.textContent = "מוחק...";
-  try {
-    const res = await fetch(`/api/visitplan?companyId=${companyId}&year=${ym.year}&month=${ym.month}`, { method: "DELETE" });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; btnConfirmDeleteVp.disabled = false; return; }
-    const result = await res.json();
-    msg.className = "form-msg success"; msg.textContent = `נמחקו ${result.Deleted} שורות.`;
-    syncVpTableFilterTo(ym);
-    await refreshVpTable();
-    setTimeout(closeDeleteVpModal, 900);
-  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; btnConfirmDeleteVp.disabled = false; }
 });
 
 const vpGenerateModal = document.getElementById("vpGenerateModalOverlay");

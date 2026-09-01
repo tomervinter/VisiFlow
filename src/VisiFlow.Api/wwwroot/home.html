@@ -1396,6 +1396,8 @@
           </div>
         </div>
 
+        <!-- Group 1: filters (channel/year/month/agent, all the same pill style, plus the two
+             actions that act ON a filter - clear it, or toggle the unscheduled-only view). -->
         <div class="pill-filter-bar">
           <div class="pill-filter">
             <label for="vpChannelFilter">ערוץ מכר:</label>
@@ -1409,13 +1411,16 @@
             <label for="vpTableMonthFilter">חודש:</label>
             <select id="vpTableMonthFilter"></select>
           </div>
-        </div>
-        <div class="controls">
-          <select id="vpAgentFilter"><option value="">כל הסוכנים</option></select>
+          <div class="pill-filter">
+            <label for="vpAgentFilter">סוכן:</label>
+            <select id="vpAgentFilter"><option value="">כל הסוכנים</option></select>
+          </div>
           <button type="button" class="btn small" id="btnClearVpFilters">נקה סינון</button>
           <button type="button" class="btn small" id="btnShowUnscheduled" style="display:none;"></button>
         </div>
-        <div class="controls" style="margin-top:0;">
+
+        <!-- Group 2: bulk selection + what to do with it, danger action pushed to the row's far end. -->
+        <div class="controls">
           <span class="vs-selected-count" id="vpSelectedCount">לא נבחרו שורות</span>
           <button type="button" class="btn small" id="btnSelectAllVp">בחירת כל הנתונים</button>
           <button type="button" class="btn small" id="btnClearVpSelection" disabled>ניקוי בחירה</button>
@@ -1429,6 +1434,7 @@
           <button type="button" class="btn primary large" id="btnOpenGenerateModal">+ יצירת תוכנית ביקורים</button>
         </div>
 
+        <h3 class="dash-section-title" style="margin:0 0 10px;">תוכנית הביקורים</h3>
         <div class="table-wrap">
           <table id="vpTable"></table>
         </div>

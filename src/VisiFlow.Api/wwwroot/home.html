@@ -506,6 +506,9 @@
   .vp-build-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; align-items: stretch; margin-top: 14px; }
   @media (max-width: 1180px) { .vp-build-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 640px) { .vp-build-grid { grid-template-columns: 1fr; } }
+  /* Only 3 columns now (weights/capacity/city-optimization) - "יצירת תוכנית" moved out to its own
+     always-visible box above, see #view-visitplan markup. */
+  #vpAdvancedSettings.vp-build-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .vp-build-col {
     border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--offwhite);
     display: flex; flex-direction: column; gap: 10px;
@@ -1320,13 +1323,30 @@
       <section class="panel">
         <h2>בניית תוכנית ביקורים</h2>
         <p class="desc">
-          4 שלבים: 1) קבעו משקלים 2) קבעו קיבולת יומית (שניהם אופציונליים - יש ברירת מחדל) 3) בחרו
-          חודש ולחצו "יצירת תוכנית" 4) לחצו "אופטימיזציה לפי עיר". פירוט מלא של כל שלב נמצא
-          ב<a href="#" id="lnkVpGuide">הדרכה</a>.
+          בחרו חודש (חייב קובץ לקוחות טעון משלו) ולחצו "יצירת תוכנית". משקלי חשיבות, קיבולת יומית
+          ואופטימיזציה לפי עיר הן הגדרות אופציונליות (יש להן ברירת מחדל) - מוסתרות כברירת מחדל,
+          נפתחות בלחיצה על "הגדרות מתקדמות" למטה. פירוט מלא נמצא ב<a href="#" id="lnkVpGuide">הדרכה</a>.
         </p>
-        <div class="vp-build-grid">
+
+        <div class="vp-build-col vp-build-col-action" style="margin-bottom:14px;">
+          <h3 class="vp-build-col-title">יצירת תוכנית ביקורים</h3>
+          <div class="month-picker">
+            <label for="vpYearSelect">שנה:</label>
+            <select id="vpYearSelect"></select>
+            <label for="vpMonthSelect">חודש:</label>
+            <select id="vpMonthSelect"></select>
+          </div>
+          <div class="vp-build-col-foot">
+            <button type="button" class="btn primary" id="btnGeneratePlan">יצירת תוכנית</button>
+            <span class="form-msg" id="vpGenerateMsg"></span>
+          </div>
+        </div>
+
+        <button type="button" class="btn-toolbar" id="btnToggleVpAdvanced">⚙️ הגדרות מתקדמות (משקלים, קיבולת, אופטימיזציה לפי עיר)</button>
+
+        <div class="vp-build-grid" id="vpAdvancedSettings" style="display:none;">
           <div class="vp-build-col">
-            <h3 class="vp-build-col-title">1. משקלי חשיבות</h3>
+            <h3 class="vp-build-col-title">משקלי חשיבות</h3>
             <p class="vp-build-col-desc">כמה כל פרמטר משפיע על סדר העדיפויות. ברירת מחדל: 20% לכל אחד - הסה"כ חייב להיות בדיוק 100%.</p>
             <div class="vp-weights-grid" id="vpWeightsGrid"></div>
             <div class="vp-build-col-foot">
@@ -1337,7 +1357,7 @@
           </div>
 
           <div class="vp-build-col">
-            <h3 class="vp-build-col-title">2. קיבולת יומית לסוכן</h3>
+            <h3 class="vp-build-col-title">קיבולת יומית לסוכן</h3>
             <p class="vp-build-col-desc">כמה פגישות אפשר לשבץ לסוכן ביום. אם לקוחות נשארים "לא שובץ" - הגדילו כאן, <b>לחצו "שמירה"</b> וצרו את התוכנית מחדש (השינוי לא משפיע על תוכנית שכבר נוצרה, וגם לא נשמר אם לא לוחצים שמירה).</p>
             <div class="vp-capacity-grid">
               <div class="vp-weight-field">
@@ -1356,23 +1376,8 @@
           </div>
 
           <div class="vp-build-col vp-build-col-action">
-            <h3 class="vp-build-col-title">3. יצירת התוכנית</h3>
-            <p class="vp-build-col-desc">בחרו חודש (חייב קובץ לקוחות טעון משלו) ולחצו ליצירה.</p>
-            <div class="month-picker">
-              <label for="vpYearSelect">שנה:</label>
-              <select id="vpYearSelect"></select>
-              <label for="vpMonthSelect">חודש:</label>
-              <select id="vpMonthSelect"></select>
-            </div>
-            <div class="vp-build-col-foot">
-              <button type="button" class="btn primary" id="btnGeneratePlan">יצירת תוכנית</button>
-              <span class="form-msg" id="vpGenerateMsg"></span>
-            </div>
-          </div>
-
-          <div class="vp-build-col vp-build-col-action">
-            <h3 class="vp-build-col-title">4. אופטימיזציה לפי עיר</h3>
-            <p class="vp-build-col-desc">מסדר מחדש בין תאריכים חוקיים כדי לרכז ביקורים של אותו סוכן באותה עיר לאותו יום, על התוכנית של החודש שנבחר בשלב 3. <a href="#" id="lnkManageCityGroups">ניהול אשכולות ערים קרובות</a></p>
+            <h3 class="vp-build-col-title">אופטימיזציה לפי עיר</h3>
+            <p class="vp-build-col-desc">מסדר מחדש בין תאריכים חוקיים כדי לרכז ביקורים של אותו סוכן באותה עיר לאותו יום, על התוכנית של החודש שנבחר למעלה. <a href="#" id="lnkManageCityGroups">ניהול אשכולות ערים קרובות</a></p>
             <div class="vp-build-col-foot">
               <button type="button" class="btn" id="btnOptimizeByCity">📍 אופטימיזציה</button>
               <span class="form-msg" id="vpOptimizeMsg"></span>
@@ -1657,6 +1662,17 @@ function jumpToGuide(key) {
 }
 document.getElementById("btnTopbarGuide").addEventListener("click", () => jumpToGuide(CURRENT_VIEW_KEY));
 document.getElementById("lnkVpGuide").addEventListener("click", (e) => { e.preventDefault(); jumpToGuide("visitplan"); });
+
+// Weights/capacity/city-optimization hidden by default (reported as overwhelming/scary for a screen
+// that most users only ever need for "pick a month, click generate") - collapsed behind this toggle,
+// the generate button/month-picker stays in its own always-visible box above regardless.
+document.getElementById("btnToggleVpAdvanced").addEventListener("click", () => {
+  const panel = document.getElementById("vpAdvancedSettings");
+  const btn = document.getElementById("btnToggleVpAdvanced");
+  const opening = panel.style.display === "none";
+  panel.style.display = opening ? "" : "none";
+  btn.textContent = opening ? "⚙️ הסתרת הגדרות מתקדמות" : "⚙️ הגדרות מתקדמות (משקלים, קיבולת, אופטימיזציה לפי עיר)";
+});
 
 /* ==================== GENERIC DATA TABLE ENGINE ====================
    Sortable/draggable columns, per-column filter row, global search box, and an Excel-export

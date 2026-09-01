@@ -646,6 +646,12 @@ app.MapDelete("/api/nonvisitreasons/{id:int}", async (int id, VisiFlowDbContext 
 {
     var reason = await db.NonVisitReasons.FindAsync(id);
     if (reason == null) return Results.NotFound();
+    // CustomerVisit.NonVisitReasonId -> NonVisitReasons is DeleteBehavior.Restrict (a past visit's
+    // logged reason must never silently go missing) - deleting a reason still referenced by at least
+    // one recorded visit would otherwise throw an unhandled FK-constraint DbUpdateException (a raw
+    // 500 the frontend has no message to show for). Check first and explain instead.
+    var inUse = await db.CustomerVisits.AnyAsync(v => v.NonVisitReasonId == id);
+    if (inUse) return Results.BadRequest("לא ניתן למחוק סיבה זו - היא כבר רשומה בביקורים קיימים. ניתן לערוך את הנוסח שלה במקום.");
     db.NonVisitReasons.Remove(reason);
     await db.SaveChangesAsync();
     return Results.NoContent();

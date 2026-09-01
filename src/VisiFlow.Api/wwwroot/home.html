@@ -1421,11 +1421,11 @@
 
         <!-- Group 2: bulk selection + what to do with it, danger action pushed to the row's far end. -->
         <div class="controls">
-          <span class="vs-selected-count" id="vpSelectedCount">לא נבחרו שורות</span>
+          <span class="vs-selected-count" id="vpSelectedCount" style="display:none;"></span>
           <button type="button" class="btn small" id="btnSelectAllVp">בחירת כל הנתונים</button>
-          <button type="button" class="btn small" id="btnClearVpSelection" disabled>ניקוי בחירה</button>
-          <button type="button" class="btn primary small" id="btnMoveVpSelectedToNextMonth" disabled>📅 העברה לתחילת החודש הבא</button>
-          <button type="button" class="btn danger small" id="btnDeleteVpSelected" disabled>&#128465; מחיקת נבחרים</button>
+          <button type="button" class="btn small" id="btnClearVpSelection" style="display:none;">ניקוי בחירה</button>
+          <button type="button" class="btn primary small" id="btnMoveVpSelectedToNextMonth" style="display:none;">📅 העברה לתחילת החודש הבא</button>
+          <button type="button" class="btn danger small" id="btnDeleteVpSelected" style="display:none;">&#128465; מחיקת נבחרים</button>
           <button type="button" class="btn danger small" id="btnDeleteAllVp" style="margin-inline-start:auto;">&#128465; מחיקת כל התוכנית לחודש הנבחר</button>
           <span class="form-msg" id="vpDeleteMsg"></span>
         </div>
@@ -3865,10 +3865,13 @@ async function refreshVpTable() {
 
 function updateVpSelectionBar() {
   const n = vpSelected.size;
-  document.getElementById("vpSelectedCount").textContent = n === 0 ? "לא נבחרו שורות" : `נבחרו ${n} שורות`;
-  document.getElementById("btnDeleteVpSelected").disabled = n === 0;
-  document.getElementById("btnClearVpSelection").disabled = n === 0;
-  document.getElementById("btnMoveVpSelectedToNextMonth").disabled = n === 0;
+  // Hidden, not just disabled, while nothing is selected - three always-visible grayed-out buttons
+  // (reported as visual clutter) only actually matter once there's a selection for them to act on.
+  document.getElementById("vpSelectedCount").style.display = n === 0 ? "none" : "";
+  document.getElementById("vpSelectedCount").textContent = `נבחרו ${n} שורות`;
+  ["btnDeleteVpSelected", "btnClearVpSelection", "btnMoveVpSelectedToNextMonth"].forEach(id => {
+    document.getElementById(id).style.display = n === 0 ? "none" : "";
+  });
 }
 
 document.getElementById("vpTable").addEventListener("change", (e) => {

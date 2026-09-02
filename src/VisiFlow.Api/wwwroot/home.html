@@ -225,6 +225,7 @@
   --chart-5: #ec4899; --chart-6: var(--electric); --chart-7: #64748b; --chart-8: #22c55e;
 
   .dash-updated-line { font-size: 0.78rem; color: var(--text-muted); margin: -8px 0 16px; }
+  .dash-greeting { font-size: 1.2rem; font-weight: 700; color: var(--text); margin: 0 0 14px; }
   .dash-section-title { font-size: 1.05rem; font-weight: 700; color: var(--text); margin: 0 0 2px; display: flex; align-items: center; gap: 8px; }
   .dash-section-title .dash-icon { color: var(--brand); flex-shrink: 0; }
   .dash-section-sub { font-size: 0.8rem; color: var(--text-muted); margin: 0 0 16px; }
@@ -630,7 +631,7 @@
   .dropzone-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 0; }
   /* Inline in the year/month controls row instead of its own full-width block - same drop target,
      just compact padding and a one-line body instead of the stacked icon/text/button layout. */
-  .dropzone-compact { padding: 6px 12px; flex: 1 1 260px; }
+  .dropzone-compact { padding: 6px 12px; flex: 0 1 320px; }
   .dropzone-compact .dropzone-body { gap: 8px; flex-wrap: nowrap; white-space: nowrap; }
   .dropzone-compact .dropzone-body span { font-size: 0.82rem; }
 
@@ -831,10 +832,6 @@
       <span>סיבות אי ביקור</span>
       <span class="count" id="navCountReasons"></span>
     </button>
-    <button class="nav-item" data-view="users">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-      <span>ניהול משתמשים</span>
-    </button>
   </nav>
 
   <div class="nav-group-label">טעינת נתונים</div>
@@ -854,16 +851,18 @@
     </button>
   </nav>
 
-  <!-- Hidden entirely for non-super-admins - see applyCurrentUserUi(). -->
-  <div id="navGroupAdmin" style="display:none;">
-    <div class="nav-group-label">ניהול</div>
-    <nav class="main-nav">
-      <button class="nav-item" data-view="admin">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6.5V11c0 4.9 3.4 9.4 8 10.5 4.6-1.1 8-5.6 8-10.5V6.5L12 3Z"/><path d="m9.5 12 1.8 1.8L15 10"/></svg>
-        <span>ניהול</span>
-      </button>
-    </nav>
-  </div>
+  <div class="nav-group-label">ניהול</div>
+  <nav class="main-nav">
+    <button class="nav-item" data-view="users">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span>ניהול משתמשים</span>
+    </button>
+    <!-- Hidden for non-super-admins - see applyCurrentUserUi(). -->
+    <button class="nav-item" data-view="admin" id="navItemAdminCompanies" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6.5V11c0 4.9 3.4 9.4 8 10.5 4.6-1.1 8-5.6 8-10.5V6.5L12 3Z"/><path d="m9.5 12 1.8 1.8L15 10"/></svg>
+      <span>ניהול</span>
+    </button>
+  </nav>
 
   <div class="sidebar-foot">
     <div class="sidebar-foot-user"><span id="sidebarUserLabel"></span></div>
@@ -891,6 +890,8 @@
 
     <!-- ===================== DASHBOARD ===================== -->
     <div class="view active" id="view-dashboard">
+      <div class="dash-greeting" id="dashGreeting"></div>
+
       <div class="no-company-banner" id="noCompanyBanner" style="display:none;">
         טרם הוגדרה אף חברה במערכת. מנהל-על יכול להקים חברה חדשה במסך "ניהול" בתפריט הצד.
       </div>
@@ -4202,7 +4203,8 @@ function hideLoginScreen() {
 // dangling in front of someone who'd only ever get a 403 clicking it).
 function applyCurrentUserUi() {
   document.getElementById("sidebarUserLabel").textContent = CURRENT_USER.DisplayName;
-  document.getElementById("navGroupAdmin").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
+  document.getElementById("navItemAdminCompanies").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
+  document.getElementById("dashGreeting").textContent = `שלום, ${CURRENT_USER.DisplayName}`;
 }
 
 async function checkAuth() {

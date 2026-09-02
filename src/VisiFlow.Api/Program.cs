@@ -275,10 +275,11 @@ static string? JoinChannels(List<string>? channels)
 // User management (create/reset-password/delete other admin-interface logins) - confined to the
 // caller's own company unless they're a super-admin (see ResolveCallerAsync), who can manage any
 // company's users - needed to create the first user of a newly-created tenant.
-app.MapGet("/api/users", async (HttpContext ctx, VisiFlowDbContext db) =>
+app.MapGet("/api/users", async (int companyId, HttpContext ctx, VisiFlowDbContext db) =>
 {
     var caller = await ResolveCallerAsync(ctx, db);
-    var users = (await db.Users.Where(u => caller.IsSuperAdmin || u.CompanyId == caller.CompanyId).OrderBy(u => u.Username).ToListAsync()).Select(UserDto.From);
+    if (!caller.IsSuperAdmin && companyId != caller.CompanyId) return ForbiddenCompany();
+    var users = (await db.Users.Where(u => u.CompanyId == companyId).OrderBy(u => u.Username).ToListAsync()).Select(UserDto.From);
     return Results.Ok(users);
 }).RequireAuthorization();
 

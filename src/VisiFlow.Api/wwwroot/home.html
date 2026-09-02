@@ -1928,6 +1928,7 @@ async function refreshAllCompanyScopedViews() {
   refreshWorkCalendarView();
   refreshVisitLogView();
   refreshVisitPlanView();
+  refreshUsersView();
   vsSelected.clear();
   refreshVsView();
 }
@@ -4289,8 +4290,10 @@ const usersTable = createDataTable({
 });
 
 async function refreshUsersView() {
+  const companyId = selectedCompanyId();
+  if (!companyId) { liveUsers = []; document.getElementById("usersCount").textContent = ""; usersTable.refresh(); return; }
   try {
-    const res = await fetch("/api/users");
+    const res = await fetch(`/api/users?companyId=${companyId}`);
     if (res.ok) liveUsers = await res.json();
   } catch { /* offline */ }
   document.getElementById("usersCount").textContent = `${liveUsers.length} משתמשים`;

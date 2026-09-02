@@ -1692,6 +1692,27 @@
 </div>
 
 <!-- ===================== DELETE ALL CUSTOMERS CONFIRMATION MODAL ===================== -->
+<!-- ===================== DELETE COMPANY CONFIRMATION MODAL ===================== -->
+<div class="modal-overlay" id="deleteCompanyModalOverlay">
+  <div class="modal-box">
+    <h3>מחיקת חברה</h3>
+    <p class="desc" style="text-align:center;">
+      פעולה זו תמחק לצמיתות את החברה <strong id="deleteCompanyNameLabel"></strong> ואת <u>כל</u> הנתונים
+      שלה - לקוחות, תוכניות ביקורים, יומן ביקורים, משתמשים, הגדרות וכל השאר. הפעולה אינה ניתנת לביטול.
+      לאישור, הקלידו את <u>שם החברה במדויק</u> בתיבה שלמטה.
+    </p>
+    <div class="field" style="margin-bottom:14px;">
+      <label for="deleteCompanyConfirmInput">הקלדת אישור</label>
+      <input type="text" id="deleteCompanyConfirmInput" autocomplete="off" />
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn danger" id="btnConfirmDeleteCompany" disabled>מחיקת החברה לצמיתות</button>
+      <button type="button" class="btn" id="btnCancelDeleteCompany">ביטול</button>
+      <span class="form-msg" id="deleteCompanyMsg"></span>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="deleteCustomersModalOverlay">
   <div class="modal-box">
     <h3>מחיקת החודש הנבחר</h3>
@@ -2037,14 +2058,79 @@ function renderAdminCompaniesList() {
   const listEl = document.getElementById("adminCompaniesList");
   const countEl = document.getElementById("adminCompaniesCount");
   countEl.textContent = COMPANIES.length ? String(COMPANIES.length) : "";
-  listEl.innerHTML = COMPANIES.map((c, i) => `
-    <div class="editable-row">
+  listEl.innerHTML = COMPANIES.map((c, i) => {
+    const name = String(c.Name).replace(/</g, "&lt;");
+    const nameAttr = String(c.Name).replace(/"/g, "&quot;");
+    const isActive = c.IsActive !== false;
+    return `
+    <div class="editable-row" style="${isActive ? "" : "opacity:0.55;"}">
       <span class="reason-index">${i + 1}</span>
-      <span style="flex:1;font-weight:600;">${String(c.Name).replace(/</g, "&lt;")}</span>
+      <span style="flex:1;font-weight:600;">${name}</span>
       <span class="badge">מזהה ${c.Id}</span>
-    </div>
-  `).join("") || `<div class="editable-row" style="color:var(--text-muted);">אין עדיין חברות במערכת.</div>`;
+      <button type="button" class="btn-icon-badge badge${isActive ? " good" : ""}" data-action="toggle-company-active" data-id="${c.Id}" data-name="${nameAttr}" data-active="${isActive}" title="${isActive ? "לחצו להקפאה - יחסום התחברות לכל משתמשי החברה (הפיך)" : "לחצו להפשרה - יאפשר התחברות מחדש"}">${isActive ? "פעיל" : "מוקפא"}</button>
+      <button type="button" class="btn-icon" data-action="delete-company" data-id="${c.Id}" data-name="${nameAttr}" title="מחיקה סופית - כל הנתונים">&#128465;</button>
+    </div>`;
+  }).join("") || `<div class="editable-row" style="color:var(--text-muted);">אין עדיין חברות במערכת.</div>`;
 }
+
+document.getElementById("adminCompaniesList").addEventListener("click", async (e) => {
+  const toggleBtn = e.target.closest('[data-action="toggle-company-active"]');
+  const deleteBtn = e.target.closest('[data-action="delete-company"]');
+
+  if (toggleBtn) {
+    const nextActive = toggleBtn.dataset.active !== "true";
+    if (!nextActive) {
+      // Freezing is deliberately re-confirmed (per admin's own request) - unfreezing needs no extra
+      // step since it only restores access, nothing is lost by doing it accidentally.
+      const ok = confirm(`להקפיא את החברה "${toggleBtn.dataset.name}"? כל המשתמשים שלה לא יוכלו להתחבר עד שתפשירו אותה מחדש. הנתונים עצמם לא נפגעים.`);
+      if (!ok) return;
+    }
+    try {
+      const res = await fetch(`/api/companies/${toggleBtn.dataset.id}/active`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ IsActive: nextActive })
+      });
+      if (!res.ok) { alert(await res.text()); return; }
+      await loadCompanies();
+    } catch { alert("שגיאת תקשורת עם השרת"); }
+    return;
+  }
+
+  if (deleteBtn) openDeleteCompanyModal(deleteBtn.dataset.id, deleteBtn.dataset.name);
+});
+
+/* ---- delete-company modal: type the exact company name to confirm, same spirit as the "type מחיקה"
+   modals elsewhere but keyed to the name since this deletes an entire tenant, not one month's data. ---- */
+const deleteCompanyModal = document.getElementById("deleteCompanyModalOverlay");
+let deleteCompanyId = null, deleteCompanyName = null;
+function openDeleteCompanyModal(id, name) {
+  deleteCompanyId = id; deleteCompanyName = name;
+  document.getElementById("deleteCompanyNameLabel").textContent = name;
+  document.getElementById("deleteCompanyConfirmInput").value = "";
+  document.getElementById("deleteCompanyMsg").textContent = "";
+  document.getElementById("btnConfirmDeleteCompany").disabled = true;
+  deleteCompanyModal.classList.add("open");
+}
+function closeDeleteCompanyModal() { deleteCompanyModal.classList.remove("open"); deleteCompanyId = null; }
+document.getElementById("btnCancelDeleteCompany").addEventListener("click", closeDeleteCompanyModal);
+deleteCompanyModal.addEventListener("click", (e) => { if (e.target === deleteCompanyModal) closeDeleteCompanyModal(); });
+document.getElementById("deleteCompanyConfirmInput").addEventListener("input", (e) => {
+  document.getElementById("btnConfirmDeleteCompany").disabled = e.target.value !== deleteCompanyName;
+});
+document.getElementById("btnConfirmDeleteCompany").addEventListener("click", async () => {
+  const msg = document.getElementById("deleteCompanyMsg");
+  const btn = document.getElementById("btnConfirmDeleteCompany");
+  btn.disabled = true;
+  msg.className = "form-msg"; msg.textContent = "מוחק...";
+  try {
+    const res = await fetch(`/api/companies/${deleteCompanyId}`, { method: "DELETE" });
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await res.text(); btn.disabled = false; return; }
+    msg.className = "form-msg success"; msg.textContent = "החברה נמחקה.";
+    await loadCompanies();
+    refreshAllCompanyScopedViews();
+    setTimeout(closeDeleteCompanyModal, 900);
+  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; btn.disabled = false; }
+});
 
 document.getElementById("addCompanyForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -4364,7 +4450,14 @@ async function attemptLogin() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ Username: username, Password: password })
     });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = "שם משתמש או סיסמה שגויים"; btn.disabled = false; return; }
+    if (!res.ok) {
+      msg.className = "form-msg error";
+      // 403 = correct credentials but blocked for a real reason (frozen company) - show that specific
+      // message. Any other failure (401 etc.) stays generic, same as always, so a wrong password never
+      // reveals whether the username itself exists.
+      msg.textContent = res.status === 403 ? await res.text() : "שם משתמש או סיסמה שגויים";
+      btn.disabled = false; return;
+    }
     CURRENT_USER = await res.json();
     applyCurrentUserUi();
     document.getElementById("loginPassword").value = "";

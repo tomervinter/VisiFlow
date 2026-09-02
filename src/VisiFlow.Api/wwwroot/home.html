@@ -815,7 +815,7 @@
   <nav class="main-nav">
     <button class="nav-item" data-view="customers">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.3 2.9-6 6.5-6s6.5 2.7 6.5 6"/><circle cx="17" cy="7" r="2.3"/><path d="M14.8 14.3c.6-.3 1.3-.4 2-.4 2.9 0 5.2 2.4 5.2 5.3"/></svg>
-      <span>לקוחות</span>
+      <span>טעינת לקוחות</span>
       <span class="count" id="navCountCustomers"></span>
     </button>
   </nav>
@@ -1573,7 +1573,7 @@
         <div class="guide-screenshot"><img src="/guide-images/visitplan_advanced.png" alt="מסך תוכנית ביקורים עם הגדרות מתקדמות" /></div>
         <ol class="vp-steps">
           <li><strong>שלב 1 - קביעת משקל החשיבות:</strong> בפאנל "משקלי חשיבות וקיבולת יומית", אפשר לשנות את האחוזים (ברירת המחדל: 20% לכל פרמטר) ואת קיבולת הסוכן (ברירת מחדל: 8 פגישות ביום מלא, 4 בחצי יום). אם לא רוצים לשנות כלום - אפשר לדלג לשלב 2, המערכת כבר משתמשת בברירת המחדל.</li>
-          <li><strong>שלב 2 - בחירת חודש ושנה:</strong> בפאנל "יצירת תוכנית ביקורים", בחרו לאיזה חודש בונים את התוכנית. חייב להיות לחודש הזה קובץ לקוחות טעון משלו (במסך "לקוחות") - אחרת המערכת תסרב וייתן הודעה על כך.</li>
+          <li><strong>שלב 2 - בחירת חודש ושנה:</strong> בפאנל "יצירת תוכנית ביקורים", בחרו לאיזה חודש בונים את התוכנית. חייב להיות לחודש הזה קובץ לקוחות טעון משלו (במסך "טעינת לקוחות") - אחרת המערכת תסרב וייתן הודעה על כך.</li>
           <li><strong>שלב 3 - יצירת תוכנית:</strong> לחצו על הכפתור "יצירת תוכנית". <b>מה קורה:</b> תוך שניות המערכת משבצת את כל הלקוחות של החודש הזה לתאריכים, לפי סדר עדיפות והקיבולת היומית שהוגדרה. הטבלה למטה מתמלאת בתוצאה. לקוח שלא נכנס בגלל קיבולת מלאה מסומן "לא שובץ" - אם יש כאלה, אפשר לחזור לשלב 1, להגדיל את הקיבולת, ולעשות שלב 3 שוב (זה מחליף את התוכנית הקיימת, לא מוסיף לה).</li>
           <li><strong>שלב 4 - אופטימיזציה לפי עיר (אופציונלי):</strong> אחרי שיש תוכנית, אפשר ללחוץ "אופטימיזציה לפי עיר". <b>מה קורה:</b> המערכת מנסה להזיז ביקורים בין ימים כדי שאותו סוכן יבקר כמה שיותר לקוחות מאותה עיר באותו יום, בלי לשבור אילוצים כמו ימי הפצה. בסוף מוצגת הודעה כמה שינויים בוצעו.</li>
         </ol>
@@ -1756,7 +1756,7 @@
 /* ==================== VIEW SWITCHING ==================== */
 const VIEW_TITLES = {
   dashboard: ["בית", "תמונת מצב כללית"],
-  customers: ["לקוחות", "בסיס הלקוחות של הסוכנים - טבלת Customers"],
+  customers: ["טעינת לקוחות", "בסיס הלקוחות של הסוכנים - טבלת Customers"],
   nonvisitreasons: ["סיבות אי ביקור", "רשימת סיבות ערוכה - תוצג לסוכן כשידווח שלא הגיע ללקוח"],
   visitlog: ["יומן ביקורים", "תיעוד ביקורים שבוצעו בפועל - הבסיס לחישוב ימים מאז ביקור אחרון"],
   distributiondays: ["יומן ימי הפצה", "באילו ימות השבוע כל לקוח מקבל הפצה, לפי חודש"],
@@ -2694,13 +2694,22 @@ async function refreshDashboard() {
     .filter(e => (e.PlannedDate || "").slice(0, 10) === todayIso)
     .filter(e => !globalChannel || e.Channel === globalChannel).length;
 
-  // Planned for today but no visit logged yet at all (neither visited nor postponed) - what's still
-  // outstanding for the agent to get to today, as opposed to visitsToday/postponedToday which are
-  // already-resolved outcomes.
-  const pendingToday = todayPlanEntries
+  // Agents who have at least one customer planned for today but haven't logged a single visit today
+  // yet (visited OR postponed) - "hasn't started today at all", not "still has some left". Visits don't
+  // carry AgentIdNumber directly, so each is attributed via today's plan entry for the same customer.
+  const todayEntriesForChannel = todayPlanEntries
     .filter(e => (e.PlannedDate || "").slice(0, 10) === todayIso)
-    .filter(e => !globalChannel || e.Channel === globalChannel)
-    .filter(e => !visits.some(v => v.CustomerNumber === e.CustomerNumber && (v.VisitDate || "").slice(0, 10) === todayIso));
+    .filter(e => !globalChannel || e.Channel === globalChannel);
+  const customerToAgentToday = new Map(todayEntriesForChannel.map(e => [e.CustomerNumber, { id: e.AgentIdNumber || `__noid__:${e.AgentName || "ללא סוכן"}`, name: e.AgentName || "ללא סוכן" }]));
+  const agentsPlannedToday = new Map();
+  for (const e of todayEntriesForChannel) agentsPlannedToday.set(e.AgentIdNumber || `__noid__:${e.AgentName || "ללא סוכן"}`, e.AgentName || "ללא סוכן");
+  const agentsReportedToday = new Set(visits
+    .filter(v => (v.VisitDate || "").slice(0, 10) === todayIso)
+    .map(v => customerToAgentToday.get(v.CustomerNumber)?.id)
+    .filter(Boolean));
+  const agentsNotReportedToday = [...agentsPlannedToday.keys()].filter(id => !agentsReportedToday.has(id));
+  // Everything those agents have planned today - what clicking the KPI card below drills into.
+  const pendingToday = todayEntriesForChannel.filter(e => agentsNotReportedToday.includes(e.AgentIdNumber || `__noid__:${e.AgentName || "ללא סוכן"}`));
 
   // Customers whose visit-plan entry for the selected month exists but never got a PlannedDate - the
   // generator ran out of daily capacity for them (see VisitPlanGenerator/"לא שובץ" in the visit-plan
@@ -2751,7 +2760,7 @@ async function refreshDashboard() {
     { id: "plannedToday", value: fmtNumber(plannedTodayCount), label: `ביקורים מתוכננים ל${todayWord}`, sub: fmtDate(todayIso) },
     { id: "visitsToday", value: fmtNumber(visitsToday.length), label: `ביקורים שבוצעו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso) },
     { id: "postponedToday", value: fmtNumber(postponedToday.length), label: `ביקורים שנדחו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso) },
-    { id: "pendingToday", value: fmtNumber(pendingToday.length), label: `לקוחות שטרם דווחו ${todayWord}`, sub: fmtDate(todayIso) }
+    { id: "pendingToday", value: fmtNumber(agentsNotReportedToday.length), label: `סוכנים שטרם דיווחו ${todayWord}`, sub: fmtDate(todayIso) }
   ]);
   renderKpiGrid("dashKpiGridMonthly", [
     { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel ? `בערוץ ${globalChannel}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים`, tier: "good" },

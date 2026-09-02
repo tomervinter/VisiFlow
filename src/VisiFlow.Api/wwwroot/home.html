@@ -262,10 +262,10 @@
     font-size: 0.76rem; font-weight: 700; color: var(--text-muted); letter-spacing: 0.02em;
     margin: 0 0 10px; text-transform: none;
   }
-  .dash-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+  .dash-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; }
   .kpi-card {
     position: relative; background: var(--white); border: 1px solid var(--border); border-radius: 14px;
-    padding: 16px 18px; box-shadow: var(--shadow); cursor: pointer; overflow: hidden;
+    padding: 10px 12px; box-shadow: var(--shadow); cursor: pointer; overflow: hidden;
     transition: transform .15s, box-shadow .15s; text-align: right;
   }
   .kpi-card::before {
@@ -277,19 +277,19 @@
   .kpi-card.crit::before { background: var(--crit-fg); }
   .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 8px 22px rgba(15,23,42,0.16); }
   .kpi-card .kpi-icon {
-    display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
-    border-radius: 9px; background: var(--ice); color: var(--brand); margin-bottom: 10px;
+    display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+    border-radius: 8px; background: var(--ice); color: var(--brand); margin-bottom: 8px;
   }
   .kpi-card.good .kpi-icon { background: var(--good-bg); color: var(--good-fg); }
   .kpi-card.warn .kpi-icon { background: var(--warn-bg); color: var(--warn-fg); }
   .kpi-card.crit .kpi-icon { background: var(--crit-bg); color: var(--crit-fg); }
-  .kpi-card .kpi-icon svg { width: 18px; height: 18px; }
-  .kpi-card .kpi-n { font-size: 2rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; color: var(--text); position: relative; }
+  .kpi-card .kpi-icon svg { width: 16px; height: 16px; }
+  .kpi-card .kpi-n { font-size: 1.4rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; color: var(--text); position: relative; }
   .kpi-card.good .kpi-n { color: var(--good-fg); }
   .kpi-card.warn .kpi-n { color: var(--warn-fg); }
   .kpi-card.crit .kpi-n { color: var(--crit-fg); }
-  .kpi-card .kpi-l { font-size: 0.84rem; color: var(--text); font-weight: 600; margin-top: 6px; position: relative; }
-  .kpi-card .kpi-sub { font-size: 0.74rem; color: var(--text-muted); margin-top: 3px; position: relative; }
+  .kpi-card .kpi-l { font-size: 0.76rem; color: var(--text); font-weight: 600; margin-top: 5px; position: relative; }
+  .kpi-card .kpi-sub { font-size: 0.68rem; color: var(--text-muted); margin-top: 3px; position: relative; }
 
   .dash-charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-bottom: 22px; align-items: stretch; }
   @media (max-width: 900px) { .dash-charts-row { grid-template-columns: 1fr; } }
@@ -2224,6 +2224,8 @@ document.querySelector(".dash-kpi-groups").addEventListener("click", (e) => {
     navigateToVisitPlanFiltered({ year: d.selYear, month: d.selMonth, customerNumbers: d.decliningNeglected.map(c => c.CustomerNumber) });
   } else if (id === "unscheduled") {
     navigateToVisitPlanFiltered({ year: d.selYear, month: d.selMonth, customerNumbers: d.unscheduled.map(e => e.CustomerNumber) });
+  } else if (id === "plannedToday") {
+    navigateToVisitPlanFiltered({ year: d.todayYear, month: d.todayMonth, customerNumbers: d.plannedToday.map(e => e.CustomerNumber) });
   } else if (id === "visitsToday") {
     navigateToVisitLogFiltered({ search: d.todayIso });
   } else if (id === "postponedToday") {
@@ -2484,9 +2486,10 @@ async function refreshDashboard() {
   const postponedToday = visits.filter(v => v.Outcome === "NotVisited" && (v.VisitDate || "").slice(0, 10) === todayIso
     && (!globalChannel || customerByNumber.get(v.CustomerNumber)?.Channel === globalChannel));
 
-  const plannedTodayCount = todayPlanEntries
+  const plannedToday = todayPlanEntries
     .filter(e => (e.PlannedDate || "").slice(0, 10) === todayIso)
-    .filter(e => !globalChannel || e.Channel === globalChannel).length;
+    .filter(e => !globalChannel || e.Channel === globalChannel);
+  const plannedTodayCount = plannedToday.length;
 
   // Customers whose visit-plan entry for the selected month exists but never got a PlannedDate - the
   // generator ran out of daily capacity for them (see VisitPlanGenerator/"לא שובץ" in the visit-plan
@@ -2520,7 +2523,8 @@ async function refreshDashboard() {
 
   DASH_STATE = {
     selYear, selMonth, activeCustomers, neglected, decliningNeglected, reasonAgg, todayIso,
-    globalChannel, frequencyBuckets, agentComposition, agentPerf, cityBreakdown, unscheduled
+    globalChannel, frequencyBuckets, agentComposition, agentPerf, cityBreakdown, unscheduled,
+    plannedToday, todayYear: today.getFullYear(), todayMonth: today.getMonth() + 1
   };
 
   // Populate the one global channel dropdown (options only, keep the current selection if still valid).

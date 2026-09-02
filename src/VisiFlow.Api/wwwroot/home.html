@@ -4171,12 +4171,20 @@ function hideLoginScreen() {
   document.querySelector(".main").style.display = "";
 }
 
+// "+ הוספת חברה" only makes sense for a super-admin - a regular user has no legitimate reason to spin
+// up an unrelated company (the server rejects the attempt either way - this just keeps the button from
+// dangling in front of someone who'd only ever get a 403 clicking it).
+function applyCurrentUserUi() {
+  document.getElementById("sidebarUserLabel").textContent = CURRENT_USER.DisplayName;
+  document.getElementById("btnAddCompanyTop").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
+}
+
 async function checkAuth() {
   try {
     const res = await fetch("/api/auth/me");
     if (!res.ok) return false;
     CURRENT_USER = await res.json();
-    document.getElementById("sidebarUserLabel").textContent = CURRENT_USER.DisplayName;
+    applyCurrentUserUi();
     return true;
   } catch { return false; }
 }
@@ -4207,7 +4215,7 @@ async function attemptLogin() {
     });
     if (!res.ok) { msg.className = "form-msg error"; msg.textContent = "שם משתמש או סיסמה שגויים"; btn.disabled = false; return; }
     CURRENT_USER = await res.json();
-    document.getElementById("sidebarUserLabel").textContent = CURRENT_USER.DisplayName;
+    applyCurrentUserUi();
     document.getElementById("loginPassword").value = "";
     msg.textContent = "";
     await startApp();

@@ -157,10 +157,23 @@
   .sidebar-foot {
     margin-top: auto;
     padding: 12px;
-    font-size: 0.72rem;
-    color: var(--sidebar-text-dim);
     border-top: 1px solid rgba(255,255,255,0.08);
   }
+  .sidebar-foot-user { font-size: 0.76rem; color: var(--sidebar-text-dim); margin-bottom: 8px; }
+  .sidebar-foot-link {
+    display: block; font-size: 0.76rem; color: var(--sidebar-text-dim);
+    text-decoration: none; margin-bottom: 10px;
+  }
+  .sidebar-foot-link:hover { color: #fff; }
+  .sidebar-logout-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; padding: 9px 12px; border-radius: 9px; box-sizing: border-box;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14);
+    color: #fff; font-family: inherit; font-size: 0.86rem; font-weight: 600;
+    cursor: pointer; transition: background .15s, border-color .15s, color .15s;
+  }
+  .sidebar-logout-btn:hover { background: rgba(239,68,68,0.18); border-color: rgba(239,68,68,0.4); color: #fecaca; }
+  .sidebar-logout-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
 
   /* ---------- Main area ---------- */
   .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -853,8 +866,12 @@
   </div>
 
   <div class="sidebar-foot">
-    <span id="sidebarUserLabel"></span> &middot; <a href="/agent.html" target="_blank" style="color:inherit;">מעבר לממשק סוכן &#8599;</a>
-    &middot; <a href="#" id="btnLogout" style="color:inherit;">התנתקות</a>
+    <div class="sidebar-foot-user"><span id="sidebarUserLabel"></span></div>
+    <a href="/agent.html" target="_blank" class="sidebar-foot-link">מעבר לממשק סוכן &#8599;</a>
+    <button type="button" class="sidebar-logout-btn" id="btnLogout">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+      <span>התנתקות</span>
+    </button>
   </div>
 </div>
 

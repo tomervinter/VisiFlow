@@ -259,13 +259,14 @@
   .dash-kpi-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 26px; }
   @media (max-width: 760px) { .dash-kpi-groups { grid-template-columns: 1fr; } }
   .dash-kpi-group-title {
-    font-size: 0.76rem; font-weight: 700; color: var(--text-muted); letter-spacing: 0.02em;
-    margin: 0 0 10px; text-transform: none;
+    font-size: 0.98rem; font-weight: 700; color: var(--text-muted); letter-spacing: 0.01em;
+    margin: 0 0 12px; text-transform: none; text-align: center;
+    padding-bottom: 10px; border-bottom: 1px solid var(--border);
   }
-  .dash-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; }
+  .dash-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, 136px); justify-content: center; gap: 8px; }
   .kpi-card {
     position: relative; background: var(--white); border: 1px solid var(--border); border-radius: 14px;
-    padding: 10px 12px; box-shadow: var(--shadow); cursor: pointer; overflow: hidden;
+    padding: 9px 10px; box-shadow: var(--shadow); cursor: pointer; overflow: hidden;
     transition: transform .15s, box-shadow .15s; text-align: right;
   }
   .kpi-card::before {

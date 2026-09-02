@@ -811,6 +811,15 @@
     </button>
   </nav>
 
+  <div class="nav-group-label">טעינת נתונים</div>
+  <nav class="main-nav">
+    <button class="nav-item" data-view="customers">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.3 2.9-6 6.5-6s6.5 2.7 6.5 6"/><circle cx="17" cy="7" r="2.3"/><path d="M14.8 14.3c.6-.3 1.3-.4 2-.4 2.9 0 5.2 2.4 5.2 5.3"/></svg>
+      <span>לקוחות</span>
+      <span class="count" id="navCountCustomers"></span>
+    </button>
+  </nav>
+
   <div class="nav-group-label">דוחות</div>
   <nav class="main-nav">
     <button class="nav-item" data-view="visitplan">
@@ -845,23 +854,6 @@
     </button>
   </nav>
 
-  <div class="nav-group-label">טעינת נתונים</div>
-  <nav class="main-nav">
-    <button class="nav-item" data-view="customers">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.3 2.9-6 6.5-6s6.5 2.7 6.5 6"/><circle cx="17" cy="7" r="2.3"/><path d="M14.8 14.3c.6-.3 1.3-.4 2-.4 2.9 0 5.2 2.4 5.2 5.3"/></svg>
-      <span>לקוחות</span>
-      <span class="count" id="navCountCustomers"></span>
-    </button>
-  </nav>
-
-  <div class="nav-group-label">עזרה</div>
-  <nav class="main-nav">
-    <button class="nav-item" data-view="guide">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>
-      <span>הדרכה</span>
-    </button>
-  </nav>
-
   <div class="nav-group-label">ניהול</div>
   <nav class="main-nav">
     <button class="nav-item" data-view="users">
@@ -872,6 +864,14 @@
     <button class="nav-item" data-view="admin" id="navItemAdminCompanies" style="display:none;">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6.5V11c0 4.9 3.4 9.4 8 10.5 4.6-1.1 8-5.6 8-10.5V6.5L12 3Z"/><path d="m9.5 12 1.8 1.8L15 10"/></svg>
       <span>ניהול</span>
+    </button>
+  </nav>
+
+  <div class="nav-group-label">עזרה</div>
+  <nav class="main-nav">
+    <button class="nav-item" data-view="guide">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>
+      <span>הדרכה</span>
     </button>
   </nav>
 
@@ -961,6 +961,17 @@
           </h2>
           <p class="dash-section-sub">מספר הלקוחות הפעילים בכל עיר (בהתאם לפילטר הערוץ שנבחר למעלה). לחצו על עמודה לרשימת הלקוחות.</p>
           <div class="vbar-chart" id="dashCityChart"></div>
+        </section>
+      </div>
+
+      <div class="dash-charts-row">
+        <section class="panel" style="flex:1 1 100%;">
+          <h2 class="dash-section-title">
+            <svg class="dash-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+            כמות ביקורים לפי שעה ביום
+          </h2>
+          <p class="dash-section-sub">ביקורים שבוצעו בפועל בחודש שנבחר למעלה, לפי השעה שבה נרשמו.</p>
+          <div class="vbar-chart" id="dashHourlyChart"></div>
         </section>
       </div>
 
@@ -1540,7 +1551,7 @@
           <a href="#guide-distributiondays">יומן ימי הפצה</a>
           <a href="#guide-nonvisitreasons">סיבות אי ביקור</a>
           <a href="#guide-users">ניהול משתמשים</a>
-          <a href="#guide-admin">ניהול (הוספת חברה)</a>
+          <a href="#guide-admin" id="guideTocAdmin" style="display:none;">ניהול (הוספת חברה)</a>
         </div>
       </section>
 
@@ -1665,7 +1676,7 @@
         <p><b>לתשומת לב:</b> הרשאת "מנהל-על" (גישה ליותר מחברה אחת, ויכולת ליצור חברות חדשות) לא ניתנת להענקה דרך המסך הזה בכוונה - היא מוגדרת ידנית מול בסיס הנתונים בלבד, כדי שמשתמש לא יוכל להעניק אותה לעצמו.</p>
       </section>
 
-      <section class="panel guide-section" id="guide-admin">
+      <section class="panel guide-section" id="guide-admin" style="display:none;">
         <h3>ניהול (הוספת חברה)</h3>
         <p>זמין למנהל-על בלבד. יוצר סביבת עבודה חדשה ונקייה, בלי שום נתונים משותפים עם חברות קיימות - שימושי אם רוצים להפעיל את VisiFlow עבור לקוח/גוף נוסף.</p>
         <div class="guide-screenshot"><img src="/guide-images/admin.png" alt="מסך ניהול - הוספת חברה" /></div>
@@ -1943,6 +1954,21 @@ function createDataTable({ tableId, emptyId, columns, getRows, searchInputId, ge
 function fmtCurrency(n) { return n == null ? "—" : "₪" + Math.round(n).toLocaleString("he-IL"); }
 function fmtNumber(n) { return n == null ? "—" : Number(n).toLocaleString("he-IL"); }
 function fmtDate(dateStr) { return !dateStr ? "—" : new Date(dateStr).toLocaleDateString("he-IL", { year: "numeric", month: "2-digit", day: "2-digit" }); }
+// The server writes timestamps like CreatedAt as DateTime.UtcNow, but EF Core's round-trip through the
+// DB (SQLite locally, Postgres in prod) strips the "this is UTC" marker, so the JSON comes back without
+// a trailing "Z" - append one before parsing so the browser doesn't misread a UTC instant as already
+// being local time (which would show every visit 2-3 hours early/at the wrong hour).
+function parseUtc(dateTimeStr) {
+  if (!dateTimeStr) return null;
+  const iso = /[zZ]|[+-]\d\d:\d\d$/.test(dateTimeStr) ? dateTimeStr : dateTimeStr + "Z";
+  return new Date(iso);
+}
+// CreatedAt is a real timestamp (unlike VisitDate, which is date-only) - this is when the visit was
+// actually recorded, used as a stand-in for "what time the agent visited" since there's no separate field for it.
+function fmtTime(dateTimeStr) {
+  const d = parseUtc(dateTimeStr);
+  return d ? d.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }) : "—";
+}
 
 // Builds <option> list for an "agent" filter dropdown, keyed by AgentIdNumber (not AgentName) -
 // two different real agents can share a display name, so the dropdown's VALUE must be the ID for
@@ -2116,6 +2142,7 @@ const KPI_ICONS = {
   plannedToday: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="M12 13v3.5l2.5 1.5"/><circle cx="12" cy="15.5" r="4.5"/></svg>`,
   visitsToday: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="m8 14 2.5 2.5L16 11"/></svg>`,
   postponedToday: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="m9 12 6 5M15 12l-6 5"/></svg>`,
+  pendingToday: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>`,
   neglected: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>`,
   decliningNeglected: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l6 6 4-4 8 8"/><path d="M15 17h6v-6"/></svg>`,
   unscheduled: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="M9 14h.01M12 14h.01M15 14h.01M9 17h.01M12 17h.01"/></svg>`
@@ -2329,6 +2356,8 @@ document.querySelector(".dash-kpi-groups").addEventListener("click", (e) => {
     navigateToVisitPlanFiltered({ year: d.selYear, month: d.selMonth, customerNumbers: d.unscheduled.map(e => e.CustomerNumber) });
   } else if (id === "plannedToday") {
     navigateToVisitPlanFiltered({ year: d.todayYear, month: d.todayMonth, date: d.todayIso, channel: d.globalChannel });
+  } else if (id === "pendingToday") {
+    navigateToVisitPlanFiltered({ year: d.todayYear, month: d.todayMonth, date: d.todayIso, channel: d.globalChannel, customerNumbers: d.pendingToday.map(e => e.CustomerNumber) });
   } else if (id === "visitsToday") {
     navigateToVisitLogFiltered({ search: d.todayIso });
   } else if (id === "postponedToday") {
@@ -2409,6 +2438,19 @@ function renderCityChart(cityBreakdown) {
     </div>`).join("");
 }
 
+function renderHourlyVisitsChart(hourlyBuckets) {
+  const el = document.getElementById("dashHourlyChart");
+  const total = hourlyBuckets.reduce((s, h) => s + h.count, 0);
+  if (total === 0) { el.innerHTML = `<div class="bar-empty">אין ביקורים שבוצעו להצגה בחודש זה.</div>`; return; }
+  const max = Math.max(...hourlyBuckets.map(h => h.count), 1);
+  el.innerHTML = hourlyBuckets.map(h => `
+    <div class="vbar-col">
+      <div class="vbar-value">${fmtNumber(h.count)}</div>
+      <div class="vbar-track"><div class="vbar-fill" style="height:${Math.round(h.count / max * 100)}%"></div></div>
+      <div class="vbar-label">${h.label}</div>
+    </div>`).join("");
+}
+
 function renderAgentMeetingCountsTable(agentMeetingCounts) {
   const table = document.getElementById("dashAgentMeetingCountsTable");
   const entries = [...agentMeetingCounts.entries()].sort((a, b) => b[1].month - a[1].month);
@@ -2483,6 +2525,7 @@ async function refreshDashboard() {
     document.getElementById("dashCalGrid").innerHTML = "";
     document.getElementById("dashCalTitle").textContent = "";
     document.getElementById("dashAgentPerfChart").innerHTML = "";
+    document.getElementById("dashHourlyChart").innerHTML = "";
     document.getElementById("dashAgentMeetingCountsTable").innerHTML = "";
     document.getElementById("dashUpdatedLine").textContent = "";
     DASH_STATE = null;
@@ -2565,6 +2608,14 @@ async function refreshDashboard() {
     .filter(e => (e.PlannedDate || "").slice(0, 10) === todayIso)
     .filter(e => !globalChannel || e.Channel === globalChannel).length;
 
+  // Planned for today but no visit logged yet at all (neither visited nor postponed) - what's still
+  // outstanding for the agent to get to today, as opposed to visitsToday/postponedToday which are
+  // already-resolved outcomes.
+  const pendingToday = todayPlanEntries
+    .filter(e => (e.PlannedDate || "").slice(0, 10) === todayIso)
+    .filter(e => !globalChannel || e.Channel === globalChannel)
+    .filter(e => !visits.some(v => v.CustomerNumber === e.CustomerNumber && (v.VisitDate || "").slice(0, 10) === todayIso));
+
   // Customers whose visit-plan entry for the selected month exists but never got a PlannedDate - the
   // generator ran out of daily capacity for them (see VisitPlanGenerator/"לא שובץ" in the visit-plan
   // table). Surfaced here so an admin sees this at a glance instead of only when they happen to open
@@ -2598,7 +2649,7 @@ async function refreshDashboard() {
   DASH_STATE = {
     selYear, selMonth, activeCustomers, neglected, decliningNeglected, reasonAgg, todayIso,
     globalChannel, frequencyBuckets, agentComposition, agentPerf, cityBreakdown, unscheduled,
-    todayYear: today.getFullYear(), todayMonth: today.getMonth() + 1
+    pendingToday, todayYear: today.getFullYear(), todayMonth: today.getMonth() + 1
   };
 
   // Populate the one global channel dropdown (options only, keep the current selection if still valid).
@@ -2613,7 +2664,8 @@ async function refreshDashboard() {
   renderKpiGrid("dashKpiGridDaily", [
     { id: "plannedToday", value: fmtNumber(plannedTodayCount), label: `ביקורים מתוכננים ל${todayWord}`, sub: fmtDate(todayIso) },
     { id: "visitsToday", value: fmtNumber(visitsToday.length), label: `ביקורים שבוצעו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso) },
-    { id: "postponedToday", value: fmtNumber(postponedToday.length), label: `ביקורים שנדחו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso) }
+    { id: "postponedToday", value: fmtNumber(postponedToday.length), label: `ביקורים שנדחו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso) },
+    { id: "pendingToday", value: fmtNumber(pendingToday.length), label: `לקוחות שטרם דווחו ${todayWord}`, sub: fmtDate(todayIso) }
   ]);
   renderKpiGrid("dashKpiGridMonthly", [
     { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel ? `בערוץ ${globalChannel}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים`, tier: "good" },
@@ -2631,6 +2683,19 @@ async function refreshDashboard() {
   renderDashCalGrid(selYear, selMonth, calendarDays);
   renderAgentPerfChart(agentPerf);
   renderCityChart(cityBreakdown);
+
+  // Real time-of-day only exists on CreatedAt (VisitDate is date-only) - scoped to the selected
+  // month/channel like the other monthly charts, bucketed by the hour the visit was actually recorded.
+  const HOURLY_RANGE = Array.from({ length: 14 }, (_, i) => i + 7); // 07:00-20:00 - covers a full working day
+  const monthVisited = visits.filter(v => v.Outcome === "Visited"
+    && v.VisitDate.slice(0, 4) === String(selYear) && Number(v.VisitDate.slice(5, 7)) === selMonth
+    && (!globalChannel || v.Channel === globalChannel));
+  const hourCounts = new Map();
+  for (const v of monthVisited) {
+    const h = parseUtc(v.CreatedAt).getHours();
+    hourCounts.set(h, (hourCounts.get(h) || 0) + 1);
+  }
+  renderHourlyVisitsChart(HOURLY_RANGE.map(h => ({ count: hourCounts.get(h) || 0, label: `${String(h).padStart(2, "0")}:00` })));
 
   // todayPlanEntries is always fetched for the REAL current month (see the fetch above, independent
   // of the selYear/selMonth dropcown) - so it's already exactly "this month" for both counts below.
@@ -2959,6 +3024,7 @@ const vlTable = createDataTable({
       render: v => `<input type="checkbox" class="vl-row-check" data-id="${v.Id}"${vlSelected.has(v.Id) ? " checked" : ""} />`
     },
     { key: "date", label: "תאריך", text: v => v.VisitDate, sortValue: v => v.VisitDate, render: v => `<span class="mono">${fmtDate(v.VisitDate)}</span>` },
+    { key: "time", label: "שעת ביקור", text: v => v.Outcome === "Visited" ? fmtTime(v.CreatedAt) : "", sortValue: v => v.Outcome === "Visited" ? v.CreatedAt : "", render: v => v.Outcome === "Visited" ? `<span class="mono">${fmtTime(v.CreatedAt)}</span>` : `<span class="muted">—</span>` },
     { key: "customerNumber", label: "מספר לקוח", text: v => v.CustomerNumber, render: v => `<span class="mono name">${v.CustomerNumber}</span>` },
     { key: "customerName", label: "שם לקוח", text: v => customerLookup().get(v.CustomerNumber)?.CustomerName || "", render: v => customerLookup().get(v.CustomerNumber)?.CustomerName || `<span class="muted">—</span>` },
     { key: "agentName", label: "סוכן", text: v => v.AgentName || "", render: v => v.AgentName || `<span class="muted">—</span>` },
@@ -4259,6 +4325,8 @@ function hideLoginScreen() {
 function applyCurrentUserUi() {
   document.getElementById("sidebarUserLabel").textContent = CURRENT_USER.DisplayName;
   document.getElementById("navItemAdminCompanies").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
+  document.getElementById("guideTocAdmin").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
+  document.getElementById("guide-admin").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
   document.getElementById("dashGreeting").textContent = `שלום, ${CURRENT_USER.DisplayName}`;
 }
 

@@ -2344,21 +2344,28 @@ function renderAgentMeetingCountsTable(agentMeetingCounts) {
   }
   // First <th>/<td> in the DOM renders as the RIGHTMOST column in this RTL table - channel goes first
   // in source order specifically to land there, per how this section was asked to look.
-  const head = `<thead><tr><th>ערוץ מכר</th><th>סוכן</th><th>היום</th><th>בוצעו היום</th><th>החודש</th></tr></thead>`;
+  // "מתוכנן לחודש הנוכחי" (not "הנבחר") is deliberate - this whole table stays pinned to the real
+  // current month regardless of the dashboard's own month picker (see the fetch above), so labeling it
+  // "selected month" would misdescribe what's actually being counted.
+  const head = `<thead><tr><th>ערוץ מכר</th><th>סוכן</th><th>מתוכנן להיום</th><th>בוצעו היום</th><th>בוצעו מתחילת החודש עד היום</th><th>מתוכנן לחודש הנוכחי</th></tr></thead>`;
   const body = entries.map(([agentId, g]) => `
     <tr class="dash-today-row" data-drill-agent-meetings="${agentId}" style="cursor:pointer;">
       <td>${[...g.channels].join(", ") || `<span class="muted">—</span>`}</td>
       <td>${g.name}</td>
       <td><span class="mono">${fmtNumber(g.today)}</span></td>
       <td><span class="mono">${fmtNumber(g.performedToday)}</span></td>
+      <td><span class="mono">${fmtNumber(g.performedMonthToDate)}</span></td>
       <td><span class="mono">${fmtNumber(g.month)}</span></td>
     </tr>`).join("");
-  const totals = entries.reduce((t, [, g]) => ({ today: t.today + g.today, performedToday: t.performedToday + g.performedToday, month: t.month + g.month }),
-    { today: 0, performedToday: 0, month: 0 });
+  const totals = entries.reduce((t, [, g]) => ({
+    today: t.today + g.today, performedToday: t.performedToday + g.performedToday,
+    performedMonthToDate: t.performedMonthToDate + g.performedMonthToDate, month: t.month + g.month
+  }), { today: 0, performedToday: 0, performedMonthToDate: 0, month: 0 });
   const foot = `<tfoot><tr class="dash-agent-meetings-total">
     <td colspan="2">סה"כ (${fmtNumber(entries.length)} סוכנים)</td>
     <td><span class="mono">${fmtNumber(totals.today)}</span></td>
     <td><span class="mono">${fmtNumber(totals.performedToday)}</span></td>
+    <td><span class="mono">${fmtNumber(totals.performedMonthToDate)}</span></td>
     <td><span class="mono">${fmtNumber(totals.month)}</span></td>
   </tr></tfoot>`;
   table.innerHTML = head + `<tbody>${body}</tbody>` + foot;
@@ -2554,18 +2561,32 @@ async function refreshDashboard() {
   // todayPlanEntries is always fetched for the REAL current month (see the fetch above, independent
   // of the selYear/selMonth dropcown) - so it's already exactly "this month" for both counts below.
   const agentMeetingCounts = new Map();
+  const customerToAgentMeetingsId = new Map();
   for (const e of todayPlanEntries) {
     if (globalChannel && e.Channel !== globalChannel) continue;
     const id = e.AgentIdNumber || `__noid__:${e.AgentName || "ללא סוכן"}`;
-    if (!agentMeetingCounts.has(id)) agentMeetingCounts.set(id, { name: e.AgentName || "ללא סוכן", channels: new Set(), today: 0, performedToday: 0, month: 0 });
+    if (!agentMeetingCounts.has(id)) agentMeetingCounts.set(id, { name: e.AgentName || "ללא סוכן", channels: new Set(), today: 0, performedToday: 0, performedMonthToDate: 0, month: 0 });
     const g = agentMeetingCounts.get(id);
     if (e.Channel) g.channels.add(e.Channel);
     g.month++;
+    customerToAgentMeetingsId.set(e.CustomerNumber, id);
     if ((e.PlannedDate || "").slice(0, 10) === todayIso) {
       g.today++;
       const visit = visits.find(v => v.CustomerNumber === e.CustomerNumber && (v.VisitDate || "").slice(0, 10) === todayIso);
       if (visit && visit.Outcome === "Visited") g.performedToday++;
     }
+  }
+  // "בוצעו מתחילת החודש עד היום" - actual logged visits, not just plan entries, so it also reflects
+  // visits performed against customers whose visit landed outside their originally planned date.
+  const monthStartIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+  for (const v of visits) {
+    if (v.Outcome !== "Visited") continue;
+    const vDate = (v.VisitDate || "").slice(0, 10);
+    if (vDate < monthStartIso || vDate > todayIso) continue;
+    if (globalChannel && v.Channel !== globalChannel) continue;
+    const id = customerToAgentMeetingsId.get(v.CustomerNumber);
+    if (!id) continue; // customer has no entry in this month's plan at all - nothing to attribute this visit to here
+    agentMeetingCounts.get(id).performedMonthToDate++;
   }
   renderAgentMeetingCountsTable(agentMeetingCounts);
 

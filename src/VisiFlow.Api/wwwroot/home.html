@@ -256,7 +256,13 @@
   .pill-filter-bar .pill-filter select:hover { border-color: var(--brand); }
   .pill-filter-bar .pill-filter select:focus { outline: 2px solid var(--electric); outline-offset: 1px; }
 
-  .dash-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 26px; }
+  .dash-kpi-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 26px; }
+  @media (max-width: 760px) { .dash-kpi-groups { grid-template-columns: 1fr; } }
+  .dash-kpi-group-title {
+    font-size: 0.76rem; font-weight: 700; color: var(--text-muted); letter-spacing: 0.02em;
+    margin: 0 0 10px; text-transform: none;
+  }
+  .dash-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
   .kpi-card {
     position: relative; background: var(--white); border: 1px solid var(--border); border-radius: 14px;
     padding: 16px 18px; box-shadow: var(--shadow); cursor: pointer; overflow: hidden;
@@ -886,8 +892,18 @@
         </div>
       </section>
 
-      <!-- SECTION: current customer-health snapshot (as-of-today, not tied to a specific month) -->
-      <div class="dash-kpi-grid" id="dashKpiGrid"></div>
+      <!-- SECTION: current customer-health snapshot, split into two groups by time scale - right (RTL
+           reading-start) = today-specific numbers, left = numbers scoped to the selected month above. -->
+      <div class="dash-kpi-groups">
+        <div class="dash-kpi-group">
+          <h3 class="dash-kpi-group-title">נתוני היום</h3>
+          <div class="dash-kpi-grid" id="dashKpiGridDaily"></div>
+        </div>
+        <div class="dash-kpi-group">
+          <h3 class="dash-kpi-group-title">נתונים חודשיים</h3>
+          <div class="dash-kpi-grid" id="dashKpiGridMonthly"></div>
+        </div>
+      </div>
 
       <div class="dash-charts-row">
         <section class="panel">
@@ -1188,13 +1204,13 @@
     <!-- ===================== VISIT LOG ===================== -->
     <div class="view" id="view-visitlog">
       <section class="panel">
-        <div class="head" style="display:flex;align-items:baseline;justify-content:flex-end;margin-bottom:4px;">
-          <span class="badge accent" id="vlCount"></span>
-        </div>
         <p class="desc">
           תיעוד ביקורים שנרשמו על ידי הסוכנים בממשק הסוכן שלהם (בוצע / לא בוצע + סיבה). זהו הבסיס לחישוב
           "ימים מאז הביקור האחרון" שישמש בהמשך לתעדוף תוכנית הביקורים.
         </p>
+        <div class="head" style="display:flex;align-items:baseline;justify-content:flex-end;margin-bottom:4px;">
+          <span class="badge accent" id="vlCount"></span>
+        </div>
         <div class="pill-filter-bar">
           <div class="pill-filter">
             <label for="vlChannelFilter">ערוץ מכר:</label>
@@ -1958,9 +1974,16 @@ function navigateToVisitLogFiltered({ search, date, outcome } = {}) {
     ? v => (!date || v.VisitDate.slice(0, 10) === date) && (!outcome || v.Outcome === outcome)
     : null);
 }
-function navigateToVisitPlanFiltered({ year, month, search, channel, agent, customerNumbers } = {}) {
-  if (year) document.getElementById("vpYearSelect").value = String(year);
-  if (month) document.getElementById("vpMonthSelect").value = String(month);
+async function navigateToVisitPlanFiltered({ year, month, search, channel, agent, customerNumbers } = {}) {
+  // The TABLE's own year/month filter (vpTableYearFilter/vpTableMonthFilter) is what actually decides
+  // which month's data gets fetched into liveVpEntries - vpYearSelect/vpMonthSelect belong to the
+  // "generate a new plan" popup and have no effect on what the table shows. Setting only those (as
+  // this used to do) left the table showing whatever month it already happened to be on, with the
+  // customerSet predicate silently applied to the wrong month's rows.
+  if (year) document.getElementById("vpTableYearFilter").value = String(year);
+  if (month) document.getElementById("vpTableMonthFilter").value = String(month);
+  activateView("visitplan");
+  if (year && month) await refreshVpTable(); // make sure the target month is actually loaded before filtering it
   vpTable.setPredicate("channel", channel ? entry => entry.Channel === channel : null);
   vpTable.setPredicate("agent", agent ? entry => entry.AgentIdNumber === agent : null);
   // For dashboard metrics that pick out a specific SET of customers (e.g. "neglected 30+ days")
@@ -1973,7 +1996,6 @@ function navigateToVisitPlanFiltered({ year, month, search, channel, agent, cust
   } else {
     vpTable.setPredicate("customerSet", null);
   }
-  activateView("visitplan");
 }
 
 /* ---- KPI card grid (shared renderer for both the snapshot row and the plan-performance row) ---- */
@@ -1992,7 +2014,8 @@ const KPI_ICONS = {
   visitsToday: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="m8 14 2.5 2.5L16 11"/></svg>`,
   postponedToday: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="m9 12 6 5M15 12l-6 5"/></svg>`,
   neglected: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>`,
-  decliningNeglected: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l6 6 4-4 8 8"/><path d="M15 17h6v-6"/></svg>`
+  decliningNeglected: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l6 6 4-4 8 8"/><path d="M15 17h6v-6"/></svg>`,
+  unscheduled: `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="M9 14h.01M12 14h.01M15 14h.01M9 17h.01M12 17h.01"/></svg>`
 };
 
 /* ---- bar charts (plain divs, no chart library - widths are % of the group's own max value) ---- */
@@ -2188,7 +2211,7 @@ function dashSelectedYearMonth() {
 document.getElementById("dashYearSelect").addEventListener("change", () => refreshDashboard());
 document.getElementById("dashMonthSelect").addEventListener("change", () => refreshDashboard());
 
-document.getElementById("dashKpiGrid").addEventListener("click", (e) => {
+document.querySelector(".dash-kpi-groups").addEventListener("click", (e) => {
   const card = e.target.closest("[data-kpi]");
   const d = DASH_STATE;
   if (!card || !d) return;
@@ -2199,6 +2222,8 @@ document.getElementById("dashKpiGrid").addEventListener("click", (e) => {
     navigateToVisitPlanFiltered({ year: d.selYear, month: d.selMonth, customerNumbers: d.neglected.map(c => c.CustomerNumber) });
   } else if (id === "decliningNeglected") {
     navigateToVisitPlanFiltered({ year: d.selYear, month: d.selMonth, customerNumbers: d.decliningNeglected.map(c => c.CustomerNumber) });
+  } else if (id === "unscheduled") {
+    navigateToVisitPlanFiltered({ year: d.selYear, month: d.selMonth, customerNumbers: d.unscheduled.map(e => e.CustomerNumber) });
   } else if (id === "visitsToday") {
     navigateToVisitLogFiltered({ search: d.todayIso });
   } else if (id === "postponedToday") {
@@ -2371,7 +2396,8 @@ let DASH_STATE = null;
 async function refreshDashboard() {
   const companyId = selectedCompanyId();
   if (!companyId) {
-    document.getElementById("dashKpiGrid").innerHTML = "";
+    document.getElementById("dashKpiGridDaily").innerHTML = "";
+    document.getElementById("dashKpiGridMonthly").innerHTML = "";
     document.getElementById("dashReasonsChart").innerHTML = "";
     document.getElementById("dashAgentDonut").innerHTML = "";
     document.getElementById("dashFrequencyDonut").innerHTML = "";
@@ -2462,6 +2488,14 @@ async function refreshDashboard() {
     .filter(e => (e.PlannedDate || "").slice(0, 10) === todayIso)
     .filter(e => !globalChannel || e.Channel === globalChannel).length;
 
+  // Customers whose visit-plan entry for the selected month exists but never got a PlannedDate - the
+  // generator ran out of daily capacity for them (see VisitPlanGenerator/"לא שובץ" in the visit-plan
+  // table). Surfaced here so an admin sees this at a glance instead of only when they happen to open
+  // the visit-plan screen for that month.
+  const unscheduled = selectedMonthPlanEntries
+    .filter(e => !e.PlannedDate)
+    .filter(e => !globalChannel || e.Channel === globalChannel);
+
   const frequencyBuckets = computeFrequencyBreakdown(kpiCustomers);
   const agentComposition = computeAgentComposition(kpiCustomers);
   const cityBreakdown = computeCityBreakdown(kpiCustomers);
@@ -2486,7 +2520,7 @@ async function refreshDashboard() {
 
   DASH_STATE = {
     selYear, selMonth, activeCustomers, neglected, decliningNeglected, reasonAgg, todayIso,
-    globalChannel, frequencyBuckets, agentComposition, agentPerf, cityBreakdown
+    globalChannel, frequencyBuckets, agentComposition, agentPerf, cityBreakdown, unscheduled
   };
 
   // Populate the one global channel dropdown (options only, keep the current selection if still valid).
@@ -2498,13 +2532,16 @@ async function refreshDashboard() {
   // "היום" only when this really is today - a picked dashDateFilter gets its own date spelled out in
   // the label instead, so these cards never claim to be "today" when they're not.
   const todayWord = isRealToday ? "היום" : fmtDate(todayIso);
-  renderKpiGrid("dashKpiGrid", [
-    { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel ? `בערוץ ${globalChannel}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים` },
+  renderKpiGrid("dashKpiGridDaily", [
     { id: "plannedToday", value: fmtNumber(plannedTodayCount), label: `ביקורים מתוכננים ל${todayWord}`, sub: fmtDate(todayIso) },
     { id: "visitsToday", value: fmtNumber(visitsToday.length), label: `ביקורים שבוצעו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso) },
-    { id: "postponedToday", value: fmtNumber(postponedToday.length), label: `ביקורים שנדחו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso) },
+    { id: "postponedToday", value: fmtNumber(postponedToday.length), label: `ביקורים שנדחו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso) }
+  ]);
+  renderKpiGrid("dashKpiGridMonthly", [
+    { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel ? `בערוץ ${globalChannel}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים` },
     { id: "neglected", value: fmtNumber(neglected.length), label: "לקוחות שלא ביקרנו מעל 30 יום", sub: "לחצו לרשימה המלאה", tier: neglected.length === 0 ? "good" : (neglected.length > kpiCustomers.length * 0.2 ? "crit" : "warn") },
-    { id: "decliningNeglected", value: fmtNumber(decliningNeglected.length), label: "יורדים במכר וללא ביקור מספק", sub: "ירידה במכר + לא ביקרנו מעל 30 יום", tier: decliningNeglected.length === 0 ? "good" : "crit" }
+    { id: "decliningNeglected", value: fmtNumber(decliningNeglected.length), label: "יורדים במכר וללא ביקור מספק", sub: "ירידה במכר + לא ביקרנו מעל 30 יום", tier: decliningNeglected.length === 0 ? "good" : "crit" },
+    { id: "unscheduled", value: fmtNumber(unscheduled.length), label: "לקוחות שלא שובצו", sub: "אין קיבולת פנויה ביומן הסוכן - לחצו לרשימה", tier: unscheduled.length === 0 ? "good" : "crit" }
   ]);
   renderReasonsChart(reasonAgg);
   renderDonutChart("dashAgentDonut", agentComposition, { centerLabel: "לקוחות", drillAttr: "drill-agent-donut", inlineCount: true, showPct: false });

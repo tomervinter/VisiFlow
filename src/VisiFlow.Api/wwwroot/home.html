@@ -263,10 +263,10 @@
     margin: 0 0 12px; text-transform: none; text-align: center;
     padding-bottom: 10px; border-bottom: 1px solid var(--border);
   }
-  .dash-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, 136px); justify-content: center; gap: 8px; }
+  .dash-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, 145px); justify-content: center; gap: 10px; }
   .kpi-card {
     position: relative; background: var(--white); border: 1px solid var(--border); border-radius: 14px;
-    padding: 9px 10px; box-shadow: var(--shadow); cursor: pointer; overflow: hidden;
+    padding: 12px 14px; box-shadow: var(--shadow); cursor: pointer; overflow: hidden;
     transition: transform .15s, box-shadow .15s; text-align: right;
   }
   .kpi-card::before {
@@ -278,19 +278,19 @@
   .kpi-card.crit::before { background: var(--crit-fg); }
   .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 8px 22px rgba(15,23,42,0.16); }
   .kpi-card .kpi-icon {
-    display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
-    border-radius: 8px; background: var(--ice); color: var(--brand); margin-bottom: 8px;
+    display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+    border-radius: 9px; background: var(--ice); color: var(--brand); margin-bottom: 9px;
   }
   .kpi-card.good .kpi-icon { background: var(--good-bg); color: var(--good-fg); }
   .kpi-card.warn .kpi-icon { background: var(--warn-bg); color: var(--warn-fg); }
   .kpi-card.crit .kpi-icon { background: var(--crit-bg); color: var(--crit-fg); }
-  .kpi-card .kpi-icon svg { width: 16px; height: 16px; }
-  .kpi-card .kpi-n { font-size: 1.4rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; color: var(--text); position: relative; }
+  .kpi-card .kpi-icon svg { width: 17px; height: 17px; }
+  .kpi-card .kpi-n { font-size: 1.7rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; color: var(--text); position: relative; }
   .kpi-card.good .kpi-n { color: var(--good-fg); }
   .kpi-card.warn .kpi-n { color: var(--warn-fg); }
   .kpi-card.crit .kpi-n { color: var(--crit-fg); }
-  .kpi-card .kpi-l { font-size: 0.76rem; color: var(--text); font-weight: 600; margin-top: 5px; position: relative; }
-  .kpi-card .kpi-sub { font-size: 0.68rem; color: var(--text-muted); margin-top: 3px; position: relative; }
+  .kpi-card .kpi-l { font-size: 0.8rem; color: var(--text); font-weight: 600; margin-top: 5px; position: relative; }
+  .kpi-card .kpi-sub { font-size: 0.7rem; color: var(--text-muted); margin-top: 3px; position: relative; }
 
   .dash-charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-bottom: 22px; align-items: stretch; }
   @media (max-width: 900px) { .dash-charts-row { grid-template-columns: 1fr; } }
@@ -809,6 +809,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
       <span>יומן ימי עבודה</span>
     </button>
+    <button class="nav-item" data-view="distributiondays">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="m8 14 2.5 2.5L16 11"/></svg>
+      <span>יומן ימי הפצה</span>
+    </button>
     <button class="nav-item" data-view="nonvisitreasons">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
       <span>סיבות אי ביקור</span>
@@ -827,10 +831,6 @@
       <span>לקוחות</span>
       <span class="count" id="navCountCustomers"></span>
     </button>
-    <button class="nav-item" data-view="distributiondays">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="m8 14 2.5 2.5L16 11"/></svg>
-      <span>ימי הפצה</span>
-    </button>
   </nav>
 
   <div class="nav-group-label">עזרה</div>
@@ -840,6 +840,17 @@
       <span>הדרכה</span>
     </button>
   </nav>
+
+  <!-- Hidden entirely for non-super-admins - see applyCurrentUserUi(). -->
+  <div id="navGroupAdmin" style="display:none;">
+    <div class="nav-group-label">ניהול</div>
+    <nav class="main-nav">
+      <button class="nav-item" data-view="admin">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6.5V11c0 4.9 3.4 9.4 8 10.5 4.6-1.1 8-5.6 8-10.5V6.5L12 3Z"/><path d="m9.5 12 1.8 1.8L15 10"/></svg>
+        <span>ניהול</span>
+      </button>
+    </nav>
+  </div>
 
   <div class="sidebar-foot">
     <span id="sidebarUserLabel"></span> &middot; <a href="/agent.html" target="_blank" style="color:inherit;">מעבר לממשק סוכן &#8599;</a>
@@ -856,7 +867,6 @@
     </div>
     <div class="company-picker">
       <select id="globalCompanySelector"></select>
-      <button type="button" class="btn-add-company" id="btnAddCompanyTop">+ הוספת חברה</button>
     </div>
   </div>
 
@@ -865,7 +875,7 @@
     <!-- ===================== DASHBOARD ===================== -->
     <div class="view active" id="view-dashboard">
       <div class="no-company-banner" id="noCompanyBanner" style="display:none;">
-        טרם הוגדרה אף חברה במערכת. לחצו על "הוספת חברה" בפינה הימנית העליונה כדי להתחיל.
+        טרם הוגדרה אף חברה במערכת. מנהל-על יכול להקים חברה חדשה במסך "ניהול" בתפריט הצד.
       </div>
 
       <div class="dash-updated-line" id="dashUpdatedLine"></div>
@@ -986,19 +996,6 @@
         </div>
       </section>
 
-      <section class="panel">
-        <div class="head" style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
-          <h2 class="dash-section-title" style="margin:0;">
-            <svg class="dash-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="m8 14 2.5 2.5L16 11"/></svg>
-            ביקורים מתוכננים להיום
-          </h2>
-          <span class="badge accent" id="dashTodayVisitsCount"></span>
-        </div>
-        <p class="dash-section-sub">כל הביקורים המתוכננים להיום, לפי סוכן (בהתאם לפילטר הערוץ שנבחר למעלה).</p>
-        <div class="table-wrap" style="max-height:420px;">
-          <table id="dashTodayVisitsTable"></table>
-        </div>
-      </section>
     </div>
 
     <!-- ===================== CUSTOMERS ===================== -->
@@ -1459,6 +1456,46 @@
       </section>
     </div>
 
+    <!-- ===================== ADMIN (super-admin only - see applyCurrentUserUi) ===================== -->
+    <div class="view" id="view-admin">
+      <section class="panel">
+        <h2>הוספת חברה</h2>
+        <p class="desc">
+          יוצר סביבת עבודה חדשה ונקייה, בלי שום נתונים משותפים עם החברות הקיימות - שימושי אם רוצים
+          להפעיל את VisiFlow עבור לקוח/גוף נוסף. רק מנהל-על (כמוך) רואה את המסך הזה ויכול ליצור חברות.
+        </p>
+        <form id="addCompanyForm">
+          <div class="controls" style="margin-bottom:0;">
+            <div class="field" style="flex:1 1 260px;">
+              <label for="newCompanyName">שם החברה</label>
+              <input type="text" id="newCompanyName" autocomplete="off" required />
+            </div>
+          </div>
+          <div class="controls" style="margin-top:12px;">
+            <button type="submit" class="btn primary">+ הוספת חברה</button>
+            <span class="form-msg" id="addCompanyMsg"></span>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="head" style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
+          <h2>חברות קיימות</h2>
+          <span class="badge accent" id="adminCompaniesCount"></span>
+        </div>
+        <div class="editable-list" id="adminCompaniesList"></div>
+      </section>
+
+      <section class="panel">
+        <h2>איך ממשיכים אחרי יצירת חברה</h2>
+        <ol class="guide-steps">
+          <li>למעלה בפינה השמאלית, בבורר החברות - בחרו את החברה החדשה שיצרתם (היא כבר נבחרת אוטומטית מיד אחרי היצירה).</li>
+          <li>עברו למסך "ניהול משתמשים" בתפריט הצד, והוסיפו לחברה החדשה משתמש ראשון (שם משתמש + סיסמה).</li>
+          <li>התחברו עם המשתמש החדש שיצרתם, או מסרו לו את הפרטים - מרגע זה החברה החדשה עובדת באופן עצמאי לגמרי: הלקוחות, תוכניות הביקורים וההגדרות שלה נפרדים לחלוטין מכל חברה אחרת.</li>
+        </ol>
+      </section>
+    </div>
+
     <!-- ===================== GUIDE ===================== -->
     <div class="view" id="view-guide">
       <section class="panel">
@@ -1570,24 +1607,6 @@
   </div>
 </div>
 
-<!-- ===================== ADD COMPANY MODAL ===================== -->
-<div class="modal-overlay" id="companyModalOverlay">
-  <div class="modal-box">
-    <h3>הוספת חברה</h3>
-    <form id="companyForm">
-      <div class="field" style="margin-bottom:14px;">
-        <label for="companyFormName">שם חברה *</label>
-        <input type="text" id="companyFormName" required />
-      </div>
-      <div class="form-actions">
-        <button type="submit" class="btn primary">שמירה</button>
-        <button type="button" class="btn" id="btnCancelCompany">ביטול</button>
-        <span class="form-msg" id="companyFormMsg"></span>
-      </div>
-    </form>
-  </div>
-</div>
-
 <!-- ===================== DELETE ALL CUSTOMERS CONFIRMATION MODAL ===================== -->
 <div class="modal-overlay" id="deleteCustomersModalOverlay">
   <div class="modal-box">
@@ -1635,12 +1654,13 @@ const VIEW_TITLES = {
   customers: ["לקוחות", "בסיס הלקוחות של הסוכנים - טבלת Customers"],
   nonvisitreasons: ["סיבות אי ביקור", "רשימת סיבות ערוכה - תוצג לסוכן כשידווח שלא הגיע ללקוח"],
   visitlog: ["יומן ביקורים", "תיעוד ביקורים שבוצעו בפועל - הבסיס לחישוב ימים מאז ביקור אחרון"],
-  distributiondays: ["ימי הפצה", "באילו ימות השבוע כל לקוח מקבל הפצה, לפי חודש"],
+  distributiondays: ["יומן ימי הפצה", "באילו ימות השבוע כל לקוח מקבל הפצה, לפי חודש"],
   visitstandards: ["תקן ביקורים ללקוח", "הגדרת כמות ביקורים נדרשת בשבוע, ללקוח בודד או לקבוצת לקוחות שנבחרה"],
   workcalendar: ["יומן ימי עבודה", "הגדרת ימי עבודה מלאים, חצי יום וימי חופש על פני לוח השנה"],
   users: ["ניהול משתמשים", "משתמשים עם גישה לממשק הניהול - לא משפיע על ממשק הסוכן"],
   visitplan: ["תוכנית ביקורים", "תעדוף ותזמון ביקורי הסוכנים לחודש הנבחר, לפי שקלול משוקלל של הפרמטרים"],
-  guide: ["הדרכה", "הוראות שימוש קצרות לכל מסך במערכת"]
+  guide: ["הדרכה", "הוראות שימוש קצרות לכל מסך במערכת"],
+  admin: ["ניהול", "יצירת חברות נוספות במערכת - זמין למנהל-על בלבד"]
 };
 const VIEW_ACTIVATION_HOOKS = {};
 
@@ -1884,6 +1904,7 @@ async function loadCompanies() {
   sel.innerHTML = COMPANIES.map(c => `<option value="${c.Id}">${c.Name}</option>`).join("");
 
   document.getElementById("noCompanyBanner").style.display = COMPANIES.length === 0 ? "block" : "none";
+  renderAdminCompaniesList();
 
   if (COMPANIES.length === 0) { sel.value = ""; return; }
   const wanted = previous || remembered;
@@ -1912,21 +1933,25 @@ async function refreshAllCompanyScopedViews() {
 }
 
 /* ---- add company modal ---- */
-const companyModal = document.getElementById("companyModalOverlay");
-function openCompanyModal() {
-  document.getElementById("companyForm").reset();
-  document.getElementById("companyFormMsg").textContent = "";
-  companyModal.classList.add("open");
+function renderAdminCompaniesList() {
+  const listEl = document.getElementById("adminCompaniesList");
+  const countEl = document.getElementById("adminCompaniesCount");
+  countEl.textContent = COMPANIES.length ? String(COMPANIES.length) : "";
+  listEl.innerHTML = COMPANIES.map((c, i) => `
+    <div class="editable-row">
+      <span class="reason-index">${i + 1}</span>
+      <span style="flex:1;font-weight:600;">${String(c.Name).replace(/</g, "&lt;")}</span>
+      <span class="badge">מזהה ${c.Id}</span>
+    </div>
+  `).join("") || `<div class="editable-row" style="color:var(--text-muted);">אין עדיין חברות במערכת.</div>`;
 }
-function closeCompanyModal() { companyModal.classList.remove("open"); }
-document.getElementById("btnAddCompanyTop").addEventListener("click", openCompanyModal);
-document.getElementById("btnCancelCompany").addEventListener("click", closeCompanyModal);
-companyModal.addEventListener("click", (e) => { if (e.target === companyModal) closeCompanyModal(); });
-document.getElementById("companyForm").addEventListener("submit", async (e) => {
+
+document.getElementById("addCompanyForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const msg = document.getElementById("companyFormMsg");
+  const msg = document.getElementById("addCompanyMsg");
   msg.className = "form-msg"; msg.textContent = "";
-  const name = document.getElementById("companyFormName").value.trim();
+  const nameInput = document.getElementById("newCompanyName");
+  const name = nameInput.value.trim();
   if (!name) { msg.className = "form-msg error"; msg.textContent = "יש להזין שם חברה"; return; }
   const fd = new FormData();
   fd.append("Name", name);
@@ -1934,12 +1959,12 @@ document.getElementById("companyForm").addEventListener("submit", async (e) => {
     const res = await fetch("/api/companies", { method: "POST", body: fd });
     if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
     const created = await res.json();
-    msg.className = "form-msg success"; msg.textContent = "החברה נוספה בהצלחה!";
+    msg.className = "form-msg success"; msg.textContent = `החברה "${created.Name}" נוספה בהצלחה - היא כבר נבחרת למעלה.`;
+    nameInput.value = "";
     await loadCompanies();
     document.getElementById("globalCompanySelector").value = String(created.Id);
     localStorage.setItem("visiflowSelectedCompanyId", String(created.Id));
     refreshAllCompanyScopedViews();
-    setTimeout(closeCompanyModal, 900);
   } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
 });
 
@@ -1975,7 +2000,7 @@ function navigateToVisitLogFiltered({ search, date, outcome } = {}) {
     ? v => (!date || v.VisitDate.slice(0, 10) === date) && (!outcome || v.Outcome === outcome)
     : null);
 }
-async function navigateToVisitPlanFiltered({ year, month, search, channel, agent, customerNumbers } = {}) {
+async function navigateToVisitPlanFiltered({ year, month, search, channel, agent, customerNumbers, date } = {}) {
   // The TABLE's own year/month filter (vpTableYearFilter/vpTableMonthFilter) is what actually decides
   // which month's data gets fetched into liveVpEntries - vpYearSelect/vpMonthSelect belong to the
   // "generate a new plan" popup and have no effect on what the table shows. Setting only those (as
@@ -1997,6 +2022,9 @@ async function navigateToVisitPlanFiltered({ year, month, search, channel, agent
   } else {
     vpTable.setPredicate("customerSet", null);
   }
+  // Exact-date match (e.g. "planned today") - customerSet above only tells you a customer HAS some
+  // row this month, which isn't the same thing as that row's date being the one the KPI card counted.
+  vpTable.setPredicate("plannedDate", date ? entry => (entry.PlannedDate || "").slice(0, 10) === date : null);
 }
 
 /* ---- KPI card grid (shared renderer for both the snapshot row and the plan-performance row) ---- */
@@ -2226,7 +2254,7 @@ document.querySelector(".dash-kpi-groups").addEventListener("click", (e) => {
   } else if (id === "unscheduled") {
     navigateToVisitPlanFiltered({ year: d.selYear, month: d.selMonth, customerNumbers: d.unscheduled.map(e => e.CustomerNumber) });
   } else if (id === "plannedToday") {
-    navigateToVisitPlanFiltered({ year: d.todayYear, month: d.todayMonth, customerNumbers: d.plannedToday.map(e => e.CustomerNumber) });
+    navigateToVisitPlanFiltered({ year: d.todayYear, month: d.todayMonth, date: d.todayIso, channel: d.globalChannel });
   } else if (id === "visitsToday") {
     navigateToVisitLogFiltered({ search: d.todayIso });
   } else if (id === "postponedToday") {
@@ -2307,39 +2335,6 @@ function renderCityChart(cityBreakdown) {
     </div>`).join("");
 }
 
-function todayVisitStatusBadge(status) {
-  if (status === "Visited") return `<span class="badge good">בוצע</span>`;
-  if (status === "NotVisited") return `<span class="badge crit">לא בוצע</span>`;
-  return `<span class="badge">ממתין</span>`;
-}
-function renderTodayVisitsTable(rows) {
-  const table = document.getElementById("dashTodayVisitsTable");
-  document.getElementById("dashTodayVisitsCount").textContent = `${fmtNumber(rows.length)} ביקורים`;
-  if (rows.length === 0) {
-    table.innerHTML = `<tbody><tr><td style="padding:16px;color:var(--text-muted);text-align:center;">אין ביקורים מתוכננים להיום.</td></tr></tbody>`;
-    return;
-  }
-  const head = `<thead><tr>
-    <th>סוכן</th><th>מספר לקוח</th><th>שם לקוח</th><th>טלפון</th><th>ציון עדיפות</th><th>סטטוס</th>
-  </tr></thead>`;
-  const body = rows.map(e => `
-    <tr class="dash-today-row" data-drill-today-agent="${e.AgentIdNumber || ""}" style="cursor:pointer;">
-      <td>${e.AgentName || `<span class="muted">—</span>`}</td>
-      <td><span class="mono name">${e.CustomerNumber}</span></td>
-      <td>${e.CustomerName || `<span class="muted">—</span>`}</td>
-      <td>${e.Phone ? `<span class="mono">${e.Phone}</span>` : `<span class="muted">—</span>`}</td>
-      <td><span class="mono">${e.PriorityScore}</span></td>
-      <td>${todayVisitStatusBadge(e.status)}</td>
-    </tr>`).join("");
-  table.innerHTML = head + `<tbody>${body}</tbody>`;
-}
-document.getElementById("dashTodayVisitsTable").addEventListener("click", (e) => {
-  const row = e.target.closest("[data-drill-today-agent]");
-  const d = DASH_STATE;
-  if (!row || !d) return;
-  navigateToVisitPlanFiltered({ year: d.selYear, month: d.selMonth, agent: row.dataset.drillTodayAgent || undefined });
-});
-
 function renderAgentMeetingCountsTable(agentMeetingCounts) {
   const table = document.getElementById("dashAgentMeetingCountsTable");
   const entries = [...agentMeetingCounts.entries()].sort((a, b) => b[1].month - a[1].month);
@@ -2407,8 +2402,6 @@ async function refreshDashboard() {
     document.getElementById("dashCalGrid").innerHTML = "";
     document.getElementById("dashCalTitle").textContent = "";
     document.getElementById("dashAgentPerfChart").innerHTML = "";
-    document.getElementById("dashTodayVisitsTable").innerHTML = "";
-    document.getElementById("dashTodayVisitsCount").textContent = "";
     document.getElementById("dashAgentMeetingCountsTable").innerHTML = "";
     document.getElementById("dashUpdatedLine").textContent = "";
     DASH_STATE = null;
@@ -2487,10 +2480,9 @@ async function refreshDashboard() {
   const postponedToday = visits.filter(v => v.Outcome === "NotVisited" && (v.VisitDate || "").slice(0, 10) === todayIso
     && (!globalChannel || customerByNumber.get(v.CustomerNumber)?.Channel === globalChannel));
 
-  const plannedToday = todayPlanEntries
+  const plannedTodayCount = todayPlanEntries
     .filter(e => (e.PlannedDate || "").slice(0, 10) === todayIso)
-    .filter(e => !globalChannel || e.Channel === globalChannel);
-  const plannedTodayCount = plannedToday.length;
+    .filter(e => !globalChannel || e.Channel === globalChannel).length;
 
   // Customers whose visit-plan entry for the selected month exists but never got a PlannedDate - the
   // generator ran out of daily capacity for them (see VisitPlanGenerator/"לא שובץ" in the visit-plan
@@ -2525,7 +2517,7 @@ async function refreshDashboard() {
   DASH_STATE = {
     selYear, selMonth, activeCustomers, neglected, decliningNeglected, reasonAgg, todayIso,
     globalChannel, frequencyBuckets, agentComposition, agentPerf, cityBreakdown, unscheduled,
-    plannedToday, todayYear: today.getFullYear(), todayMonth: today.getMonth() + 1
+    todayYear: today.getFullYear(), todayMonth: today.getMonth() + 1
   };
 
   // Populate the one global channel dropdown (options only, keep the current selection if still valid).
@@ -2543,7 +2535,7 @@ async function refreshDashboard() {
     { id: "postponedToday", value: fmtNumber(postponedToday.length), label: `ביקורים שנדחו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso) }
   ]);
   renderKpiGrid("dashKpiGridMonthly", [
-    { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel ? `בערוץ ${globalChannel}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים` },
+    { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel ? `בערוץ ${globalChannel}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים`, tier: "good" },
     { id: "neglected", value: fmtNumber(neglected.length), label: "לקוחות שלא ביקרנו מעל 30 יום", sub: "לחצו לרשימה המלאה", tier: neglected.length === 0 ? "good" : (neglected.length > kpiCustomers.length * 0.2 ? "crit" : "warn") },
     { id: "decliningNeglected", value: fmtNumber(decliningNeglected.length), label: "יורדים במכר וללא ביקור מספק", sub: "ירידה במכר + לא ביקרנו מעל 30 יום", tier: decliningNeglected.length === 0 ? "good" : "crit" },
     { id: "unscheduled", value: fmtNumber(unscheduled.length), label: "לקוחות שלא שובצו", sub: "אין קיבולת פנויה ביומן הסוכן - לחצו לרשימה", tier: unscheduled.length === 0 ? "good" : "crit" }
@@ -2558,16 +2550,6 @@ async function refreshDashboard() {
   renderDashCalGrid(selYear, selMonth, calendarDays);
   renderAgentPerfChart(agentPerf);
   renderCityChart(cityBreakdown);
-
-  const todayVisits = todayPlanEntries
-    .filter(e => (e.PlannedDate || "").slice(0, 10) === todayIso)
-    .filter(e => !globalChannel || e.Channel === globalChannel)
-    .map(e => {
-      const visit = visits.find(v => v.CustomerNumber === e.CustomerNumber && (v.VisitDate || "").slice(0, 10) === todayIso);
-      return { ...e, status: visit ? visit.Outcome : "Pending" };
-    })
-    .sort((a, b) => (a.AgentName || "").localeCompare(b.AgentName || "", "he") || (a.CustomerName || "").localeCompare(b.CustomerName || "", "he"));
-  renderTodayVisitsTable(todayVisits);
 
   // todayPlanEntries is always fetched for the REAL current month (see the fetch above, independent
   // of the selYear/selMonth dropcown) - so it's already exactly "this month" for both counts below.
@@ -4181,7 +4163,7 @@ function hideLoginScreen() {
 // dangling in front of someone who'd only ever get a 403 clicking it).
 function applyCurrentUserUi() {
   document.getElementById("sidebarUserLabel").textContent = CURRENT_USER.DisplayName;
-  document.getElementById("btnAddCompanyTop").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
+  document.getElementById("navGroupAdmin").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
 }
 
 async function checkAuth() {

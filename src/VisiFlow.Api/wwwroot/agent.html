@@ -381,6 +381,15 @@
 </div>
 
 <script>
+/* ==================== HTML ESCAPING ====================
+   Shared helper for interpolating free-text data (customer names, notes, reason text, etc.)
+   into innerHTML-bound template literals. Never wrap a textContent assignment in this -
+   the browser already escapes those natively and double-escaping shows literal &amp; etc. */
+function esc(s) {
+  if (s === null || s === undefined) return "";
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 const AGENT_ID_KEY = "visiflowAgentIdNumber";
 let agentVisits = [];
 let reasonsByCompany = {}; // companyId -> [{Id, Text}]
@@ -463,7 +472,7 @@ function renderCustomerCard(c) {
   if (c.Outcome === "Visited") {
     statusHtml = `<div class="cc-status-badge visited"><span>✓ סומן כ"ביקרתי"</span><button type="button" data-action="change-status" data-key="${key}">שינוי</button></div>`;
   } else if (c.Outcome === "NotVisited") {
-    statusHtml = `<div class="cc-status-badge notvisited"><span>✗ לא ביקרתי - ${c.ReasonText || ""}</span><button type="button" data-action="change-status" data-key="${key}">שינוי</button></div>`;
+    statusHtml = `<div class="cc-status-badge notvisited"><span>✗ לא ביקרתי - ${esc(c.ReasonText || "")}</span><button type="button" data-action="change-status" data-key="${key}">שינוי</button></div>`;
   } else {
     statusHtml = `
       <div class="cc-visit-row">
@@ -481,12 +490,12 @@ function renderCustomerCard(c) {
     <div class="customer-card" data-card="${key}">
       <div class="cc-head">
         <div>
-          <div class="cc-name">${c.CustomerName}</div>
+          <div class="cc-name">${esc(c.CustomerName)}</div>
           <div class="cc-number">מספר לקוח ${c.CustomerNumber}${viewMode !== "day" ? ` · ${formatBannerDate(c.PlannedDate.slice(0, 10))}` : ""}</div>
         </div>
         ${c.VisitOrder != null ? `<span class="cc-stop-badge">עצירה #${c.VisitOrder}</span>` : ""}
       </div>
-      ${c.AdminNote ? `<div class="cc-admin-note">📌 <b>הערה מהמנהל:</b> ${c.AdminNote}</div>` : ""}
+      ${c.AdminNote ? `<div class="cc-admin-note">📌 <b>הערה מהמנהל:</b> ${esc(c.AdminNote)}</div>` : ""}
       <div class="cc-sales">
         <span>מכר השנה: <b>${fmtCurrency(c.SalesYtdCurrentYear)}</b></span>
         <span>מכר אשתקד: <b>${fmtCurrency(c.SalesYtdPreviousYear)}</b></span>
@@ -498,7 +507,7 @@ function renderCustomerCard(c) {
         <div class="cc-info-item" style="grid-column:1 / -1;"><span class="cc-info-label">ימי הפצה</span><span class="cc-info-value">${fmtDistDays(c)}</span></div>
       </div>
       <div class="cc-actions">
-        ${telUrl ? `<a class="cc-action-btn tel-btn" href="${telUrl}">📞 ${c.Phone}</a>` : ""}
+        ${telUrl ? `<a class="cc-action-btn tel-btn" href="${telUrl}">📞 ${esc(c.Phone)}</a>` : ""}
         ${wazeUrl ? `<a class="cc-action-btn waze-btn" href="${wazeUrl}" target="_blank" rel="noopener">🧭 ניווט ב-Waze</a>` : ""}
       </div>
       <div class="cc-status-area" data-status-area="${key}">${statusHtml}</div>
@@ -523,16 +532,16 @@ function renderCustomerRow(c) {
     : c.Outcome === "NotVisited" ? `<span class="cl-status-dot notvisited">✗</span>`
     : `<span class="cl-status-dot pending"></span>`;
   const subParts = [];
-  if (c.Address) subParts.push(c.Address);
+  if (c.Address) subParts.push(esc(c.Address));
   subParts.push(formatBannerDate(c.PlannedDate.slice(0, 10)));
   const toggleLabel = isExpanded ? `<span>▲</span><span>סגירה</span>` : `<span>▼</span><span>פתיחה</span>`;
   return `
     <div class="customer-row-wrap${isExpanded ? " expanded" : ""}" data-wrap-key="${key}">
       <div class="customer-row" data-row-key="${key}">
         <div class="cl-row-main">
-          <div class="cl-row-name">${c.CustomerName}</div>
+          <div class="cl-row-name">${esc(c.CustomerName)}</div>
           <div class="cl-row-sub">${subParts.join(" · ")}</div>
-          ${c.AdminNote ? `<div class="cl-row-note">📌 ${c.AdminNote}</div>` : ""}
+          ${c.AdminNote ? `<div class="cl-row-note">📌 ${esc(c.AdminNote)}</div>` : ""}
         </div>
         ${statusDot}
         <span class="cl-row-toggle">${toggleLabel}</span>
@@ -573,7 +582,7 @@ async function renderCustomerList() {
   expandedUnmarked.forEach(c => {
     const select = container.querySelector(`[data-reason-select="${c.PlanEntryId}"]`);
     if (select) select.innerHTML = `<option value="" selected disabled>בחרו סיבה...</option>` +
-      (reasonsByCompany[c.CompanyId] || []).map(r => `<option value="${r.Id}">${r.Text}</option>`).join("");
+      (reasonsByCompany[c.CompanyId] || []).map(r => `<option value="${r.Id}">${esc(r.Text)}</option>`).join("");
   });
 }
 
@@ -728,7 +737,7 @@ function renderSearchResults(results) {
   });
   el.innerHTML = [...byCustomer.entries()].map(([num, info]) => `
     <div class="search-result-item" data-jump-date="${info.dates[0]}">
-      <div class="search-result-name">${info.name} <span class="search-result-num">(${num})</span></div>
+      <div class="search-result-name">${esc(info.name)} <span class="search-result-num">(${num})</span></div>
       <div class="search-result-dates">${info.dates.map(formatBannerDate).join(" · ")}</div>
     </div>`).join("");
 }
@@ -860,12 +869,12 @@ function showReschedulePrompt(key, reasonText) {
   // c.Outcome === "NotVisited" branch) - no inline resched controls anymore, those live in the modal.
   const area = document.querySelector(`[data-status-area="${key}"]`);
   if (area) {
-    area.innerHTML = `<div class="cc-status-badge notvisited"><span>✗ לא ביקרתי - ${reasonText}</span><button type="button" data-action="change-status" data-key="${key}">שינוי</button></div>`;
+    area.innerHTML = `<div class="cc-status-badge notvisited"><span>✗ לא ביקרתי - ${esc(reasonText)}</span><button type="button" data-action="change-status" data-key="${key}">שינוי</button></div>`;
   }
 
   reschedModalKey = key;
   reschedModalReasonText = reasonText || "";
-  document.getElementById("reschedModalReasonBadge").innerHTML = `<span>✗ לא ביקרתי - ${reasonText}</span>`;
+  document.getElementById("reschedModalReasonBadge").innerHTML = `<span>✗ לא ביקרתי - ${esc(reasonText)}</span>`;
   const dateInput = document.getElementById("reschedModalDateInput");
   dateInput.style.display = "none";
   dateInput.value = "";

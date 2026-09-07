@@ -1820,6 +1820,15 @@
 </div>
 
 <script>
+/* ==================== HTML ESCAPING ====================
+   Shared helper for interpolating free-text data (customer names, notes, usernames, etc.)
+   into innerHTML-bound template literals. Never wrap a textContent assignment in this -
+   the browser already escapes those natively and double-escaping shows literal &amp; etc. */
+function esc(s) {
+  if (s === null || s === undefined) return "";
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 /* ==================== VIEW SWITCHING ==================== */
 const VIEW_TITLES = {
   dashboard: ["בית", "תמונת מצב כללית"],
@@ -2090,7 +2099,7 @@ async function loadCompanies() {
   const sel = document.getElementById("globalCompanySelector");
   const remembered = localStorage.getItem("visiflowSelectedCompanyId");
   const previous = sel.value;
-  sel.innerHTML = COMPANIES.map(c => `<option value="${c.Id}">${c.Name}</option>`).join("");
+  sel.innerHTML = COMPANIES.map(c => `<option value="${c.Id}">${esc(c.Name)}</option>`).join("");
 
   document.getElementById("noCompanyBanner").style.display = COMPANIES.length === 0 ? "block" : "none";
   renderAdminCompaniesList();
@@ -2129,8 +2138,8 @@ function renderAdminCompaniesList() {
   const countEl = document.getElementById("adminCompaniesCount");
   countEl.textContent = COMPANIES.length ? String(COMPANIES.length) : "";
   listEl.innerHTML = COMPANIES.map((c, i) => {
-    const name = String(c.Name).replace(/</g, "&lt;");
-    const nameAttr = String(c.Name).replace(/"/g, "&quot;");
+    const name = esc(c.Name);
+    const nameAttr = esc(c.Name);
     const isActive = c.IsActive !== false;
     return `
     <div class="editable-row" style="${isActive ? "" : "opacity:0.55;"}">
@@ -2234,9 +2243,9 @@ const auditLogTable = createDataTable({
   tableId: "auditLogTable",
   columns: [
     { key: "createdAt", label: "תאריך ושעה", width: "80px", text: e => e.CreatedAt, sortValue: e => e.CreatedAt, render: e => `<span class="mono">${fmtDate(e.CreatedAt)} ${fmtTime(e.CreatedAt)}</span>` },
-    { key: "actor", label: "מבצע", width: "90px", text: e => e.ActorUsername || "", render: e => e.ActorUsername ? `<span class="mono name">${e.ActorUsername}</span>` : `<span class="muted">—</span>` },
+    { key: "actor", label: "מבצע", width: "90px", text: e => e.ActorUsername || "", render: e => e.ActorUsername ? `<span class="mono name">${esc(e.ActorUsername)}</span>` : `<span class="muted">—</span>` },
     { key: "action", label: "פעולה", width: "90px", text: e => e.Action || "", render: e => e.Action ? `<span class="badge warn">${e.Action}</span>` : `<span class="muted">—</span>` },
-    { key: "target", label: "פירוט", text: e => e.TargetDescription || "", render: e => e.TargetDescription ? e.TargetDescription : `<span class="muted">—</span>` }
+    { key: "target", label: "פירוט", text: e => e.TargetDescription || "", render: e => e.TargetDescription ? esc(e.TargetDescription) : `<span class="muted">—</span>` }
   ],
   getRows: () => liveAuditLog,
   entityLabel: "רשומות ביקורת"
@@ -2369,10 +2378,10 @@ function renderReasonsChart(reasonAgg) {
   el.innerHTML = entries.map(([reason, list]) => {
     const rescheduledCount = list.filter(wasRescheduled).length;
     return `
-    <div class="vbar-col" data-drill-reason="${reason}">
+    <div class="vbar-col" data-drill-reason="${esc(reason)}">
       <div class="vbar-value">${fmtNumber(list.length)}</div>
       <div class="vbar-track"><div class="vbar-fill" style="height:${Math.round(list.length / max * 100)}%"></div></div>
-      <div class="vbar-label">${reason}</div>
+      <div class="vbar-label">${esc(reason)}</div>
       <div class="vbar-resched-tag${rescheduledCount > 0 ? " shown" : ""}"${rescheduledCount > 0 ? ` title="מתוך ${list.length}, ${rescheduledCount} נדחו על ידי הסוכן למועד חדש"` : ""}>${rescheduledCount > 0 ? `🔁 ${fmtNumber(rescheduledCount)} נדחו` : " "}</div>
     </div>`;
   }).join("");
@@ -2451,7 +2460,7 @@ function renderDonutChart(containerId, entriesMap, { centerLabel, sortFn, drillA
   const segs = entries.map(([label, list], i) => {
     const frac = list.length / total;
     const dash = frac * c;
-    const seg = `<circle class="donut-seg" cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${DONUT_COLORS[i % DONUT_COLORS.length]}" stroke-width="${thickness}" stroke-dasharray="${dash} ${c - dash}" stroke-dashoffset="${-cumulative}" transform="rotate(-90 ${size / 2} ${size / 2})" data-${drillAttr}="${label}"><title>${label}: ${list.length}</title></circle>`;
+    const seg = `<circle class="donut-seg" cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${DONUT_COLORS[i % DONUT_COLORS.length]}" stroke-width="${thickness}" stroke-dasharray="${dash} ${c - dash}" stroke-dashoffset="${-cumulative}" transform="rotate(-90 ${size / 2} ${size / 2})" data-${drillAttr}="${esc(label)}"><title>${esc(label)}: ${list.length}</title></circle>`;
     cumulative += dash;
     return seg;
   }).join("");
@@ -2465,11 +2474,11 @@ function renderDonutChart(containerId, entriesMap, { centerLabel, sortFn, drillA
   const legendHtml = entries.map(([label, list], i) => {
     const pct = Math.round(list.length / total * 100);
     const nameHtml = inlineCount
-      ? `<span class="donut-legend-label">${label} <span class="donut-legend-value">(${fmtNumber(list.length)}${showPct ? ` · ${pct}%` : ""})</span></span>`
-      : `<span class="donut-legend-label">${label}</span><span class="donut-legend-value">${fmtNumber(list.length)}</span>`;
+      ? `<span class="donut-legend-label">${esc(label)} <span class="donut-legend-value">(${fmtNumber(list.length)}${showPct ? ` · ${pct}%` : ""})</span></span>`
+      : `<span class="donut-legend-label">${esc(label)}</span><span class="donut-legend-value">${fmtNumber(list.length)}</span>`;
     const pctHtml = (showPct && !inlineCount) ? `<span class="donut-legend-pct">${pct}% מסה"כ</span>` : "";
     return `
-    <div class="donut-legend-item" data-${drillAttr}="${label}">
+    <div class="donut-legend-item" data-${drillAttr}="${esc(label)}">
       <span class="donut-swatch" style="background:${DONUT_COLORS[i % DONUT_COLORS.length]}"></span>
       ${nameHtml}${pctHtml}
     </div>`;
@@ -2626,10 +2635,10 @@ function renderAgentPerfChart(agentPerf) {
     const pct = g.scheduled > 0 ? Math.round(g.performed / g.scheduled * 100) : 0;
     const tier = pct >= 80 ? "good" : pct >= 50 ? "warn" : "crit";
     return `
-    <div class="vbar-col" data-drill-agent-perf="${agentId}">
+    <div class="vbar-col" data-drill-agent-perf="${esc(agentId)}">
       <div class="vbar-value">${pct}%</div>
       <div class="vbar-track"><div class="vbar-fill tier-${tier}" style="height:${pct}%"></div></div>
-      <div class="vbar-label">${g.name}<br><span style="color:var(--text-muted);">${fmtNumber(g.performed)}/${fmtNumber(g.scheduled)}</span></div>
+      <div class="vbar-label">${esc(g.name)}<br><span style="color:var(--text-muted);">${fmtNumber(g.performed)}/${fmtNumber(g.scheduled)}</span></div>
     </div>`;
   }).join("");
 }
@@ -2640,10 +2649,10 @@ function renderCityChart(cityBreakdown) {
   if (entries.length === 0) { el.innerHTML = `<div class="bar-empty">אין נתוני עיר להצגה.</div>`; return; }
   const max = Math.max(...entries.map(([, list]) => list.length), 1);
   el.innerHTML = entries.map(([city, list]) => `
-    <div class="vbar-col" data-drill-city="${city}">
+    <div class="vbar-col" data-drill-city="${esc(city)}">
       <div class="vbar-value">${fmtNumber(list.length)}</div>
       <div class="vbar-track"><div class="vbar-fill" style="height:${Math.round(list.length / max * 100)}%"></div></div>
-      <div class="vbar-label">${city}</div>
+      <div class="vbar-label">${esc(city)}</div>
     </div>`).join("");
 }
 
@@ -2674,9 +2683,9 @@ function renderAgentMeetingCountsTable(agentMeetingCounts) {
   // "selected month" would misdescribe what's actually being counted.
   const head = `<thead><tr><th>ערוץ מכר</th><th>סוכן</th><th>מתוכנן להיום</th><th>בוצעו היום</th><th>בוצעו מתחילת החודש עד היום</th><th>מתוכנן לחודש הנוכחי</th></tr></thead>`;
   const body = entries.map(([agentId, g]) => `
-    <tr class="dash-today-row" data-drill-agent-meetings="${agentId}" style="cursor:pointer;">
-      <td>${[...g.channels].join(", ") || `<span class="muted">—</span>`}</td>
-      <td>${g.name}</td>
+    <tr class="dash-today-row" data-drill-agent-meetings="${esc(agentId)}" style="cursor:pointer;">
+      <td>${[...g.channels].map(esc).join(", ") || `<span class="muted">—</span>`}</td>
+      <td>${esc(g.name)}</td>
       <td><span class="mono">${fmtNumber(g.today)}</span></td>
       <td><span class="mono">${fmtNumber(g.performedToday)}</span></td>
       <td><span class="mono">${fmtNumber(g.performedMonthToDate)}</span></td>
@@ -2873,7 +2882,7 @@ async function refreshDashboard() {
   // Populate the one global channel dropdown (options only, keep the current selection if still valid).
   const allChannels = [...new Set(activeCustomers.map(c => c.Channel).filter(Boolean))].sort();
   const globalChannelSel = document.getElementById("dashGlobalChannelFilter");
-  globalChannelSel.innerHTML = `<option value="">כל הערוצים</option>` + allChannels.map(ch => `<option value="${ch}">${ch}</option>`).join("");
+  globalChannelSel.innerHTML = `<option value="">כל הערוצים</option>` + allChannels.map(ch => `<option value="${esc(ch)}">${esc(ch)}</option>`).join("");
   if (allChannels.includes(globalChannel)) globalChannelSel.value = globalChannel;
 
   // "היום" only when this really is today - a picked dashDateFilter gets its own date spelled out in
@@ -2959,16 +2968,16 @@ const customersTable = createDataTable({
   tableId: "customersTable",
   columns: [
     { key: "customerNumber", label: "מספר לקוח", text: c => c.CustomerNumber, render: c => `<span class="mono name">${c.CustomerNumber}</span>` },
-    { key: "customerName", label: "שם לקוח", text: c => c.CustomerName, render: c => `<span class="name">${c.CustomerName}</span>` },
-    { key: "agentName", label: "סוכן משוייך", text: c => c.AgentName || "", render: c => c.AgentName || `<span class="muted">—</span>` },
-    { key: "agentIdNumber", label: "ת.ז. סוכן", text: c => c.AgentIdNumber || "", render: c => c.AgentIdNumber ? `<span class="mono">${c.AgentIdNumber}</span>` : `<span class="muted">—</span>` },
-    { key: "channel", label: "ערוץ מכר", text: c => c.Channel || "", render: c => c.Channel ? `<span class="badge accent">${c.Channel}</span>` : `<span class="muted">—</span>` },
+    { key: "customerName", label: "שם לקוח", text: c => c.CustomerName, render: c => `<span class="name">${esc(c.CustomerName)}</span>` },
+    { key: "agentName", label: "סוכן משוייך", text: c => c.AgentName || "", render: c => c.AgentName ? esc(c.AgentName) : `<span class="muted">—</span>` },
+    { key: "agentIdNumber", label: "ת.ז. סוכן", text: c => c.AgentIdNumber || "", render: c => c.AgentIdNumber ? `<span class="mono">${esc(c.AgentIdNumber)}</span>` : `<span class="muted">—</span>` },
+    { key: "channel", label: "ערוץ מכר", text: c => c.Channel || "", render: c => c.Channel ? `<span class="badge accent">${esc(c.Channel)}</span>` : `<span class="muted">—</span>` },
     { key: "salesCurrent", label: "מכירות השנה", text: c => c.SalesYtdCurrentYear ?? "", sortValue: c => c.SalesYtdCurrentYear, render: c => `<span class="mono">${fmtCurrency(c.SalesYtdCurrentYear)}</span>` },
     { key: "salesPrevious", label: "מכירות אשתקד", text: c => c.SalesYtdPreviousYear ?? "", sortValue: c => c.SalesYtdPreviousYear, render: c => `<span class="mono">${fmtCurrency(c.SalesYtdPreviousYear)}</span>` },
-    { key: "size", label: "גודל לקוח", text: c => c.CustomerSize || "", render: c => c.CustomerSize ? `<span class="badge">${c.CustomerSize}</span>` : `<span class="muted">—</span>` },
-    { key: "phone", label: "טלפון", text: c => c.Phone || "", render: c => c.Phone ? `<span class="mono">${c.Phone}</span>` : `<span class="muted">—</span>` },
-    { key: "address", label: "כתובת", text: c => c.Address || "", render: c => c.Address || `<span class="muted">—</span>` },
-    { key: "city", label: "עיר", text: c => c.City || "", render: c => c.City ? `<span class="badge">${c.City}</span>` : `<span class="muted">—</span>` },
+    { key: "size", label: "גודל לקוח", text: c => c.CustomerSize || "", render: c => c.CustomerSize ? `<span class="badge">${esc(c.CustomerSize)}</span>` : `<span class="muted">—</span>` },
+    { key: "phone", label: "טלפון", text: c => c.Phone || "", render: c => c.Phone ? `<span class="mono">${esc(c.Phone)}</span>` : `<span class="muted">—</span>` },
+    { key: "address", label: "כתובת", text: c => c.Address || "", render: c => c.Address ? esc(c.Address) : `<span class="muted">—</span>` },
+    { key: "city", label: "עיר", text: c => c.City || "", render: c => c.City ? `<span class="badge">${esc(c.City)}</span>` : `<span class="muted">—</span>` },
     { key: "avgOrders", label: "הזמנות ממוצע/חודש", text: c => c.AvgMonthlyOrders ?? "", sortValue: c => c.AvgMonthlyOrders, render: c => `<span class="mono">${fmtNumber(c.AvgMonthlyOrders)}</span>` },
     { key: "active", label: "פעיל לאורך התקופה", text: c => c.WasActiveAllPeriod ? "כן" : "לא", render: c => c.WasActiveAllPeriod ? `<span class="badge good">כן</span>` : `<span class="badge crit">לא</span>` },
     { key: "status", label: "סטטוס לקוח", text: c => c.Status === "Active" ? "פעיל" : "לא פעיל", render: c => c.Status === "Active" ? `<span class="badge good">פעיל</span>` : `<span class="badge crit">לא פעיל</span>` }
@@ -3141,7 +3150,7 @@ function renderReasonsList() {
   document.getElementById("reasonsList").innerHTML = liveReasons.map((r, i) => `
     <div class="editable-row" data-id="${r.Id}" style="${r.IsActive ? "" : "opacity:0.55;"}">
       <span class="reason-index">${i + 1}</span>
-      <input type="text" value="${String(r.Text).replace(/"/g, "&quot;")}" data-id="${r.Id}" />
+      <input type="text" value="${esc(r.Text)}" data-id="${r.Id}" />
       <span class="saved-tick">נשמר &#10003;</span>
       <button type="button" class="btn-icon-badge badge${r.IsActive ? " good" : ""}" data-action="toggle-reason-active" data-id="${r.Id}" data-active="${r.IsActive}" title="${r.IsActive ? "לחצו להקפאה - תפסיק להיות זמינה לבחירה חדשה" : "לחצו להפשרה - תחזור להיות זמינה לבחירה חדשה"}">${r.IsActive ? "פעיל" : "מוקפא"}</button>
       <button type="button" class="btn-icon" data-action="delete-reason" data-id="${r.Id}" title="מחיקה">&#128465;</button>
@@ -3229,7 +3238,7 @@ function fmtVisitOutcome(v) {
   // via a Notes marker at submission time; surface it here so it doesn't read as an ordinary on-
   // schedule visit.
   const isEarly = v.Outcome === "Visited" && (v.Notes || "").includes("הפגישה הוקדמה");
-  return isEarly ? `${base} <span class="badge warn" title="${v.Notes}">⏩ הוקדם</span>` : base;
+  return isEarly ? `${base} <span class="badge warn" title="${esc(v.Notes)}">⏩ הוקדם</span>` : base;
 }
 
 let vlSelected = new Set(); // CustomerVisit.Id -> selected for bulk delete
@@ -3244,13 +3253,13 @@ const vlTable = createDataTable({
     { key: "date", label: "תאריך", text: v => v.VisitDate, sortValue: v => v.VisitDate, render: v => `<span class="mono">${fmtDate(v.VisitDate)}</span>` },
     { key: "time", label: "שעת ביקור", text: v => v.Outcome === "Visited" ? fmtTime(v.CreatedAt) : "", sortValue: v => v.Outcome === "Visited" ? v.CreatedAt : "", render: v => v.Outcome === "Visited" ? `<span class="mono">${fmtTime(v.CreatedAt)}</span>` : `<span class="muted">—</span>` },
     { key: "customerNumber", label: "מספר לקוח", text: v => v.CustomerNumber, render: v => `<span class="mono name">${v.CustomerNumber}</span>` },
-    { key: "customerName", label: "שם לקוח", text: v => customerLookup().get(v.CustomerNumber)?.CustomerName || "", render: v => customerLookup().get(v.CustomerNumber)?.CustomerName || `<span class="muted">—</span>` },
-    { key: "agentName", label: "סוכן", text: v => v.AgentName || "", render: v => v.AgentName || `<span class="muted">—</span>` },
-    { key: "channel", label: "ערוץ מכר", text: v => v.Channel || "", render: v => v.Channel ? `<span class="badge accent">${v.Channel}</span>` : `<span class="muted">—</span>` },
-    { key: "city", label: "עיר", text: v => v.City || "", render: v => v.City ? `<span class="badge">${v.City}</span>` : `<span class="muted">—</span>` },
+    { key: "customerName", label: "שם לקוח", text: v => customerLookup().get(v.CustomerNumber)?.CustomerName || "", render: v => customerLookup().get(v.CustomerNumber)?.CustomerName ? esc(customerLookup().get(v.CustomerNumber).CustomerName) : `<span class="muted">—</span>` },
+    { key: "agentName", label: "סוכן", text: v => v.AgentName || "", render: v => v.AgentName ? esc(v.AgentName) : `<span class="muted">—</span>` },
+    { key: "channel", label: "ערוץ מכר", text: v => v.Channel || "", render: v => v.Channel ? `<span class="badge accent">${esc(v.Channel)}</span>` : `<span class="muted">—</span>` },
+    { key: "city", label: "עיר", text: v => v.City || "", render: v => v.City ? `<span class="badge">${esc(v.City)}</span>` : `<span class="muted">—</span>` },
     { key: "outcome", label: "סטטוס", text: v => v.Outcome === "Visited" ? "בוצע" : "לא בוצע", render: fmtVisitOutcome },
-    { key: "reason", label: "סיבת אי ביקור", text: v => v.NonVisitReasonText || "", render: v => v.NonVisitReasonText || `<span class="muted">—</span>` },
-    { key: "notes", label: "הערות", text: v => v.Notes || "", render: v => v.Notes || `<span class="muted">—</span>` },
+    { key: "reason", label: "סיבת אי ביקור", text: v => v.NonVisitReasonText || "", render: v => v.NonVisitReasonText ? esc(v.NonVisitReasonText) : `<span class="muted">—</span>` },
+    { key: "notes", label: "הערות", text: v => v.Notes || "", render: v => v.Notes ? esc(v.Notes) : `<span class="muted">—</span>` },
     { key: "actions", label: "", noFilter: true, text: () => "", render: v => `<button type="button" class="btn-icon" data-action="delete-visit" data-id="${v.Id}" title="מחיקה">&#128465;</button>` }
   ],
   getRows: () => liveVisits,
@@ -3278,7 +3287,7 @@ function populateVlFilterDropdowns() {
   const prevYear = yearSel.value, prevMonth = monthSel.value, prevChannel = channelSel.value;
   yearSel.innerHTML = `<option value="">כל השנים</option>` + years.map(y => `<option value="${y}">${y}</option>`).join("");
   monthSel.innerHTML = `<option value="">כל החודשים</option>` + months.map(m => `<option value="${m}">${HE_MONTHS[m - 1]}</option>`).join("");
-  channelSel.innerHTML = `<option value="">כל הערוצים</option>` + channels.map(ch => `<option value="${ch}">${ch}</option>`).join("");
+  channelSel.innerHTML = `<option value="">כל הערוצים</option>` + channels.map(ch => `<option value="${esc(ch)}">${esc(ch)}</option>`).join("");
   if (years.includes(prevYear)) yearSel.value = prevYear;
   if (months.map(String).includes(prevMonth)) monthSel.value = prevMonth;
   if (channels.includes(prevChannel)) channelSel.value = prevChannel;
@@ -3382,9 +3391,9 @@ const distTable = createDataTable({
   tableId: "distTable",
   columns: [
     { key: "customerNumber", label: "מספר לקוח", text: d => d.CustomerNumber, render: d => `<span class="mono name">${d.CustomerNumber}</span>` },
-    { key: "customerName", label: "שם לקוח", text: d => customerLookup().get(d.CustomerNumber)?.CustomerName || "", render: d => customerLookup().get(d.CustomerNumber)?.CustomerName || `<span class="muted">—</span>` },
-    { key: "agentName", label: "סוכן", text: d => customerLookup().get(d.CustomerNumber)?.AgentName || "", render: d => customerLookup().get(d.CustomerNumber)?.AgentName || `<span class="muted">—</span>` },
-    { key: "channel", label: "ערוץ", text: d => customerLookup().get(d.CustomerNumber)?.Channel || "", render: d => customerLookup().get(d.CustomerNumber)?.Channel || `<span class="muted">—</span>` },
+    { key: "customerName", label: "שם לקוח", text: d => customerLookup().get(d.CustomerNumber)?.CustomerName || "", render: d => customerLookup().get(d.CustomerNumber)?.CustomerName ? esc(customerLookup().get(d.CustomerNumber).CustomerName) : `<span class="muted">—</span>` },
+    { key: "agentName", label: "סוכן", text: d => customerLookup().get(d.CustomerNumber)?.AgentName || "", render: d => customerLookup().get(d.CustomerNumber)?.AgentName ? esc(customerLookup().get(d.CustomerNumber).AgentName) : `<span class="muted">—</span>` },
+    { key: "channel", label: "ערוץ", text: d => customerLookup().get(d.CustomerNumber)?.Channel || "", render: d => customerLookup().get(d.CustomerNumber)?.Channel ? esc(customerLookup().get(d.CustomerNumber).Channel) : `<span class="muted">—</span>` },
     ...DIST_DAY_COLS.map(dc => ({
       key: dc.key, label: dc.label, width: "44px", text: d => d[dc.key] ? "כן" : "לא",
       // Blocked (not a distribution day) reads as a red X rather than a neutral dash, so a fully
@@ -3595,10 +3604,10 @@ const vsTable = createDataTable({
       render: c => `<input type="checkbox" class="vs-row-check" data-num="${c.CustomerNumber}"${vsSelected.has(c.CustomerNumber) ? " checked" : ""} />`
     },
     { key: "customerNumber", label: "מספר לקוח", text: c => c.CustomerNumber, render: c => `<span class="mono name">${c.CustomerNumber}</span>` },
-    { key: "customerName", label: "שם לקוח", text: c => c.CustomerName, render: c => `<span class="name">${c.CustomerName}</span>` },
-    { key: "agentName", label: "סוכן משוייך", text: c => c.AgentName || "", render: c => c.AgentName || `<span class="muted">—</span>` },
-    { key: "channel", label: "ערוץ מכר", text: c => c.Channel || "", render: c => c.Channel ? `<span class="badge accent">${c.Channel}</span>` : `<span class="muted">—</span>` },
-    { key: "size", label: "גודל לקוח", text: c => c.CustomerSize || "", render: c => c.CustomerSize ? `<span class="badge">${c.CustomerSize}</span>` : `<span class="muted">—</span>` },
+    { key: "customerName", label: "שם לקוח", text: c => c.CustomerName, render: c => `<span class="name">${esc(c.CustomerName)}</span>` },
+    { key: "agentName", label: "סוכן משוייך", text: c => c.AgentName || "", render: c => c.AgentName ? esc(c.AgentName) : `<span class="muted">—</span>` },
+    { key: "channel", label: "ערוץ מכר", text: c => c.Channel || "", render: c => c.Channel ? `<span class="badge accent">${esc(c.Channel)}</span>` : `<span class="muted">—</span>` },
+    { key: "size", label: "גודל לקוח", text: c => c.CustomerSize || "", render: c => c.CustomerSize ? `<span class="badge">${esc(c.CustomerSize)}</span>` : `<span class="muted">—</span>` },
     { key: "salesCurrent", label: "מחזור השנה", text: c => c.SalesYtdCurrentYear ?? "", sortValue: c => c.SalesYtdCurrentYear, render: c => `<span class="mono">${fmtCurrency(c.SalesYtdCurrentYear)}</span>` },
     { key: "salesPrevious", label: "מחזור אשתקד", text: c => c.SalesYtdPreviousYear ?? "", sortValue: c => c.SalesYtdPreviousYear, render: c => `<span class="mono">${fmtCurrency(c.SalesYtdPreviousYear)}</span>` },
     { key: "avgOrders", label: "ממוצע הזמנות חודשי", text: c => c.AvgMonthlyOrders ?? "", sortValue: c => c.AvgMonthlyOrders, render: c => `<span class="mono">${fmtNumber(c.AvgMonthlyOrders)}</span>` },
@@ -4068,25 +4077,25 @@ const vpTable = createDataTable({
     {
       key: "manualEdit", label: "עריכה ידנית", width: "108px", text: e => e.ManuallyModifiedNote || e.CityOptimizedNote || "",
       render: e => e.ManuallyModifiedAt
-        ? `<span class="badge warn" title="${e.ManuallyModifiedNote || ""}">✋ הוזז ידנית</span>`
+        ? `<span class="badge warn" title="${esc(e.ManuallyModifiedNote || "")}">✋ הוזז ידנית</span>`
         : e.CityOptimizedAt
-          ? `<span class="badge warn" title="${e.CityOptimizedNote || ""}">📍 רוכז לפי עיר</span>`
+          ? `<span class="badge warn" title="${esc(e.CityOptimizedNote || "")}">📍 רוכז לפי עיר</span>`
           : `<span class="muted">—</span>`
     },
     {
       key: "adminNote", label: "הערה לסוכן (לחצו לעריכה)", width: "110px", text: e => e.AdminNote || "",
-      render: e => `<span class="vp-note-cell${e.AdminNote ? "" : " muted"}" data-plan-id="${e.Id}" data-current-note="${(e.AdminNote || "").replace(/"/g, "&quot;")}" title="${e.AdminNote ? "לחצו לעריכת ההערה" : "לחצו להוספת הערה לסוכן"}">
-        ${e.AdminNote ? `📝 ${e.AdminNote}` : "+ הערה"}
+      render: e => `<span class="vp-note-cell${e.AdminNote ? "" : " muted"}" data-plan-id="${e.Id}" data-current-note="${esc(e.AdminNote || "")}" title="${e.AdminNote ? "לחצו לעריכת ההערה" : "לחצו להוספת הערה לסוכן"}">
+        ${e.AdminNote ? `📝 ${esc(e.AdminNote)}` : "+ הערה"}
       </span>`
     },
     { key: "customerNumber", label: "מספר לקוח", width: "62px", text: e => e.CustomerNumber, render: e => `<span class="mono name" title="${e.CustomerNumber}">${e.CustomerNumber}</span>` },
-    { key: "customerName", label: "שם לקוח", width: "100px", text: e => e.CustomerName || "", render: e => e.CustomerName ? `<span title="${e.CustomerName}">${e.CustomerName}</span>` : `<span class="muted">—</span>` },
-    { key: "agentName", label: "סוכן", width: "68px", text: e => e.AgentName || "", render: e => e.AgentName ? `<span title="${e.AgentName}">${e.AgentName}</span>` : `<span class="muted">—</span>` },
-    { key: "agentIdNumber", label: "ת.ז. סוכן", width: "62px", text: e => e.AgentIdNumber || "", render: e => e.AgentIdNumber ? `<span class="mono">${e.AgentIdNumber}</span>` : `<span class="muted">—</span>` },
-    { key: "channel", label: "ערוץ מכר", width: "55px", text: e => e.Channel || "", render: e => e.Channel ? `<span class="badge accent">${e.Channel}</span>` : `<span class="muted">—</span>` },
-    { key: "phone", label: "טלפון", width: "72px", text: e => e.Phone || "", render: e => e.Phone ? `<span class="mono" title="${e.Phone}">${e.Phone}</span>` : `<span class="muted">—</span>` },
-    { key: "address", label: "כתובת", width: "105px", text: e => e.Address || "", render: e => e.Address ? `<span title="${e.Address}">${e.Address}</span>` : `<span class="muted">—</span>` },
-    { key: "city", label: "עיר", width: "55px", text: e => e.City || "", render: e => e.City ? `<span class="badge" title="${e.City}">${e.City}</span>` : `<span class="muted">—</span>` },
+    { key: "customerName", label: "שם לקוח", width: "100px", text: e => e.CustomerName || "", render: e => e.CustomerName ? `<span title="${esc(e.CustomerName)}">${esc(e.CustomerName)}</span>` : `<span class="muted">—</span>` },
+    { key: "agentName", label: "סוכן", width: "68px", text: e => e.AgentName || "", render: e => e.AgentName ? `<span title="${esc(e.AgentName)}">${esc(e.AgentName)}</span>` : `<span class="muted">—</span>` },
+    { key: "agentIdNumber", label: "ת.ז. סוכן", width: "62px", text: e => e.AgentIdNumber || "", render: e => e.AgentIdNumber ? `<span class="mono">${esc(e.AgentIdNumber)}</span>` : `<span class="muted">—</span>` },
+    { key: "channel", label: "ערוץ מכר", width: "55px", text: e => e.Channel || "", render: e => e.Channel ? `<span class="badge accent">${esc(e.Channel)}</span>` : `<span class="muted">—</span>` },
+    { key: "phone", label: "טלפון", width: "72px", text: e => e.Phone || "", render: e => e.Phone ? `<span class="mono" title="${esc(e.Phone)}">${esc(e.Phone)}</span>` : `<span class="muted">—</span>` },
+    { key: "address", label: "כתובת", width: "105px", text: e => e.Address || "", render: e => e.Address ? `<span title="${esc(e.Address)}">${esc(e.Address)}</span>` : `<span class="muted">—</span>` },
+    { key: "city", label: "עיר", width: "55px", text: e => e.City || "", render: e => e.City ? `<span class="badge" title="${esc(e.City)}">${esc(e.City)}</span>` : `<span class="muted">—</span>` },
     {
       key: "salesCurrent", label: "מכר השנה", width: "64px", text: e => e.SalesYtdCurrentYear ?? "", sortValue: e => e.SalesYtdCurrentYear,
       render: e => `<span class="mono" title="ציון ירידה במכר: ${fmtVpScorePct(e.SalesDropScore)}">${fmtCurrency(e.SalesYtdCurrentYear)}</span>`
@@ -4184,7 +4193,7 @@ document.getElementById("vpTable").addEventListener("click", (e) => {
   const cell = e.target.closest(".vp-note-cell");
   if (!cell || cell.querySelector("input")) return;
   const planId = cell.dataset.planId;
-  cell.outerHTML = `<span class="vp-note-cell"><input type="text" class="vp-note-input" data-plan-id="${planId}" value="${cell.dataset.currentNote}" placeholder="הערה לסוכן..." maxlength="500" /></span>`;
+  cell.outerHTML = `<span class="vp-note-cell"><input type="text" class="vp-note-input" data-plan-id="${planId}" value="${esc(cell.dataset.currentNote)}" placeholder="הערה לסוכן..." maxlength="500" /></span>`;
   const input = document.querySelector(`.vp-note-input[data-plan-id="${planId}"]`);
   input.focus();
   input.setSelectionRange(input.value.length, input.value.length);
@@ -4470,7 +4479,7 @@ function renderCityGroupsList() {
   el.innerHTML = liveCityGroups.length
     ? liveCityGroups.map(g => `
         <div class="city-group-item" data-group-id="${g.Id}">
-          <div><span class="name">${g.Name}</span><br><span class="cities">${g.Cities.join(", ")}</span></div>
+          <div><span class="name">${esc(g.Name)}</span><br><span class="cities">${g.Cities.map(esc).join(", ")}</span></div>
           <button type="button" class="btn-icon" data-action="delete-city-group" data-id="${g.Id}" title="מחיקה">&#128465;</button>
         </div>`).join("")
     : `<span class="muted">עדיין לא הוגדרו אשכולות ערים.</span>`;
@@ -4635,7 +4644,7 @@ function renderChannelCheckboxes(containerId, options, checkedSet, emptyMessage)
   const el = document.getElementById(containerId);
   el.innerHTML = options.length
     ? options.map(opt => `
-        <label class="checkbox-item"><input type="checkbox" value="${opt}" ${checkedSet.has(opt) ? "checked" : ""}/> ${opt}</label>`).join("")
+        <label class="checkbox-item"><input type="checkbox" value="${esc(opt)}" ${checkedSet.has(opt) ? "checked" : ""}/> ${esc(opt)}</label>`).join("")
     : `<span class="muted">${emptyMessage || "אין ערוצים זמינים לחברה זו"}</span>`;
 }
 function readCheckedChannels(containerId) {
@@ -4645,19 +4654,19 @@ function readCheckedChannels(containerId) {
 const usersTable = createDataTable({
   tableId: "usersTable",
   columns: [
-    { key: "username", label: "שם משתמש", text: u => u.Username, render: u => `<span class="mono name">${u.Username}</span>` },
-    { key: "displayName", label: "שם תצוגה", text: u => u.DisplayName, render: u => u.DisplayName },
+    { key: "username", label: "שם משתמש", text: u => u.Username, render: u => `<span class="mono name">${esc(u.Username)}</span>` },
+    { key: "displayName", label: "שם תצוגה", text: u => u.DisplayName, render: u => esc(u.DisplayName) },
     {
       key: "channels", label: "ערוצים", noFilter: true,
       text: u => (u.AllowedChannels && u.AllowedChannels.length ? u.AllowedChannels.join(", ") : "כל הערוצים"),
-      render: u => (u.AllowedChannels && u.AllowedChannels.length ? u.AllowedChannels.join(", ") : `<span class="muted">כל הערוצים</span>`)
+      render: u => (u.AllowedChannels && u.AllowedChannels.length ? u.AllowedChannels.map(esc).join(", ") : `<span class="muted">כל הערוצים</span>`)
     },
     { key: "createdAt", label: "נוצר בתאריך", text: u => u.CreatedAt, sortValue: u => u.CreatedAt, render: u => `<span class="mono">${fmtDate(u.CreatedAt)}</span>` },
     {
       key: "actions", label: "", noFilter: true, text: () => "",
       render: u => `
-        <button type="button" class="btn small" data-action="edit-channels" data-id="${u.Id}" data-username="${u.Username}" data-companyid="${u.CompanyId}">עריכת ערוצים</button>
-        <button type="button" class="btn small" data-action="reset-password" data-id="${u.Id}" data-username="${u.Username}">איפוס סיסמה</button>
+        <button type="button" class="btn small" data-action="edit-channels" data-id="${u.Id}" data-username="${esc(u.Username)}" data-companyid="${u.CompanyId}">עריכת ערוצים</button>
+        <button type="button" class="btn small" data-action="reset-password" data-id="${u.Id}" data-username="${esc(u.Username)}">איפוס סיסמה</button>
         <button type="button" class="btn-icon" data-action="delete-user" data-id="${u.Id}" title="מחיקה">&#128465;</button>`
     }
   ],

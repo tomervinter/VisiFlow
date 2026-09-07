@@ -12,6 +12,7 @@
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.10" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.10" />
+    <PackageReference Include="Stripe.net" Version="52.4.1" />
   </ItemGroup>
 
   <PropertyGroup>

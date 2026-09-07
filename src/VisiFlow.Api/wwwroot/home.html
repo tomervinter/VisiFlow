@@ -865,6 +865,16 @@
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6.5V11c0 4.9 3.4 9.4 8 10.5 4.6-1.1 8-5.6 8-10.5V6.5L12 3Z"/><path d="m9.5 12 1.8 1.8L15 10"/></svg>
       <span>ניהול</span>
     </button>
+    <!-- Hidden for non-super-admins - see applyCurrentUserUi(). -->
+    <button class="nav-item" data-view="auditlog" id="navItemAuditLog" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>
+      <span>יומן ביקורת</span>
+    </button>
+    <!-- Hidden for non-super-admins - see applyCurrentUserUi(). -->
+    <button class="nav-item" data-view="billing" id="navItemBilling" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+      <span>חיוב</span>
+    </button>
   </nav>
 
   <div class="nav-group-label">עזרה</div>
@@ -1536,6 +1546,38 @@
       </section>
     </div>
 
+    <!-- ===================== AUDIT LOG (super-admin only) ===================== -->
+    <div class="view" id="view-auditlog">
+      <section class="panel">
+        <div class="head" style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
+          <h2>יומן ביקורת</h2>
+          <span class="badge accent" id="auditLogCount"></span>
+        </div>
+        <p class="desc">
+          תיעוד קבוע של פעולות ניהוליות הרסניות בחברה הנבחרת - הקפאה/מחיקה של חברה, מחיקת משתמש, מחיקת
+          חודש לקוחות או מחיקת תוכנית ביקורים. זמין למנהל-על בלבד.
+        </p>
+        <div class="table-wrap">
+          <table id="auditLogTable"></table>
+        </div>
+      </section>
+    </div>
+
+    <!-- ===================== BILLING (super-admin only) ===================== -->
+    <div class="view" id="view-billing">
+      <section class="panel">
+        <h2>חיוב</h2>
+        <p class="desc">
+          ניהול אמצעי התשלום ופרטי החיוב של החברה הנבחרת, דרך פורטל החיוב המאובטח של Stripe. זמין
+          למנהל-על בלבד.
+        </p>
+        <div class="controls">
+          <button type="button" class="btn primary" id="btnOpenBillingPortal">ניהול חיוב</button>
+          <span class="form-msg" id="billingMsg"></span>
+        </div>
+      </section>
+    </div>
+
     <!-- ===================== GUIDE ===================== -->
     <div class="view" id="view-guide">
       <section class="panel">
@@ -1765,7 +1807,9 @@ const VIEW_TITLES = {
   users: ["ניהול משתמשים", "משתמשים עם גישה לממשק הניהול - לא משפיע על ממשק הסוכן"],
   visitplan: ["תוכנית ביקורים", "תעדוף ותזמון ביקורי הסוכנים לחודש הנבחר, לפי שקלול משוקלל של הפרמטרים"],
   guide: ["הדרכה", "הוראות שימוש קצרות לכל מסך במערכת"],
-  admin: ["ניהול", "יצירת חברות נוספות במערכת - זמין למנהל-על בלבד"]
+  admin: ["ניהול", "יצירת חברות נוספות במערכת - זמין למנהל-על בלבד"],
+  auditlog: ["יומן ביקורת", "תיעוד פעולות ניהוליות הרסניות בחברה הנבחרת - זמין למנהל-על בלבד"],
+  billing: ["חיוב", "ניהול אמצעי התשלום והחיוב של החברה הנבחרת - זמין למנהל-על בלבד"]
 };
 const VIEW_ACTIVATION_HOOKS = {};
 
@@ -2051,6 +2095,7 @@ async function refreshAllCompanyScopedViews() {
   refreshUsersView();
   vsSelected.clear();
   refreshVsView();
+  refreshAuditLogView();
 }
 
 /* ---- add company modal ---- */
@@ -2152,6 +2197,59 @@ document.getElementById("addCompanyForm").addEventListener("submit", async (e) =
     localStorage.setItem("visiflowSelectedCompanyId", String(created.Id));
     refreshAllCompanyScopedViews();
   } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+});
+
+/* ==================== AUDIT LOG (super-admin only) ====================
+   Permanent record of destructive admin actions (freezing/deleting a company, deleting a user,
+   deleting a month of customers, deleting a visit plan), scoped to the currently-selected company.
+   The server already returns it newest-first, up to 500 rows - no client-side sort needed. */
+let liveAuditLog = [];
+
+const auditLogTable = createDataTable({
+  tableId: "auditLogTable",
+  columns: [
+    { key: "createdAt", label: "תאריך ושעה", width: "80px", text: e => e.CreatedAt, sortValue: e => e.CreatedAt, render: e => `<span class="mono">${fmtDate(e.CreatedAt)} ${fmtTime(e.CreatedAt)}</span>` },
+    { key: "actor", label: "מבצע", width: "90px", text: e => e.ActorUsername || "", render: e => e.ActorUsername ? `<span class="mono name">${e.ActorUsername}</span>` : `<span class="muted">—</span>` },
+    { key: "action", label: "פעולה", width: "90px", text: e => e.Action || "", render: e => e.Action ? `<span class="badge warn">${e.Action}</span>` : `<span class="muted">—</span>` },
+    { key: "target", label: "פירוט", text: e => e.TargetDescription || "", render: e => e.TargetDescription ? e.TargetDescription : `<span class="muted">—</span>` }
+  ],
+  getRows: () => liveAuditLog,
+  entityLabel: "רשומות ביקורת"
+});
+
+async function refreshAuditLogView() {
+  if (!CURRENT_USER || !CURRENT_USER.IsSuperAdmin) { liveAuditLog = []; document.getElementById("auditLogCount").textContent = ""; auditLogTable.refresh(); return; }
+  const companyId = selectedCompanyId();
+  if (!companyId) { liveAuditLog = []; document.getElementById("auditLogCount").textContent = ""; auditLogTable.refresh(); return; }
+  try {
+    const res = await fetch(`/api/auditlog?companyId=${companyId}`);
+    liveAuditLog = res.ok ? await res.json() : [];
+  } catch { liveAuditLog = []; }
+  document.getElementById("auditLogCount").textContent = liveAuditLog.length ? `${liveAuditLog.length} רשומות` : "";
+  auditLogTable.refresh();
+}
+VIEW_ACTIVATION_HOOKS["auditlog"] = refreshAuditLogView;
+
+/* ==================== BILLING (super-admin only) ====================
+   Stripe isn't live yet in most environments, so a 400 with a plain-text Hebrew message from the
+   server is the expected/common outcome right now - shown inline via the same .form-msg pattern used
+   everywhere else in this file, not alert(). */
+document.getElementById("btnOpenBillingPortal").addEventListener("click", async () => {
+  const msg = document.getElementById("billingMsg");
+  const companyId = selectedCompanyId();
+  if (!companyId) { msg.className = "form-msg error"; msg.textContent = "יש לבחור חברה למעלה"; return; }
+  const btn = document.getElementById("btnOpenBillingPortal");
+  btn.disabled = true;
+  msg.className = "form-msg"; msg.textContent = "פותח פורטל חיוב...";
+  try {
+    const res = await fetch("/api/billing/portal", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ CompanyId: companyId, ReturnUrl: window.location.href })
+    });
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await res.text(); btn.disabled = false; return; }
+    const result = await res.json();
+    window.location.href = result.Url;
+  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; btn.disabled = false; }
 });
 
 /* ==================== DASHBOARD ==================== */
@@ -3936,6 +4034,13 @@ const vpTable = createDataTable({
       </span>`
     },
     {
+      // VisitOrder = position within an efficient driving/walking route for that day (1 = first stop),
+      // filled in by "אופטימיזציה לפי עיר" only when a Google Maps API key is configured server-side -
+      // usually null right now, so it must render as an em-dash, never "0" or blank-looking text.
+      key: "visitOrder", label: "סדר ביקור", width: "40px", text: e => e.VisitOrder ?? "", sortValue: e => e.VisitOrder ?? 99999,
+      render: e => e.VisitOrder != null ? `<span class="badge" title="סדר עצירה במסלול היום, לפי אופטימיזציה לפי עיר">${e.VisitOrder}</span>` : `<span class="muted">—</span>`
+    },
+    {
       key: "manualEdit", label: "עריכה ידנית", width: "108px", text: e => e.ManuallyModifiedNote || e.CityOptimizedNote || "",
       render: e => e.ManuallyModifiedAt
         ? `<span class="badge warn" title="${e.ManuallyModifiedNote || ""}">✋ הוזז ידנית</span>`
@@ -4420,6 +4525,8 @@ function hideLoginScreen() {
 function applyCurrentUserUi() {
   document.getElementById("sidebarUserLabel").textContent = CURRENT_USER.DisplayName;
   document.getElementById("navItemAdminCompanies").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
+  document.getElementById("navItemAuditLog").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
+  document.getElementById("navItemBilling").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
   document.getElementById("guideTocAdmin").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
   document.getElementById("guide-admin").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
   document.getElementById("dashGreeting").textContent = `שלום, ${CURRENT_USER.DisplayName}`;

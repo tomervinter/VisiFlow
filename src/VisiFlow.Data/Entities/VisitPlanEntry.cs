@@ -44,4 +44,8 @@ public class VisitPlanEntry
     /// שמגיעים" או "הלקוח ביקש להתקשר לפני הביקור"). שונה מ-ManuallyModifiedNote/CityOptimizedNote -
     /// אלה תיעוד אוטומטי של המערכת על מה שקרה לשורה, וזו הודעה אנושית מכוונת מהמנהל לסוכן.</summary>
     public string? AdminNote { get; set; }
+    /// <summary>מיקום בסדר ההליכה היעיל בתוך אותו יום+סוכן, כפי שחושב ע"י RouteOptimizationService
+    /// (1 = ראשון בסדר ההליכה) - null עד שאופטימיזציית מסלול רצה על השורה, או כשאין מפתח Google Maps
+    /// מוגדר (ראו RouteOptimizationService). לא קשור ל-PriorityScore - זה סדר תוך-יומי, לא עדיפות חודשית.</summary>
+    public int? VisitOrder { get; set; }
 }

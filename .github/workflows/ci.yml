@@ -1,0 +1,31 @@
+name: CI
+
+# Runs on every push/PR against main: restore -> build -> test. A failing test fails the workflow,
+# which GitHub can be configured (Settings -> Branches -> branch protection) to require before a PR
+# is mergeable - that gate is a repo setting, not something this file can turn on by itself.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore VisiFlow.sln
+
+      - name: Build
+        run: dotnet build VisiFlow.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test VisiFlow.sln --no-build --configuration Release --verbosity normal

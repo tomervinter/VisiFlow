@@ -13,3 +13,24 @@ services:
         sync: false
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
+      # Every var below is OPTIONAL - the feature it powers gracefully no-ops (existing behavior,
+      # unchanged) until it's actually filled in. See GeocodingService/RouteOptimizationService/
+      # StripeService for the exact fallback behavior of each.
+      #
+      # Google Maps Platform key with Geocoding API + Routes API enabled - powers customer address
+      # geocoding (on customer import) and driving-route visit ordering (on "אופטימיזציה לפי עיר").
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      # Stripe secret key (test or live mode) - powers self-serve signup billing (POST /api/signup),
+      # the billing portal link, and the subscription-canceled/payment-failed webhook.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      # The recurring Price ID (created once in the Stripe dashboard) a new signup subscribes to -
+      # without this, signup still creates a Stripe Customer (if STRIPE_SECRET_KEY is set) but skips
+      # the checkout/subscription step ("manual" billing mode).
+      - key: STRIPE_PRICE_ID
+        sync: false
+      # Signing secret for the Stripe webhook endpoint (Stripe dashboard -> Webhooks -> this endpoint's
+      # "Signing secret") - required for POST /api/billing/webhook to accept/verify events at all.
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false

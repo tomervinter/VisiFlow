@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Standalone local load-test console tool - never touches the real data/visiflow.db or any
+       production/Supabase connection. Every run creates its own throwaway SQLite file in the OS
+       temp directory and deletes it when done (see Program.cs). -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- VisiFlow.Data: DbContext/entities/migrations. VisiFlow.Api: VisitPlanGenerator and
+         VisitPlanCityOptimizer, the two algorithms under test (both public static classes in the
+         implicit global namespace, so no extra `using` is needed to call them). -->
+    <ProjectReference Include="..\..\src\VisiFlow.Data\VisiFlow.Data.csproj" />
+    <ProjectReference Include="..\..\src\VisiFlow.Api\VisiFlow.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.10" />
+  </ItemGroup>
+
+</Project>

@@ -160,6 +160,13 @@
   .customer-card .cc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
   .customer-card .cc-name { font-weight: 700; font-size: 1.2rem; }
   .customer-card .cc-number { font-size: 0.88rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  /* Position within the day's optimized route (VisitOrder from "אופטימיזציה לפי עיר") - only shown
+     when the server has actually filled it in (needs a Google Maps API key configured), so most
+     agents won't see this yet. */
+  .cc-stop-badge {
+    flex-shrink: 0; background: var(--ice); color: var(--brand); font-weight: 700; font-size: 0.82rem;
+    padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+  }
   .customer-card .cc-sales { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.92rem; color: var(--text-muted); margin-bottom: 12px; }
   .customer-card .cc-admin-note {
     background: var(--warn-bg); color: var(--warn-fg); border-radius: 8px; padding: 9px 11px;
@@ -477,6 +484,7 @@ function renderCustomerCard(c) {
           <div class="cc-name">${c.CustomerName}</div>
           <div class="cc-number">מספר לקוח ${c.CustomerNumber}${viewMode !== "day" ? ` · ${formatBannerDate(c.PlannedDate.slice(0, 10))}` : ""}</div>
         </div>
+        ${c.VisitOrder != null ? `<span class="cc-stop-badge">עצירה #${c.VisitOrder}</span>` : ""}
       </div>
       ${c.AdminNote ? `<div class="cc-admin-note">📌 <b>הערה מהמנהל:</b> ${c.AdminNote}</div>` : ""}
       <div class="cc-sales">

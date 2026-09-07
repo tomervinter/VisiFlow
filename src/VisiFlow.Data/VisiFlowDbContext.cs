@@ -20,6 +20,7 @@ public class VisiFlowDbContext : DbContext
     public DbSet<VisitPlanEntry> VisitPlanEntries => Set<VisitPlanEntry>();
     public DbSet<User> Users => Set<User>();
     public DbSet<CityGroup> CityGroups => Set<CityGroup>();
+    public DbSet<AuditLogEntry> AuditLogEntries => Set<AuditLogEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,6 +29,7 @@ public class VisiFlowDbContext : DbContext
             entity.ToTable("Companies");
             entity.HasKey(c => c.Id);
             entity.Property(c => c.Name).IsRequired().HasMaxLength(200);
+            entity.Property(c => c.StripeCustomerId).HasMaxLength(100);
         });
 
         modelBuilder.Entity<Customer>(entity =>
@@ -43,12 +45,20 @@ public class VisiFlowDbContext : DbContext
             entity.Property(c => c.Phone).HasMaxLength(50);
             entity.Property(c => c.Address).HasMaxLength(300);
             entity.Property(c => c.City).HasMaxLength(100);
+            entity.Property(c => c.Latitude).HasPrecision(9, 6);
+            entity.Property(c => c.Longitude).HasPrecision(9, 6);
             entity.Property(c => c.Status).HasConversion<string>().HasMaxLength(20);
             // A customer number is only unique within its own company (two different companies using
             // VisiFlow may both have a "1001" in their own source ERP) AND within its own (year, month)
             // snapshot - the same real customer gets a fresh row every month it's re-uploaded, rather
             // than one row that's overwritten in place.
             entity.HasIndex(c => new { c.CompanyId, c.CustomerNumber, c.Year, c.Month }).IsUnique();
+            // CustomerNumber sits before Year/Month in the unique index above, so it can't serve as a
+            // left-prefix for the (CompanyId, Year, Month) lookup every monthly-snapshot query actually
+            // does (load a whole month's customers, generate a plan, etc.) - confirmed uncovered by the
+            // load-testing tool's index-coverage check (see tools/LoadTest). This index exists purely for
+            // that access pattern.
+            entity.HasIndex(c => new { c.CompanyId, c.Year, c.Month });
             // Not unique - AgentIdNumber is a plain string until real agent accounts exist, and
             // every customer belonging to the same agent shares the same value. Indexed since the
             // agent-facing page's whole query is "find my customers by this number".
@@ -151,6 +161,17 @@ public class VisiFlowDbContext : DbContext
             entity.Property(g => g.Name).IsRequired().HasMaxLength(200);
             entity.Property(g => g.Cities).IsRequired().HasMaxLength(2000);
             entity.HasOne(g => g.Company).WithMany().HasForeignKey(g => g.CompanyId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AuditLogEntry>(entity =>
+        {
+            entity.ToTable("AuditLogEntries");
+            entity.HasKey(a => a.Id);
+            entity.Property(a => a.ActorUsername).IsRequired().HasMaxLength(100);
+            entity.Property(a => a.Action).IsRequired().HasMaxLength(100);
+            entity.Property(a => a.TargetDescription).IsRequired().HasMaxLength(300);
+            entity.HasIndex(a => new { a.CompanyId, a.CreatedAt });
+            entity.HasOne(a => a.Company).WithMany().HasForeignKey(a => a.CompanyId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

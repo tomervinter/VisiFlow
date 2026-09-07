@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- NOT the EF Core InMemory provider - this app is written against real SQL semantics (e.g.
+         unique index enforcement), which InMemory silently doesn't enforce. Every test that needs a
+         real database opens a real Microsoft.Data.Sqlite connection to ":memory:" and keeps it open
+         for the fixture's lifetime instead. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.10" />
+    <!-- WebApplicationFactory<Program> for the API-level tests (Program.cs has `public partial class
+         Program { }` appended specifically to support this). -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.10" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector" Version="6.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\VisiFlow.Data\VisiFlow.Data.csproj" />
+    <ProjectReference Include="..\..\src\VisiFlow.Api\VisiFlow.Api.csproj" />
+  </ItemGroup>
+
+</Project>

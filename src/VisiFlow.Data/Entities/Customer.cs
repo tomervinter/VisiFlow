@@ -40,6 +40,10 @@ public class Customer
     public string? Address { get; set; }
     /// <summary>עיר - נטענת כעמודה נפרדת מקובץ האקסל (לא מנותחת מתוך הכתובת), משמשת לקיבוץ ביקורים גיאוגרפית.</summary>
     public string? City { get; set; }
+    /// <summary>קואורדינטות שהתקבלו מ-geocoding (Address+City) - null עד שהשירות ריצה עליהן בהצלחה
+    /// (למשל כשאין GOOGLE_MAPS_API_KEY מוגדר, או שהכתובת לא נמצאה). ראו GeocodingService.</summary>
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
     /// <summary>כמות הזמנות ממוצעת בחודש</summary>
     public decimal? AvgMonthlyOrders { get; set; }
     /// <summary>לקוח היה פעיל בכל התקופה</summary>

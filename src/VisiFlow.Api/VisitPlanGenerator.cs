@@ -64,8 +64,13 @@ public static class VisitPlanGenerator
         var distByCustomer = await LoadDistributionDaysWithFallback(db, companyId, year, month, customers.Select(c => c.CustomerNumber).ToList());
 
         // ---- work calendar: explicit overrides for the target month + the Sun-Thu/Fri/Sat default ----
+        // Widened 7 days before monthStart too - a distribution occurrence landing on the 1st/2nd of
+        // the month can push its "2 days before delivery" target into the tail of the PREVIOUS month
+        // (see CandidatesNearOccurrence/SpilloverWindowStart below), and that date's DayTypeOf still
+        // needs to see any admin override sitting right at the boundary.
+        var spilloverWindowStart = monthStart.AddDays(-7);
         var overrides = await db.WorkCalendarDays
-            .Where(d => d.CompanyId == companyId && d.Date >= monthStart && d.Date <= monthEnd)
+            .Where(d => d.CompanyId == companyId && d.Date >= spilloverWindowStart && d.Date <= monthEnd)
             .ToDictionaryAsync(d => d.Date.Date, d => d.DayType);
         WorkDayType DayTypeOf(DateTime date) => overrides.TryGetValue(date.Date, out var t) ? t : IsraeliHolidays.TypeFor(date) ?? date.DayOfWeek switch
         {
@@ -184,6 +189,38 @@ public static class VisitPlanGenerator
             return cap;
         }
 
+        // ---- reserve capacity already spent by the PREVIOUS month's own plan, in the small window a
+        // spillover visit (see CandidatesNearOccurrence) could land in ----
+        // This is the only way a PlannedDate can ever fall outside its own PlanYear/PlanMonth - a
+        // distribution occurrence on the 1st/2nd of this month whose "2 days before delivery" target
+        // lands in the tail of last month. Without this, a spillover visit placed below could silently
+        // double-book an agent past their real capacity on a date that already has real, previously-
+        // generated visits from last month's OWN plan (which this run never touches or re-checks).
+        var priorEntries = await db.VisitPlanEntries
+            .Where(e => e.CompanyId == companyId && e.PlannedDate != null
+                && e.PlannedDate >= spilloverWindowStart && e.PlannedDate < monthStart)
+            .ToListAsync();
+        if (priorEntries.Count > 0)
+        {
+            var priorCustomerByKey = new Dictionary<(string CustomerNumber, int Year, int Month), Customer>();
+            foreach (var group in priorEntries.GroupBy(e => (e.PlanYear, e.PlanMonth)))
+            {
+                var numbers = group.Select(e => e.CustomerNumber).Distinct().ToList();
+                var priorCustomers = await db.Customers
+                    .Where(c => c.CompanyId == companyId && c.Year == group.Key.PlanYear && c.Month == group.Key.PlanMonth && numbers.Contains(c.CustomerNumber))
+                    .ToListAsync();
+                foreach (var c in priorCustomers) priorCustomerByKey[(c.CustomerNumber, group.Key.PlanYear, group.Key.PlanMonth)] = c;
+            }
+            foreach (var e in priorEntries)
+            {
+                if (!priorCustomerByKey.TryGetValue((e.CustomerNumber, e.PlanYear, e.PlanMonth), out var priorCustomer)) continue;
+                var key = AgentKey(priorCustomer);
+                var date = e.PlannedDate!.Value.Date;
+                RemainingCapacity(key, date); // seeds capacity[(key,date)] at the full daily capacity
+                capacity[(key, date)]--;
+            }
+        }
+
         // Two visit requests for the SAME customer must never land on the same date, even if agent
         // capacity would technically allow it (capacity is tracked per agent+date, not per
         // customer+date) - e.g. a capacity-driven fallback for one of that customer's own later-week
@@ -209,12 +246,20 @@ public static class VisitPlanGenerator
 
             if (req.PreferredDate is DateTime pref)
             {
-                // Try the preferred date, then walk outward (+/-1, +/-2, ...) within the month.
+                // Try the preferred date, then walk outward (+/-1, +/-2, ...) within the month. The
+                // exact preferred date itself (offset 0) is allowed to fall a little before monthStart -
+                // that's exactly (and only) CandidatesNearOccurrence's "2 days before delivery" spillover
+                // for a distribution occurrence on the 1st/2nd of the month (bounded there to at most a
+                // handful of days back). The capacity-driven outward walk (offset > 0) stays confined to
+                // this month, same as before - that's a different concern (this month's own capacity is
+                // full) and letting IT roam backward into last month would be a much bigger behavior
+                // change nobody asked for.
                 for (var offset = 0; offset <= daysInMonth && placed == null; offset++)
                 {
                     foreach (var candidate in offset == 0 ? new[] { pref } : new[] { pref.AddDays(-offset), pref.AddDays(offset) })
                     {
-                        if (candidate < monthStart || candidate > monthEnd) continue;
+                        if (candidate > monthEnd) continue;
+                        if (candidate < monthStart && candidate != pref) continue;
                         if (CanUse(candidate)) { placed = candidate; break; }
                     }
                 }
@@ -338,25 +383,38 @@ public static class VisitPlanGenerator
     }
 
     /// <summary>Every working-day candidate near a distribution occurrence that's an acceptable visit
-    /// date, in priority order: 2 days before delivery (the default), then 1 day before, then (only if
-    /// neither of those lands on a working day within the month) the nearest earlier working day. The
-    /// FIRST element is what PreferredDates uses as the deterministic pick; the FULL list is what
-    /// VisitPlanCityOptimizer uses to widen the legal window for an entry that's already off that pick
-    /// (capacity-bumped during generation) - still always strictly before delivery, never on/after it.</summary>
+    /// date, in priority order: 2 days before delivery (the default), then 1 day before, then the
+    /// nearest earlier working day. The FIRST element is what PreferredDates uses as the deterministic
+    /// pick; the FULL list is what VisitPlanCityOptimizer uses to widen the legal window for an entry
+    /// that's already off that pick (capacity-bumped during generation) - always strictly before
+    /// delivery, never on/after it, except the final give-up fallback below.
+    ///
+    /// twoBefore/oneBefore are deliberately NOT clamped to monthStart - for an occurrence on the 1st or
+    /// 2nd of the month (only DayOfWeek and monthStart itself constrain `occurrence`, never a lower
+    /// bound below monthStart), that lands the visit in the tail of the PREVIOUS month rather than
+    /// forcing it onto the delivery day itself. Since `occurrence` is always &gt;= monthStart, this can
+    /// never drift more than 2 days before monthStart - both callers (GenerateAsync's placement loop,
+    /// and the capacity pre-reservation right before it) are built around that exact bound. The walk-back
+    /// fallback below is capped the same way, so a customer whose distribution day happens to fall on a
+    /// day where both the 1-before and 2-before dates are Off (e.g. a company that also treats Friday as
+    /// Off) doesn't wander arbitrarily far into the previous month - it gives up and returns the delivery
+    /// day itself, same as before this change, once it runs out of room to search.</summary>
     internal static List<DateTime> CandidatesNearOccurrence(DateTime occurrence, DateTime monthStart, Func<DateTime, WorkDayType> dayType)
     {
+        var searchFloor = monthStart.AddDays(-7);
         var results = new List<DateTime>();
         var twoBefore = occurrence.AddDays(-2);
-        if (twoBefore >= monthStart && dayType(twoBefore) != WorkDayType.Off) results.Add(twoBefore);
+        if (dayType(twoBefore) != WorkDayType.Off) results.Add(twoBefore);
         var oneBefore = occurrence.AddDays(-1);
-        if (oneBefore >= monthStart && dayType(oneBefore) != WorkDayType.Off) results.Add(oneBefore);
+        if (dayType(oneBefore) != WorkDayType.Off) results.Add(oneBefore);
         if (results.Count == 0)
         {
-            // Neither the ideal (2 days before) nor the fallback (1 day before) landed on a working day
-            // within the month - walk back to the nearest one instead of leaving the customer unplaced.
+            // Neither the ideal (2 days before) nor the fallback (1 day before) landed on a working day -
+            // walk back to the nearest one (bounded by searchFloor) instead of leaving the customer
+            // unplaced.
             var walk = occurrence.AddDays(-1);
-            while (walk >= monthStart && dayType(walk) == WorkDayType.Off) walk = walk.AddDays(-1);
-            results.Add(walk >= monthStart ? walk : occurrence);
+            while (walk >= searchFloor && dayType(walk) == WorkDayType.Off) walk = walk.AddDays(-1);
+            results.Add(walk >= searchFloor ? walk : occurrence);
         }
         return results;
     }

@@ -80,8 +80,12 @@ public static class VisitPlanCityOptimizer
         var weights = await db.VisitPlanWeights.FirstOrDefaultAsync(w => w.CompanyId == companyId)
             ?? new VisitPlanWeights { FullDayCapacity = 8, HalfDayCapacity = 4 };
 
+        // Widened 7 days before monthStart, same as VisitPlanGenerator - an entry whose distribution
+        // occurrence fell on the 1st/2nd of the month can have PlannedDate spilling into the tail of the
+        // previous month (see VisitPlanGenerator.CandidatesNearOccurrence), and DayTypeOf needs to see
+        // any admin override sitting right at that boundary too.
         var overrides = await db.WorkCalendarDays
-            .Where(d => d.CompanyId == companyId && d.Date >= monthStart && d.Date <= monthEnd)
+            .Where(d => d.CompanyId == companyId && d.Date >= monthStart.AddDays(-7) && d.Date <= monthEnd)
             .ToDictionaryAsync(d => d.Date.Date, d => d.DayType);
         WorkDayType DayTypeOf(DateTime date) => overrides.TryGetValue(date.Date, out var t) ? t : IsraeliHolidays.TypeFor(date) ?? date.DayOfWeek switch
         {

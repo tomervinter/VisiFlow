@@ -185,4 +185,86 @@ public class VisitPlanGeneratorTests : IDisposable
         // ahead of Lo.
         Assert.True(hi.PriorityScore > lo.PriorityScore);
     }
+
+    // Regression coverage for a real bug report: a customer's distribution day landing on the 1st (or
+    // 2nd) of the month has no earlier working day left to target "2 days before delivery" WITHIN that
+    // month, so the generator used to fall back to scheduling the visit on the delivery day itself -
+    // silently violating the "visit N days before delivery" rule for exactly the customers whose
+    // delivery is earliest in the month. March 1, 2026 is a Sunday (and, like February 2026, has no
+    // IsraeliHolidays entries - see this file's header comment), so a Sunday-only distribution customer
+    // reproduces the exact shape of the reported case without depending on real holiday data.
+
+    [Fact]
+    public async Task GenerateAsync_DistributionOccurrenceOnFirstOfMonth_SpillsVisitIntoPreviousMonth()
+    {
+        var company = await SeedCompanyAsync();
+        const string customerNumber = "C-EDGE";
+
+        Db.Customers.Add(new Customer
+        {
+            CompanyId = company.Id, CustomerNumber = customerNumber, Year = Year, Month = Month,
+            CustomerName = "First Of Month Customer", AgentIdNumber = "AG1", Status = CustomerStatus.Active
+        });
+        Db.CustomerDistributionDays.Add(new CustomerDistributionDay
+        {
+            CompanyId = company.Id, CustomerNumber = customerNumber, Year = Year, Month = Month, Sunday = true
+        });
+        await Db.SaveChangesAsync();
+
+        await VisitPlanGenerator.GenerateAsync(Db, company.Id, Year, Month);
+
+        var entry = Db.VisitPlanEntries.Single(e => e.CompanyId == company.Id && e.CustomerNumber == customerNumber);
+        // 2 days before Sunday March 1 is Friday February 27 - a valid (Half-capacity, not Off) working
+        // day, so that's where the visit belongs, not March 1 (the delivery day itself).
+        Assert.Equal(new DateTime(2026, 2, 27), entry.PlannedDate);
+        // Still recorded as belonging to THIS month's plan/customer snapshot - only PlannedDate spills
+        // backward, PlanYear/PlanMonth never do.
+        Assert.Equal(Year, entry.PlanYear);
+        Assert.Equal(Month, entry.PlanMonth);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_SpilloverDateAlreadyFullFromPriorMonthsPlan_FallsBackToDeliveryDayInsteadOfDoubleBooking()
+    {
+        var company = await SeedCompanyAsync();
+        const string customerNumber = "C-EDGE2";
+        const string agentId = "AG1";
+
+        // Fill Friday February 27's entire capacity (4, the HalfDayCapacity default) with a real,
+        // already-existing FEBRUARY plan for four other customers of the same agent - simulating that
+        // last month's plan was already generated and genuinely has no room left that day.
+        Db.VisitPlanWeights.Add(new VisitPlanWeights { CompanyId = company.Id }); // defaults: Full=8, Half=4
+        for (var i = 0; i < 4; i++)
+        {
+            var priorCustomerNumber = $"C-FEB-{i}";
+            Db.Customers.Add(new Customer
+            {
+                CompanyId = company.Id, CustomerNumber = priorCustomerNumber, Year = Year, Month = Month - 1,
+                CustomerName = $"Feb Customer {i}", AgentIdNumber = agentId, Status = CustomerStatus.Active
+            });
+            Db.VisitPlanEntries.Add(new VisitPlanEntry
+            {
+                CompanyId = company.Id, PlanYear = Year, PlanMonth = Month - 1, CustomerNumber = priorCustomerNumber,
+                PlannedDate = new DateTime(2026, 2, 27), AgentName = agentId, GeneratedAt = DateTime.UtcNow
+            });
+        }
+
+        Db.Customers.Add(new Customer
+        {
+            CompanyId = company.Id, CustomerNumber = customerNumber, Year = Year, Month = Month,
+            CustomerName = "First Of Month Customer 2", AgentIdNumber = agentId, Status = CustomerStatus.Active
+        });
+        Db.CustomerDistributionDays.Add(new CustomerDistributionDay
+        {
+            CompanyId = company.Id, CustomerNumber = customerNumber, Year = Year, Month = Month, Sunday = true
+        });
+        await Db.SaveChangesAsync();
+
+        await VisitPlanGenerator.GenerateAsync(Db, company.Id, Year, Month);
+
+        var entry = Db.VisitPlanEntries.Single(e => e.CompanyId == company.Id && e.CustomerNumber == customerNumber);
+        // Feb 27 is already fully booked by February's own plan - must NOT be double-booked past
+        // capacity, so this customer falls back to the delivery day itself (March 1) instead.
+        Assert.Equal(new DateTime(2026, 3, 1), entry.PlannedDate);
+    }
 }

@@ -402,7 +402,15 @@
   }
 
 
-  .table-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  /* Sticky relative to the PAGE (not table-wrap's own scroll, which no longer exists - see .table-wrap
+     below): stays pinned to the viewport top as the whole page scrolls past it. Solid background so
+     table rows scrolling underneath don't show through; z-index above thead/filter-row (set below) so
+     the stacking order top-to-bottom is toolbar > header > filter row > body, matching how they're
+     visually stacked. Height is read by JS (see createDataTable's syncStickyOffsets) into the
+     --tw-toolbar-h custom property on this table's .table-wrap, which thead/filter-row use for their
+     own sticky "top" so they stack directly under this regardless of how many buttons/badges push a
+     given table's toolbar taller (e.g. the visit-plan table's selection-conditional buttons). */
+  .table-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; position: sticky; top: 0; z-index: 4; background: var(--offwhite); }
   /* Scoped to the visit-plan table's toolbar only (added via JS, not shared with every other table's
      toolbar) - space-between spreads a handful of buttons across the whole row width with big gaps
      between them; this packs them tightly one after another instead, growing the row as more of the
@@ -420,6 +428,11 @@
   }
   section.panel h2 { font-size: 1.05rem; font-weight: 700; margin: 0 0 4px; }
   section.panel .desc { font-size: 0.84rem; color: var(--text-muted); margin: 0 0 14px; }
+  /* Same hover affordance as .kpi-card (translateY + stronger shadow) - reused here so a whole
+     clickable panel (not just a small tile) reads as interactive with the same visual language
+     already established elsewhere on the dashboard. */
+  section.panel.panel-clickable { cursor: pointer; transition: transform .15s, box-shadow .15s, border-color .15s; }
+  section.panel.panel-clickable:hover { transform: translateY(-3px); box-shadow: 0 8px 22px rgba(15,23,42,0.16); border-color: var(--brand); }
 
   .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
   .search { flex: 1 1 220px; }
@@ -434,13 +447,20 @@
   }
   .controls select:focus { outline: 2px solid var(--electric); outline-offset: 1px; }
 
-  .table-wrap { border: 1px solid var(--border); border-radius: 10px; overflow: auto; max-height: 62vh; }
+  /* Overflow/max-height deliberately removed (was: overflow:auto; max-height:62vh - its own internal
+     scrollbar) - a table now grows naturally with the page, same as the content above/below it, so the
+     PAGE scrolls through its rows instead of a bounded inner box. That's what lets .table-toolbar/
+     thead th/tr.filter-row th below stay pinned to the viewport (position:sticky needs the page itself
+     to be the scrolling ancestor - it can't stick to the viewport while also being clipped by its own
+     overflow:auto container). See dashAgentMeetingCountsTable's own .table-wrap for the one table that
+     intentionally keeps the old bounded-scroll behavior instead (not built by createDataTable). */
+  .table-wrap { border: 1px solid var(--border); border-radius: 10px; }
   table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 0.78rem; }
   thead th {
-    position: sticky; top: 0; background: var(--ice); color: var(--text-muted);
+    position: sticky; top: var(--tw-toolbar-h, 0px); background: var(--ice); color: var(--text-muted);
     text-align: center; font-weight: 600; font-size: 0.78rem; letter-spacing: 0.03em;
     text-transform: uppercase; padding: 8px 6px; border-bottom: 1px solid var(--border);
-    white-space: normal; line-height: 1.2; z-index: 2; cursor: pointer; user-select: none; transition: background 0.1s;
+    white-space: normal; line-height: 1.2; z-index: 3; cursor: pointer; user-select: none; transition: background 0.1s;
   }
   thead th:hover { background: var(--brand-hover); color: white; }
   thead th:hover .grip { opacity: 0.7; }
@@ -450,12 +470,19 @@
   thead th .sort-arrow { font-size: 0.7rem; opacity: 0.4; }
   thead th.sorted .sort-arrow { opacity: 1; color: var(--electric); }
   thead th.sorted { color: var(--text); background: #e2ecfc; }
-  tr.filter-row th { position: sticky; top: 33px; background: var(--white); padding: 4px 4px; z-index: 1; cursor: default; }
+  /* top = toolbar height + header row height (both measured in JS, see createDataTable's
+     syncStickyOffsets, and exposed as --tw-toolbar-h/--tw-thead-h custom properties on this table's
+     own .table-wrap) so the filter row sits directly under the sticky header row, not overlapping it. */
+  tr.filter-row th { position: sticky; top: calc(var(--tw-toolbar-h, 0px) + var(--tw-thead-h, 33px)); background: var(--white); padding: 4px 4px; z-index: 2; cursor: default; }
   tr.filter-row input {
     width: 100%; box-sizing: border-box; padding: 5px 8px; font-size: 0.76rem;
     border: 1px solid var(--border); border-radius: 6px; background: var(--offwhite); color: var(--text); font-family: inherit;
   }
   tr.filter-row input:focus { outline: 2px solid var(--electric); outline-offset: 1px; }
+  /* Subtle ("עדינה" - the product owner's own word) cue that THIS column currently has a filter typed
+     into it - a gentle tint, not a loud banner, so a glance at the filter row shows which column(s) are
+     narrowing the table beyond the (possibly much shorter) row count alone. */
+  tr.filter-row input.active-filter { background: var(--ice); border-color: var(--electric); }
   tbody td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: normal; text-align: center; }
   tfoot td { padding: 8px; text-align: center; font-weight: 700; background: var(--ice); border-top: 2px solid var(--border); position: sticky; bottom: 0; }
   tbody tr:last-child td { border-bottom: none; }
@@ -537,6 +564,10 @@
      table-layout:fixed makes the explicit per-column widths below actually binding (not just hints),
      with overflow ellipsis on the columns whose content can run long (name/address) - full text is
      still available via the title attribute on hover. */
+  /* No "top" override needed here for the sticky header/filter row - the shared thead th/tr.filter-row
+     th rules already read this table's OWN measured toolbar/header heights via the --tw-toolbar-h/
+     --tw-thead-h custom properties (see createDataTable's syncStickyOffsets), so they stack correctly
+     under this table's (denser, differently-sized) toolbar and header automatically. */
   #vpTable { table-layout: fixed; font-size: 0.68rem; }
   #vpTable thead th { padding: 4px 2px; font-size: 0.64rem; }
   #vpTable tbody td { padding: 2px 2px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -895,11 +926,6 @@
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>
       <span>יומן ביקורת</span>
     </button>
-    <!-- Hidden for non-super-admins - see applyCurrentUserUi(). -->
-    <button class="nav-item" data-view="billing" id="navItemBilling" style="display:none;">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-      <span>חיוב</span>
-    </button>
   </nav>
 
   <div class="nav-group-label">עזרה</div>
@@ -1019,7 +1045,7 @@
           <p class="dash-section-sub">לפי התדירות שהוגדרה ב"תקן ביקורים ללקוח". לחצו לפירוט.</p>
           <div class="donut-panel-body" id="dashFrequencyDonut"></div>
         </section>
-        <section class="panel">
+        <section class="panel panel-clickable" id="dashWorkCalendarPanel" title="למעבר ליומן ימי עבודה לעריכה">
           <div class="head" style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
             <h2 class="dash-section-title" style="margin:0;">
               <svg class="dash-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
@@ -1027,7 +1053,7 @@
             </h2>
             <span class="badge accent" id="dashCalTitle"></span>
           </div>
-          <p class="dash-section-sub">תצוגה בלבד, לפי החודש שנבחר למעלה. לעריכה - לשונית "יומן ימי עבודה" בתפריט.</p>
+          <p class="dash-section-sub">תצוגה לפי החודש שנבחר למעלה. לחצו לעריכת יומן ימי העבודה.</p>
           <div class="cal-panel-centered">
             <div class="cal-grid-wrap">
               <div class="cal-grid" id="dashCalGrid"></div>
@@ -1066,7 +1092,10 @@
           פגישות מתוכננות לסוכן
         </h2>
         <p class="dash-section-sub">כמות פגישות מתוכננות לכל סוכן, היום ולחודש הנוכחי (בהתאם לפילטר הערוץ שנבחר למעלה). לחצו על שורה למעבר לתוכנית הביקורים של הסוכן.</p>
-        <div class="table-wrap" style="max-height:420px;">
+        <!-- Not one of the shared createDataTable() tables (no toolbar/filter-row) - keeps its own
+             original bounded internal scroll (overflow:auto here explicitly) instead of picking up
+             the page-level sticky behavior added for .table-wrap below. -->
+        <div class="table-wrap" style="max-height:420px; overflow:auto;">
           <table id="dashAgentMeetingCountsTable"></table>
         </div>
       </section>
@@ -1588,20 +1617,6 @@
       </section>
     </div>
 
-    <!-- ===================== BILLING (super-admin only) ===================== -->
-    <div class="view" id="view-billing">
-      <section class="panel">
-        <h2>חיוב</h2>
-        <p class="desc">
-          ניהול אמצעי התשלום ופרטי החיוב של החברה הנבחרת, דרך פורטל החיוב המאובטח של Stripe. זמין
-          למנהל-על בלבד.
-        </p>
-        <div class="controls">
-          <button type="button" class="btn primary" id="btnOpenBillingPortal">ניהול חיוב</button>
-          <span class="form-msg" id="billingMsg"></span>
-        </div>
-      </section>
-    </div>
 
     <!-- ===================== GUIDE ===================== -->
     <div class="view" id="view-guide">
@@ -1829,6 +1844,33 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+/* ==================== LOADING FEEDBACK ====================
+   Shared "this is working" affordance for any button whose click waits on something (almost always a
+   fetch()) that isn't instant - per the product owner's ask, a short sentence so the user understands
+   the action is in progress, not just a button that still looks clickable. Saves the button's current
+   text/disabled state, swaps in loadingText while fn() runs, and restores the original state in a
+   finally block so it resets correctly even if fn() throws/rejects.
+   Icon-only buttons (the small round trash-can delete icons, class "btn-icon", or anything with an
+   <svg> icon inside - the export/select-all toolbar buttons) are too small to fit a sentence without
+   visibly breaking their layout, so those just dim + disable instead of swapping text - still a clear
+   "don't click me again right now" signal, just not literally a sentence. */
+async function withLoading(btn, fn, loadingText = "מבצע...") {
+  if (!btn) return fn();
+  const iconOnly = btn.classList.contains("btn-icon") || !!btn.querySelector("svg");
+  const originalDisabled = btn.disabled;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  if (iconOnly) { btn.style.opacity = "0.45"; btn.style.cursor = "wait"; }
+  else { btn.textContent = loadingText; }
+  try {
+    return await fn();
+  } finally {
+    btn.disabled = originalDisabled;
+    if (iconOnly) { btn.style.opacity = ""; btn.style.cursor = ""; }
+    else { btn.textContent = originalText; }
+  }
+}
+
 /* ==================== VIEW SWITCHING ==================== */
 const VIEW_TITLES = {
   dashboard: ["בית", "תמונת מצב כללית"],
@@ -1842,8 +1884,7 @@ const VIEW_TITLES = {
   visitplan: ["תוכנית ביקורים", "תעדוף ותזמון ביקורי הסוכנים לחודש הנבחר, לפי שקלול משוקלל של הפרמטרים"],
   guide: ["הדרכה", "הוראות שימוש קצרות לכל מסך במערכת"],
   admin: ["ניהול", "יצירת חברות נוספות במערכת - זמין למנהל-על בלבד"],
-  auditlog: ["יומן ביקורת", "תיעוד פעולות ניהוליות הרסניות בחברה הנבחרת - זמין למנהל-על בלבד"],
-  billing: ["חיוב", "ניהול אמצעי התשלום והחיוב של החברה הנבחרת - זמין למנהל-על בלבד"]
+  auditlog: ["יומן ביקורת", "תיעוד פעולות ניהוליות הרסניות בחברה הנבחרת - זמין למנהל-על בלבד"]
 };
 const VIEW_ACTIVATION_HOOKS = {};
 
@@ -1926,6 +1967,26 @@ function createDataTable({ tableId, emptyId, columns, getRows, searchInputId, ge
   toolbar.appendChild(filteredCountEl);
   toolbar.appendChild(exportBtn);
   table.parentElement.insertBefore(toolbar, table);
+
+  // Sticky header/filter-row (see the CSS for .table-toolbar/thead th/tr.filter-row th) needs to know
+  // exactly how tall this table's OWN toolbar and header row render as, in pixels - both vary per table
+  // (toolbar: how many extra buttons callers append after createDataTable returns, e.g. visit-plan's
+  // selection-conditional buttons; header row: column count/label wrapping, e.g. #vpTable's denser
+  // font). Measured (not guessed) and exposed as CSS custom properties scoped to this table's own
+  // .table-wrap, which thead th/tr.filter-row th read via var(--tw-toolbar-h)/var(--tw-thead-h) so the
+  // filter row always sits flush under the header row, itself flush under the toolbar - regardless of
+  // any of those varying per table. Re-measured automatically (ResizeObserver) whenever the toolbar's
+  // own size changes later (filtered-count badge appearing, more buttons appended, selection buttons
+  // toggling visible/hidden), not just once at creation.
+  const tableWrap = table.parentElement;
+  function syncStickyOffsets() {
+    const theadFirstRow = table.querySelector("thead tr:first-child");
+    tableWrap.style.setProperty("--tw-toolbar-h", `${toolbar.offsetHeight}px`);
+    tableWrap.style.setProperty("--tw-thead-h", `${theadFirstRow ? theadFirstRow.offsetHeight : 0}px`);
+  }
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(syncStickyOffsets).observe(toolbar);
+  }
 
   function updateFilteredCount(visibleCount, totalCount) {
     const anyColFilter = Object.values(state.colFilters).some(v => (v || "").trim());
@@ -2021,9 +2082,15 @@ function createDataTable({ tableId, emptyId, columns, getRows, searchInputId, ge
       th.addEventListener("dragend", () => thead.querySelectorAll("th").forEach(t => t.classList.remove("drag-over")));
     });
     thead.querySelectorAll(".filter-row input").forEach(input => {
+      input.classList.toggle("active-filter", !!input.value.trim());
       input.addEventListener("click", e => e.stopPropagation());
-      input.addEventListener("input", e => { state.colFilters[input.dataset.key] = e.target.value; renderBody(); });
+      input.addEventListener("input", e => {
+        state.colFilters[input.dataset.key] = e.target.value;
+        input.classList.toggle("active-filter", !!e.target.value.trim());
+        renderBody();
+      });
     });
+    syncStickyOffsets();
   }
 
   function renderBody() {
@@ -2039,6 +2106,13 @@ function createDataTable({ tableId, emptyId, columns, getRows, searchInputId, ge
       if (empty) empty.style.display = "none";
       tbody.innerHTML = rows.map(row => `<tr>${cols.map(col => `<td>${col.render(row)}</td>`).join("")}</tr>`).join("");
     }
+    // Also re-measured here (not just in renderHead()) - this is what actually runs when a table's view
+    // becomes visible after page load (every view's createDataTable() call runs up front while still
+    // display:none, so the very first measurement is 0x0) via that view's VIEW_ACTIVATION_HOOKS calling
+    // refresh()/renderBody(), and whenever the toolbar's height changes from something OTHER than its
+    // own size (e.g. selection buttons toggling visible right before this call, not caught by the
+    // ResizeObserver on the toolbar until its own next paint).
+    syncStickyOffsets();
   }
 
   if (searchInputId) {
@@ -2164,14 +2238,16 @@ document.getElementById("adminCompaniesList").addEventListener("click", async (e
       const ok = confirm(`להקפיא את החברה "${toggleBtn.dataset.name}"? כל המשתמשים שלה לא יוכלו להתחבר עד שתפשירו אותה מחדש. הנתונים עצמם לא נפגעים.`);
       if (!ok) return;
     }
-    try {
-      const res = await fetch(`/api/companies/${toggleBtn.dataset.id}/active`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ IsActive: nextActive })
-      });
-      if (!res.ok) { alert(await res.text()); return; }
-      await loadCompanies();
-    } catch { alert("שגיאת תקשורת עם השרת"); }
+    await withLoading(toggleBtn, async () => {
+      try {
+        const res = await fetch(`/api/companies/${toggleBtn.dataset.id}/active`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ IsActive: nextActive })
+        });
+        if (!res.ok) { alert(await res.text()); return; }
+        await loadCompanies();
+      } catch { alert("שגיאת תקשורת עם השרת"); }
+    });
     return;
   }
 
@@ -2263,28 +2339,6 @@ async function refreshAuditLogView() {
   auditLogTable.refresh();
 }
 VIEW_ACTIVATION_HOOKS["auditlog"] = refreshAuditLogView;
-
-/* ==================== BILLING (super-admin only) ====================
-   Stripe isn't live yet in most environments, so a 400 with a plain-text Hebrew message from the
-   server is the expected/common outcome right now - shown inline via the same .form-msg pattern used
-   everywhere else in this file, not alert(). */
-document.getElementById("btnOpenBillingPortal").addEventListener("click", async () => {
-  const msg = document.getElementById("billingMsg");
-  const companyId = selectedCompanyId();
-  if (!companyId) { msg.className = "form-msg error"; msg.textContent = "יש לבחור חברה למעלה"; return; }
-  const btn = document.getElementById("btnOpenBillingPortal");
-  btn.disabled = true;
-  msg.className = "form-msg"; msg.textContent = "פותח פורטל חיוב...";
-  try {
-    const res = await fetch("/api/billing/portal", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ CompanyId: companyId, ReturnUrl: window.location.href })
-    });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await res.text(); btn.disabled = false; return; }
-    const result = await res.json();
-    window.location.href = result.Url;
-  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; btn.disabled = false; }
-});
 
 /* ==================== DASHBOARD ==================== */
 
@@ -2588,6 +2642,9 @@ document.getElementById("dashReasonsChart").addEventListener("click", (e) => {
   if (!row) return;
   navigateToVisitLogFiltered({ search: row.dataset.drillReason });
 });
+// The read-only calendar preview panel - clicking anywhere on it (not just a button inside it) jumps
+// to the editable "יומן ימי עבודה" screen, same as picking it from the sidebar.
+document.getElementById("dashWorkCalendarPanel").addEventListener("click", () => activateView("workcalendar"));
 document.getElementById("dashFrequencyDonut").addEventListener("click", (e) => {
   const el = e.target.closest("[data-drill-frequency]");
   const d = DASH_STATE;
@@ -3179,8 +3236,10 @@ document.getElementById("addReasonForm").addEventListener("submit", async (e) =>
   const fd = new FormData();
   fd.append("CompanyId", String(companyId));
   fd.append("Text", text);
-  const res = await fetch("/api/nonvisitreasons", { method: "POST", body: fd });
-  if (res.ok) { input.value = ""; await refreshReasonsView(); }
+  await withLoading(e.submitter, async () => {
+    const res = await fetch("/api/nonvisitreasons", { method: "POST", body: fd });
+    if (res.ok) { input.value = ""; await refreshReasonsView(); }
+  }, "מוסיף...");
 });
 
 document.getElementById("reasonsList").addEventListener("change", async (e) => {
@@ -3206,11 +3265,13 @@ document.getElementById("reasonsList").addEventListener("click", async (e) => {
   if (!btn) return;
   const msg = document.getElementById("reasonsMsg");
   msg.className = "form-msg"; msg.textContent = "";
-  try {
-    const res = await fetch(`/api/nonvisitreasons/${btn.dataset.id}`, { method: "DELETE" });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await res.text(); return; }
-    await refreshReasonsView();
-  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  await withLoading(btn, async () => {
+    try {
+      const res = await fetch(`/api/nonvisitreasons/${btn.dataset.id}`, { method: "DELETE" });
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await res.text(); return; }
+      await refreshReasonsView();
+    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  }, "מוחק...");
 });
 
 document.getElementById("reasonsList").addEventListener("click", async (e) => {
@@ -3219,14 +3280,16 @@ document.getElementById("reasonsList").addEventListener("click", async (e) => {
   const msg = document.getElementById("reasonsMsg");
   msg.className = "form-msg"; msg.textContent = "";
   const nextActive = btn.dataset.active !== "true"; // flip
-  try {
-    const res = await fetch(`/api/nonvisitreasons/${btn.dataset.id}/active`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ IsActive: nextActive })
-    });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await res.text(); return; }
-    await refreshReasonsView();
-  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  await withLoading(btn, async () => {
+    try {
+      const res = await fetch(`/api/nonvisitreasons/${btn.dataset.id}/active`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ IsActive: nextActive })
+      });
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await res.text(); return; }
+      await refreshReasonsView();
+    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  }, "מבצע...");
 });
 
 /* ==================== VISIT LOG ==================== */
@@ -3332,8 +3395,10 @@ VIEW_ACTIVATION_HOOKS["visitlog"] = refreshVisitLogView;
 document.getElementById("vlTable").addEventListener("click", async (e) => {
   const btn = e.target.closest('[data-action="delete-visit"]');
   if (!btn) return;
-  const res = await fetch(`/api/customervisits/${btn.dataset.id}`, { method: "DELETE" });
-  if (res.ok) await refreshVisitLogView();
+  await withLoading(btn, async () => {
+    const res = await fetch(`/api/customervisits/${btn.dataset.id}`, { method: "DELETE" });
+    if (res.ok) await refreshVisitLogView();
+  }, "מוחק...");
 });
 
 function updateVlSelectionBar() {
@@ -3365,18 +3430,21 @@ document.getElementById("btnClearVlSelection").addEventListener("click", () => {
 
 document.getElementById("btnDeleteVlSelected").addEventListener("click", async () => {
   const msg = document.getElementById("vlDeleteMsg");
+  const btn = document.getElementById("btnDeleteVlSelected");
   if (vlSelected.size === 0) return;
   msg.className = "form-msg"; msg.textContent = "מוחק...";
-  try {
-    const res = await fetch("/api/customervisits/bulkdelete", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ Ids: [...vlSelected] })
-    });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
-    const result = await res.json();
-    msg.className = "form-msg success"; msg.textContent = `נמחקו ${result.Deleted} שורות.`;
-    await refreshVisitLogView();
-  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  await withLoading(btn, async () => {
+    try {
+      const res = await fetch("/api/customervisits/bulkdelete", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ Ids: [...vlSelected] })
+      });
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      const result = await res.json();
+      msg.className = "form-msg success"; msg.textContent = `נמחקו ${result.Deleted} שורות.`;
+      await refreshVisitLogView();
+    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  }, "מוחק...");
 });
 
 /* ==================== CUSTOMER DISTRIBUTION DAYS ==================== */
@@ -3983,23 +4051,26 @@ async function loadVpWeights() {
 // was actually pressed. Not a static top-level listener for the weights button - that button itself
 // is recreated by renderVpWeightsGrid() every time weights (re)load, so that function re-attaches
 // this to the new element each time; the capacity button is static and wired once at the bottom.
-async function saveVpWeights(msgElId = "vpWeightsMsg") {
+async function saveVpWeights(msgElId = "vpWeightsMsg", btnId = "btnSaveWeights") {
   const companyId = selectedCompanyId();
   const msg = document.getElementById(msgElId);
+  const btn = document.getElementById(btnId);
   if (!companyId) return;
   const body = { CompanyId: companyId };
   VP_FACTORS.forEach(f => { body[f.key] = Number(document.getElementById(`vpWeight_${f.key}`).value) || 0; });
   body.FullDayCapacity = Number(document.getElementById("vpFullDayCapacity").value) || 0;
   body.HalfDayCapacity = Number(document.getElementById("vpHalfDayCapacity").value) || 0;
   msg.className = "form-msg"; msg.textContent = "שומר...";
-  try {
-    const res = await fetch("/api/visitplan/weights", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
-    msg.className = "form-msg success"; msg.textContent = "ההגדרות נשמרו! ניתן ליצור תוכנית מחדש כדי שהשינוי ישפיע.";
-    vpTouchedWeights = new Set(); // the saved values are the new baseline - next edit starts fresh
-  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  await withLoading(btn, async () => {
+    try {
+      const res = await fetch("/api/visitplan/weights", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      msg.className = "form-msg success"; msg.textContent = "ההגדרות נשמרו! ניתן ליצור תוכנית מחדש כדי שהשינוי ישפיע.";
+      vpTouchedWeights = new Set(); // the saved values are the new baseline - next edit starts fresh
+    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  }, "שומר...");
 }
-document.getElementById("btnSaveCapacity").addEventListener("click", () => saveVpWeights("vpCapacityMsg"));
+document.getElementById("btnSaveCapacity").addEventListener("click", () => saveVpWeights("vpCapacityMsg", "btnSaveCapacity"));
 document.getElementById("btnSaveWeights").addEventListener("click", () => saveVpWeights());
 
 function vpSelectedYearMonth() {
@@ -4326,6 +4397,7 @@ async function firstWorkDayOf(companyId, year, month) {
 
 document.getElementById("btnMoveVpSelectedToNextMonth").addEventListener("click", async () => {
   const msg = document.getElementById("vpDeleteMsg");
+  const btn = document.getElementById("btnMoveVpSelectedToNextMonth");
   if (vpSelected.size === 0) return;
   const companyId = selectedCompanyId();
   const ym = vpTableSelectedYearMonth();
@@ -4333,34 +4405,39 @@ document.getElementById("btnMoveVpSelectedToNextMonth").addEventListener("click"
   const nextMonth = ym.month === 12 ? 1 : ym.month + 1;
   const nextYear = ym.month === 12 ? ym.year + 1 : ym.year;
   msg.className = "form-msg"; msg.textContent = "מעביר לחודש הבא...";
-  try {
-    const newDate = await firstWorkDayOf(companyId, nextYear, nextMonth);
-    const res = await fetch("/api/visitplan/entries/bulkreschedule", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ Ids: [...vpSelected], NewDate: newDate })
-    });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
-    const result = await res.json();
-    msg.className = "form-msg success"; msg.textContent = `${result.Rescheduled} פגישות הועברו ל-${fmtDate(newDate)}.`;
-    vpSelected.clear();
-    await refreshVpTable();
-  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  await withLoading(btn, async () => {
+    try {
+      const newDate = await firstWorkDayOf(companyId, nextYear, nextMonth);
+      const res = await fetch("/api/visitplan/entries/bulkreschedule", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ Ids: [...vpSelected], NewDate: newDate })
+      });
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      const result = await res.json();
+      msg.className = "form-msg success"; msg.textContent = `${result.Rescheduled} פגישות הועברו ל-${fmtDate(newDate)}.`;
+      vpSelected.clear();
+      await refreshVpTable();
+    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  }, "מעביר...");
 });
 
 document.getElementById("btnDeleteVpSelected").addEventListener("click", async () => {
   const msg = document.getElementById("vpDeleteMsg");
+  const btn = document.getElementById("btnDeleteVpSelected");
   if (vpSelected.size === 0) return;
   msg.className = "form-msg"; msg.textContent = "מוחק...";
-  try {
-    const res = await fetch("/api/visitplan/entries/bulkdelete", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ Ids: [...vpSelected] })
-    });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
-    const result = await res.json();
-    msg.className = "form-msg success"; msg.textContent = `נמחקו ${result.Deleted} שורות.`;
-    await refreshVpTable();
-  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  await withLoading(btn, async () => {
+    try {
+      const res = await fetch("/api/visitplan/entries/bulkdelete", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ Ids: [...vpSelected] })
+      });
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      const result = await res.json();
+      msg.className = "form-msg success"; msg.textContent = `נמחקו ${result.Deleted} שורות.`;
+      await refreshVpTable();
+    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  }, "מוחק...");
 });
 
 const vpGenerateModal = document.getElementById("vpGenerateModalOverlay");
@@ -4430,33 +4507,36 @@ document.getElementById("btnOptimizeByCity").addEventListener("click", async () 
   const companyId = selectedCompanyId();
   const ym = vpTableSelectedYearMonth(); // the month shown in the table below, not the generate-plan popup's month
   const msg = document.getElementById("vpOptimizeMsg");
+  const btn = document.getElementById("btnOptimizeByCity");
   if (!companyId || !ym) return;
   msg.className = "form-msg"; msg.textContent = "מבצע אופטימיזציה...";
-  try {
-    const res = await fetch("/api/visitplan/optimizebycity", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ CompanyId: companyId, Year: ym.year, Month: ym.month })
-    });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
-    const result = await res.json();
-    if (result.SwapsApplied === 0) {
-      msg.className = "form-msg"; msg.textContent = "לא נמצאו שיפורים אפשריים - התוכנית כבר מרוכזת ככל שניתן לפי האילוצים הקיימים.";
-    } else {
-      msg.className = "form-msg success";
-      let text = `בוצעו ${result.SwapsApplied} העברות בין ${result.AgentsAffected} סוכנים. ריכוז ימי-עיר ירד מ-${result.FragmentationBefore} ל-${result.FragmentationAfter}.`;
-      if (result.Displaced > 0) {
-        text += ` מתוכן ${result.Displaced} הוזזו כדי לפנות מקום לריכוז.`;
+  await withLoading(btn, async () => {
+    try {
+      const res = await fetch("/api/visitplan/optimizebycity", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ CompanyId: companyId, Year: ym.year, Month: ym.month })
+      });
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      const result = await res.json();
+      if (result.SwapsApplied === 0) {
+        msg.className = "form-msg"; msg.textContent = "לא נמצאו שיפורים אפשריים - התוכנית כבר מרוכזת ככל שניתן לפי האילוצים הקיימים.";
+      } else {
+        msg.className = "form-msg success";
+        let text = `בוצעו ${result.SwapsApplied} העברות בין ${result.AgentsAffected} סוכנים. ריכוז ימי-עיר ירד מ-${result.FragmentationBefore} ל-${result.FragmentationAfter}.`;
+        if (result.Displaced > 0) {
+          text += ` מתוכן ${result.Displaced} הוזזו כדי לפנות מקום לריכוז.`;
+        }
+        if (result.NotConsolidated > 0) {
+          text += ` (${result.NotConsolidated} פגישות לא ניתן היה לרכז - קיבולת יומית מלאה או אילוץ יום הפצה.)`;
+        }
+        // Dismissible - this note can get long and isn't actionable once read, so let the admin close
+        // it explicitly instead of it just sitting there until the next optimize run overwrites it.
+        msg.innerHTML = `<span>${text}</span><button type="button" class="form-msg-dismiss" title="סגירה">&#10005;</button>`;
+        msg.querySelector(".form-msg-dismiss").addEventListener("click", () => { msg.innerHTML = ""; msg.className = "form-msg"; });
       }
-      if (result.NotConsolidated > 0) {
-        text += ` (${result.NotConsolidated} פגישות לא ניתן היה לרכז - קיבולת יומית מלאה או אילוץ יום הפצה.)`;
-      }
-      // Dismissible - this note can get long and isn't actionable once read, so let the admin close
-      // it explicitly instead of it just sitting there until the next optimize run overwrites it.
-      msg.innerHTML = `<span>${text}</span><button type="button" class="form-msg-dismiss" title="סגירה">&#10005;</button>`;
-      msg.querySelector(".form-msg-dismiss").addEventListener("click", () => { msg.innerHTML = ""; msg.className = "form-msg"; });
-    }
-    await refreshVpTable();
-  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+      await refreshVpTable();
+    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  }, "מבצע אופטימיזציה...");
 });
 
 async function refreshVisitPlanView() {
@@ -4512,29 +4592,34 @@ cityGroupsModal.addEventListener("click", (e) => { if (e.target === cityGroupsMo
 document.getElementById("btnAddCityGroup").addEventListener("click", async () => {
   const companyId = selectedCompanyId();
   const msg = document.getElementById("cityGroupsMsg");
+  const btn = document.getElementById("btnAddCityGroup");
   const name = document.getElementById("newCityGroupName").value.trim();
   const cities = readCheckedChannels("newCityGroupCities");
   if (!name) { msg.className = "form-msg error"; msg.textContent = "יש להזין שם לאשכול"; return; }
   if (cities.length < 2) { msg.className = "form-msg error"; msg.textContent = "יש לבחור לפחות שתי ערים"; return; }
   msg.className = "form-msg"; msg.textContent = "שומר...";
-  try {
-    const res = await fetch("/api/citygroups", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ CompanyId: companyId, Name: name, Cities: cities })
-    });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
-    msg.className = "form-msg success"; msg.textContent = "האשכול נוסף בהצלחה.";
-    document.getElementById("newCityGroupName").value = "";
-    await refreshCityGroupsModal();
-  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  await withLoading(btn, async () => {
+    try {
+      const res = await fetch("/api/citygroups", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ CompanyId: companyId, Name: name, Cities: cities })
+      });
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      msg.className = "form-msg success"; msg.textContent = "האשכול נוסף בהצלחה.";
+      document.getElementById("newCityGroupName").value = "";
+      await refreshCityGroupsModal();
+    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  }, "שומר...");
 });
 
 document.getElementById("cityGroupsList").addEventListener("click", async (e) => {
   const btn = e.target.closest('[data-action="delete-city-group"]');
   if (!btn) return;
   if (!confirm("למחוק את האשכול הזה?")) return;
-  await fetch(`/api/citygroups/${btn.dataset.id}`, { method: "DELETE" });
-  await refreshCityGroupsModal();
+  await withLoading(btn, async () => {
+    await fetch(`/api/citygroups/${btn.dataset.id}`, { method: "DELETE" });
+    await refreshCityGroupsModal();
+  }, "מוחק...");
 });
 
 /* ==================== AUTH (admin interface only) ====================
@@ -4560,7 +4645,6 @@ function applyCurrentUserUi() {
   document.getElementById("sidebarUserLabel").textContent = CURRENT_USER.DisplayName;
   document.getElementById("navItemAdminCompanies").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
   document.getElementById("navItemAuditLog").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
-  document.getElementById("navItemBilling").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
   document.getElementById("guideTocAdmin").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
   document.getElementById("guide-admin").style.display = CURRENT_USER.IsSuperAdmin ? "" : "none";
   document.getElementById("dashGreeting").textContent = `שלום, ${CURRENT_USER.DisplayName}`;
@@ -4698,16 +4782,18 @@ document.getElementById("addUserForm").addEventListener("submit", async (e) => {
   const password = document.getElementById("newUserPassword").value;
   const allowedChannels = readCheckedChannels("newUserChannels");
   msg.className = "form-msg"; msg.textContent = "יוצר משתמש...";
-  try {
-    const res = await fetch("/api/users", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ CompanyId: companyId, Username: username, DisplayName: displayName, Password: password, AllowedChannels: allowedChannels })
-    });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
-    msg.className = "form-msg success"; msg.textContent = "המשתמש נוצר בהצלחה.";
-    document.getElementById("addUserForm").reset();
-    await refreshUsersView();
-  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  await withLoading(e.submitter, async () => {
+    try {
+      const res = await fetch("/api/users", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ CompanyId: companyId, Username: username, DisplayName: displayName, Password: password, AllowedChannels: allowedChannels })
+      });
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      msg.className = "form-msg success"; msg.textContent = "המשתמש נוצר בהצלחה.";
+      document.getElementById("addUserForm").reset();
+      await refreshUsersView();
+    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  }, "יוצר...");
 });
 
 const resetPasswordModal = document.getElementById("resetPasswordModalOverlay");
@@ -4719,17 +4805,20 @@ resetPasswordModal.addEventListener("click", (e) => { if (e.target === resetPass
 document.getElementById("btnConfirmResetPassword").addEventListener("click", async () => {
   const password = document.getElementById("resetPasswordInput").value;
   const msg = document.getElementById("resetPasswordMsg");
+  const btn = document.getElementById("btnConfirmResetPassword");
   if (!password || password.length < 8) { msg.className = "form-msg error"; msg.textContent = "הסיסמה חייבת להכיל לפחות 8 תווים"; return; }
   msg.className = "form-msg"; msg.textContent = "שומר...";
-  try {
-    const res = await fetch(`/api/users/${resetPasswordUserId}/reset-password`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ Password: password })
-    });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
-    msg.className = "form-msg success"; msg.textContent = "הסיסמה עודכנה!";
-    setTimeout(closeResetPasswordModal, 900);
-  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  await withLoading(btn, async () => {
+    try {
+      const res = await fetch(`/api/users/${resetPasswordUserId}/reset-password`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ Password: password })
+      });
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      msg.className = "form-msg success"; msg.textContent = "הסיסמה עודכנה!";
+      setTimeout(closeResetPasswordModal, 900);
+    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  }, "שומר...");
 });
 
 const editChannelsModal = document.getElementById("editChannelsModalOverlay");
@@ -4740,18 +4829,21 @@ editChannelsModal.addEventListener("click", (e) => { if (e.target === editChanne
 
 document.getElementById("btnConfirmEditChannels").addEventListener("click", async () => {
   const msg = document.getElementById("editChannelsMsg");
+  const btn = document.getElementById("btnConfirmEditChannels");
   const allowedChannels = readCheckedChannels("editChannelsList");
   msg.className = "form-msg"; msg.textContent = "שומר...";
-  try {
-    const res = await fetch(`/api/users/${editChannelsUserId}/channels`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ AllowedChannels: allowedChannels })
-    });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
-    msg.className = "form-msg success"; msg.textContent = "הערוצים עודכנו!";
-    await refreshUsersView();
-    setTimeout(closeEditChannelsModal, 900);
-  } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  await withLoading(btn, async () => {
+    try {
+      const res = await fetch(`/api/users/${editChannelsUserId}/channels`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ AllowedChannels: allowedChannels })
+      });
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      msg.className = "form-msg success"; msg.textContent = "הערוצים עודכנו!";
+      await refreshUsersView();
+      setTimeout(closeEditChannelsModal, 900);
+    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  }, "שומר...");
 });
 
 document.getElementById("usersTable").addEventListener("click", async (e) => {
@@ -4783,8 +4875,10 @@ document.getElementById("usersTable").addEventListener("click", async (e) => {
       return;
     }
     if (!confirm("למחוק את המשתמש הזה? הפעולה אינה ניתנת לביטול.")) return;
-    const res = await fetch(`/api/users/${deleteBtn.dataset.id}`, { method: "DELETE" });
-    if (res.ok) await refreshUsersView();
+    await withLoading(deleteBtn, async () => {
+      const res = await fetch(`/api/users/${deleteBtn.dataset.id}`, { method: "DELETE" });
+      if (res.ok) await refreshUsersView();
+    }, "מוחק...");
   }
 });
 

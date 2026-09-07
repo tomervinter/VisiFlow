@@ -108,6 +108,25 @@
 
   .brand .mark svg { width: 19px; height: 19px; stroke: white; }
 
+  /* Brand mark animation - a "visit pin" gently landing with a pulsing ground ring, standing in for
+     the house icon this replaced: VisiFlow is about a rep ARRIVING at a customer location, which a
+     static house doesn't really say. Lives on both .login-box .mark and .brand .mark since they share
+     the same inner SVG markup. */
+  .mark .pin-pulse { transform-box: fill-box; transform-origin: 50% 50%; animation: markPinPulse 1.8s ease-out infinite; }
+  .mark .pin-body { transform-box: fill-box; transform-origin: 50% 100%; animation: markPinBob 1.8s ease-in-out infinite; }
+  @keyframes markPinBob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+  }
+  @keyframes markPinPulse {
+    0% { transform: scale(0.5); opacity: 0; }
+    35% { opacity: 0.45; }
+    100% { transform: scale(1.6); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mark .pin-pulse, .mark .pin-body { animation: none; }
+  }
+
   .brand .title { font-size: 1.02rem; font-weight: 700; color: white; line-height: 1.2; }
   .brand .subtitle { font-size: 0.72rem; color: var(--sidebar-text-dim); margin-top: 1px; }
 
@@ -776,7 +795,10 @@
 <div class="login-screen" id="loginScreen" style="display:none;">
   <div class="login-box">
     <div class="mark">
-      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse class="pin-pulse" cx="12" cy="20.5" rx="5" ry="1.6" fill="white" stroke="none"/>
+        <g class="pin-body"><path d="M12 21s7-7.5 7-12a7 7 0 1 0-14 0c0 4.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></g>
+      </svg>
     </div>
     <h1>VisiFlow</h1>
     <p class="sub">ניהול ביקורי סוכני מכירות</p>
@@ -796,7 +818,10 @@
 <div class="sidebar">
   <div class="brand">
     <div class="mark">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse class="pin-pulse" cx="12" cy="20.5" rx="5" ry="1.6" fill="white" stroke="none"/>
+        <g class="pin-body"><path d="M12 21s7-7.5 7-12a7 7 0 1 0-14 0c0 4.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></g>
+      </svg>
     </div>
     <div>
       <div class="title">VisiFlow</div>

@@ -371,7 +371,7 @@ app.MapPost("/api/users", async (CreateUserRequest req, HttpContext ctx, VisiFlo
     if (!caller.IsSuperAdmin && req.CompanyId != caller.CompanyId) return ForbiddenCompany();
     if (string.IsNullOrWhiteSpace(req.Username)) return Results.BadRequest("יש להזין שם משתמש");
     if (string.IsNullOrWhiteSpace(req.DisplayName)) return Results.BadRequest("יש להזין שם תצוגה");
-    if (string.IsNullOrWhiteSpace(req.Password) || req.Password.Length < 6) return Results.BadRequest("הסיסמה חייבת להכיל לפחות 6 תווים");
+    if (string.IsNullOrWhiteSpace(req.Password) || req.Password.Length < 8) return Results.BadRequest("הסיסמה חייבת להכיל לפחות 8 תווים");
     if (await db.Companies.FindAsync(req.CompanyId) == null) return Results.BadRequest("החברה שנבחרה אינה קיימת");
     if (await db.Users.AnyAsync(u => u.Username == req.Username)) return Results.BadRequest("שם המשתמש כבר תפוס");
 
@@ -388,7 +388,7 @@ app.MapPost("/api/users", async (CreateUserRequest req, HttpContext ctx, VisiFlo
 
 app.MapPost("/api/users/{id:int}/reset-password", async (int id, ResetPasswordRequest req, HttpContext ctx, VisiFlowDbContext db, IPasswordHasher<User> hasher) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Password) || req.Password.Length < 6) return Results.BadRequest("הסיסמה חייבת להכיל לפחות 6 תווים");
+    if (string.IsNullOrWhiteSpace(req.Password) || req.Password.Length < 8) return Results.BadRequest("הסיסמה חייבת להכיל לפחות 8 תווים");
     var user = await db.Users.FindAsync(id);
     if (user == null) return Results.NotFound("המשתמש לא נמצא");
     var caller = await ResolveCallerAsync(ctx, db);
@@ -471,7 +471,7 @@ app.MapPost("/api/signup", async (SignupRequest req, VisiFlowDbContext db, IPass
     if (string.IsNullOrWhiteSpace(req.CompanyName)) return Results.BadRequest("שם חברה הוא שדה חובה");
     if (string.IsNullOrWhiteSpace(req.Username)) return Results.BadRequest("יש להזין שם משתמש");
     if (string.IsNullOrWhiteSpace(req.DisplayName)) return Results.BadRequest("יש להזין שם תצוגה");
-    if (string.IsNullOrWhiteSpace(req.Password) || req.Password.Length < 6) return Results.BadRequest("הסיסמה חייבת להכיל לפחות 6 תווים");
+    if (string.IsNullOrWhiteSpace(req.Password) || req.Password.Length < 8) return Results.BadRequest("הסיסמה חייבת להכיל לפחות 8 תווים");
     if (await db.Users.AnyAsync(u => u.Username == req.Username)) return Results.BadRequest("שם המשתמש כבר תפוס");
 
     var company = new Company { Name = req.CompanyName.Trim() };

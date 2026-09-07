@@ -1171,8 +1171,8 @@
               <input type="text" id="newUserDisplayName" autocomplete="off" required />
             </div>
             <div class="field" style="flex:1 1 160px;">
-              <label for="newUserPassword">סיסמה (לפחות 6 תווים)</label>
-              <input type="password" id="newUserPassword" autocomplete="new-password" required minlength="6" />
+              <label for="newUserPassword">סיסמה (לפחות 8 תווים)</label>
+              <input type="password" id="newUserPassword" autocomplete="new-password" required minlength="8" />
             </div>
           </div>
           <div class="field" style="margin-top:12px;">
@@ -1203,8 +1203,8 @@
         <h3>איפוס סיסמה</h3>
         <p class="desc" style="text-align:center;">קביעת סיסמה חדשה עבור <strong id="resetPasswordUsername"></strong>.</p>
         <div class="field" style="margin-bottom:14px;">
-          <label for="resetPasswordInput">סיסמה חדשה (לפחות 6 תווים)</label>
-          <input type="password" id="resetPasswordInput" autocomplete="new-password" minlength="6" />
+          <label for="resetPasswordInput">סיסמה חדשה (לפחות 8 תווים)</label>
+          <input type="password" id="resetPasswordInput" autocomplete="new-password" minlength="8" />
         </div>
         <div class="form-actions">
           <button type="button" class="btn primary" id="btnConfirmResetPassword">שמירת סיסמה חדשה</button>
@@ -1737,7 +1737,7 @@
         <p>משתמשים עם גישה לממשק הניהול הזה - לא משפיע על ממשק הסוכן, שם ההתחברות פשוטה יותר (לפי מספר תעודת זהות).</p>
         <div class="guide-screenshot"><img src="/guide-images/users.png" alt="מסך ניהול משתמשים" /></div>
         <ol class="guide-steps">
-          <li>מוסיפים משתמש חדש דרך הטופס למעלה: שם משתמש, שם תצוגה וסיסמה (לפחות 6 תווים). <b>מה קורה:</b> אפשר להגביל משתמש לערוצי מכר מסוימים בלבד - השארת התיבות ריקות פירושה גישה לכל הערוצים.</li>
+          <li>מוסיפים משתמש חדש דרך הטופס למעלה: שם משתמש, שם תצוגה וסיסמה (לפחות 8 תווים). <b>מה קורה:</b> אפשר להגביל משתמש לערוצי מכר מסוימים בלבד - השארת התיבות ריקות פירושה גישה לכל הערוצים.</li>
           <li>לכל משתמש קיים בטבלה למטה יש כפתורי "עריכת ערוצים" ו"איפוס סיסמה".</li>
         </ol>
         <p><b>לתשומת לב:</b> הרשאת "מנהל-על" (גישה ליותר מחברה אחת, ויכולת ליצור חברות חדשות) לא ניתנת להענקה דרך המסך הזה בכוונה - היא מוגדרת ידנית מול בסיס הנתונים בלבד, כדי שמשתמש לא יוכל להעניק אותה לעצמו.</p>
@@ -4710,7 +4710,7 @@ resetPasswordModal.addEventListener("click", (e) => { if (e.target === resetPass
 document.getElementById("btnConfirmResetPassword").addEventListener("click", async () => {
   const password = document.getElementById("resetPasswordInput").value;
   const msg = document.getElementById("resetPasswordMsg");
-  if (!password || password.length < 6) { msg.className = "form-msg error"; msg.textContent = "הסיסמה חייבת להכיל לפחות 6 תווים"; return; }
+  if (!password || password.length < 8) { msg.className = "form-msg error"; msg.textContent = "הסיסמה חייבת להכיל לפחות 8 תווים"; return; }
   msg.className = "form-msg"; msg.textContent = "שומר...";
   try {
     const res = await fetch(`/api/users/${resetPasswordUserId}/reset-password`, {

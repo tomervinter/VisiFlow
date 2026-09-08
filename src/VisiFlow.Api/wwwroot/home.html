@@ -1272,7 +1272,14 @@
           <input type="text" id="newCityGroupName" placeholder="למשל: רמת גן וגבעתיים" />
         </div>
         <div class="field" style="margin-bottom:14px;">
-          <label>ערים באשכול (לפחות 2)</label>
+          <label for="newCityGroupCityInput">ערים באשכול (לפחות 2)</label>
+          <!-- Quick-add: type a city name and press Enter (or pick it from the suggestion list) to
+               check it below, instead of scrolling/searching through the checkbox list by hand for
+               every city - a company with many cities on file made that tedious. Purely a faster way
+               to CHECK an existing checkbox, not a separate data path - readCheckedChannels() still
+               just reads whatever ended up checked, typed or clicked. -->
+          <input type="text" id="newCityGroupCityInput" list="newCityGroupCityOptions" placeholder="הקלידו שם עיר והקישו Enter להוספה..." autocomplete="off" style="margin-bottom:8px;" />
+          <datalist id="newCityGroupCityOptions"></datalist>
           <div class="checkbox-group" id="newCityGroupCities"></div>
         </div>
         <div class="form-actions">
@@ -4623,7 +4630,32 @@ async function refreshCityGroupsModal() {
   renderCityGroupsList();
   const cities = await fetchCitiesForCompany(companyId);
   renderChannelCheckboxes("newCityGroupCities", cities, new Set(), "אין ערים זמינות לחברה זו.");
+  document.getElementById("newCityGroupCityOptions").innerHTML = cities.map(c => `<option value="${esc(c)}"></option>`).join("");
+  document.getElementById("newCityGroupCityInput").value = "";
 }
+
+// Checks the matching checkbox for whatever city name is currently typed (exact match against the
+// real city list, same one the checkboxes/datalist are built from - a typo or partial name just does
+// nothing rather than silently adding a fake "city" that was never in the data) and clears the input
+// so the next city can be typed right away.
+function addCityGroupCityByTyping() {
+  const input = document.getElementById("newCityGroupCityInput");
+  const typed = input.value.trim();
+  if (!typed) return;
+  const checkbox = document.querySelector(`#newCityGroupCities input[type="checkbox"][value="${CSS.escape(typed)}"]`);
+  if (checkbox) {
+    checkbox.checked = true;
+    input.value = "";
+  }
+  // No match - leave the typed text in place so the admin can see/correct it, rather than clearing
+  // and silently discarding what they typed.
+}
+document.getElementById("newCityGroupCityInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); addCityGroupCityByTyping(); }
+});
+// Also fires when a suggestion is picked from the datalist dropdown (a real click/selection, not
+// typing + Enter) - same handler either way.
+document.getElementById("newCityGroupCityInput").addEventListener("change", addCityGroupCityByTyping);
 
 const cityGroupsModal = document.getElementById("cityGroupsModalOverlay");
 function closeCityGroupsModal() { cityGroupsModal.classList.remove("open"); }

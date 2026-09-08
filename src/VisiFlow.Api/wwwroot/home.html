@@ -3484,7 +3484,22 @@ const DIST_DAY_COLS = [
   { key: "Sunday", label: "ראשון" }, { key: "Monday", label: "שני" }, { key: "Tuesday", label: "שלישי" },
   { key: "Wednesday", label: "רביעי" }, { key: "Thursday", label: "חמישי" }, { key: "Friday", label: "שישי" }, { key: "Saturday", label: "שבת" }
 ];
-function customerLookup() { return new Map(liveCustomers.map(c => [c.CustomerNumber, c])); }
+// Memoized against the liveCustomers ARRAY REFERENCE (always reassigned wholesale when customer data
+// changes, never mutated in place - see every `liveCustomers = ...` site) - this used to rebuild the
+// whole Map from scratch on every single call, and it's called from inside table `text`/`render`
+// callbacks that run per-column PER-ROW on every render (initial load, every keystroke in a filter box,
+// every sort) - for a company with hundreds/thousands of customers and distribution-day/visit-log rows,
+// that was a real, measurable source of the reported slowness (rebuilding an O(customers) Map many
+// times per row, many rows per render).
+let _customerLookupCache = null;
+let _customerLookupSource = null;
+function customerLookup() {
+  if (_customerLookupSource !== liveCustomers) {
+    _customerLookupCache = new Map(liveCustomers.map(c => [c.CustomerNumber, c]));
+    _customerLookupSource = liveCustomers;
+  }
+  return _customerLookupCache;
+}
 
 const distTable = createDataTable({
   tableId: "distTable",

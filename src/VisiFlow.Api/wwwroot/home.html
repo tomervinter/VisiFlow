@@ -2762,7 +2762,7 @@ function renderAgentMeetingCountsTable(agentMeetingCounts) {
   // "מתוכנן לחודש הנוכחי" (not "הנבחר") is deliberate - this whole table stays pinned to the real
   // current month regardless of the dashboard's own month picker (see the fetch above), so labeling it
   // "selected month" would misdescribe what's actually being counted.
-  const head = `<thead><tr><th>ערוץ מכר</th><th>סוכן</th><th>מתוכנן להיום</th><th>בוצעו היום</th><th>בוצעו מתחילת החודש עד היום</th><th>מתוכנן לחודש הנוכחי</th></tr></thead>`;
+  const head = `<thead><tr><th>ערוץ מכר</th><th>סוכן</th><th>מתוכנן להיום</th><th>בוצעו היום</th><th>בוצעו מתחילת החודש עד היום</th><th>מתוכנן לחודש הנוכחי</th><th>לא שובצו החודש</th></tr></thead>`;
   const body = entries.map(([agentId, g]) => `
     <tr class="dash-today-row" data-drill-agent-meetings="${esc(agentId)}" style="cursor:pointer;">
       <td>${[...g.channels].map(esc).join(", ") || `<span class="muted">—</span>`}</td>
@@ -2771,17 +2771,20 @@ function renderAgentMeetingCountsTable(agentMeetingCounts) {
       <td><span class="mono">${fmtNumber(g.performedToday)}</span></td>
       <td><span class="mono">${fmtNumber(g.performedMonthToDate)}</span></td>
       <td><span class="mono">${fmtNumber(g.month)}</span></td>
+      <td><span class="mono"${g.unscheduled > 0 ? ' style="color:var(--crit-fg);font-weight:700;"' : ""}>${fmtNumber(g.unscheduled)}</span></td>
     </tr>`).join("");
   const totals = entries.reduce((t, [, g]) => ({
     today: t.today + g.today, performedToday: t.performedToday + g.performedToday,
-    performedMonthToDate: t.performedMonthToDate + g.performedMonthToDate, month: t.month + g.month
-  }), { today: 0, performedToday: 0, performedMonthToDate: 0, month: 0 });
+    performedMonthToDate: t.performedMonthToDate + g.performedMonthToDate, month: t.month + g.month,
+    unscheduled: t.unscheduled + g.unscheduled
+  }), { today: 0, performedToday: 0, performedMonthToDate: 0, month: 0, unscheduled: 0 });
   const foot = `<tfoot><tr class="dash-agent-meetings-total">
     <td colspan="2">סה"כ (${fmtNumber(entries.length)} סוכנים)</td>
     <td><span class="mono">${fmtNumber(totals.today)}</span></td>
     <td><span class="mono">${fmtNumber(totals.performedToday)}</span></td>
     <td><span class="mono">${fmtNumber(totals.performedMonthToDate)}</span></td>
     <td><span class="mono">${fmtNumber(totals.month)}</span></td>
+    <td><span class="mono"${totals.unscheduled > 0 ? ' style="color:var(--crit-fg);font-weight:700;"' : ""}>${fmtNumber(totals.unscheduled)}</span></td>
   </tr></tfoot>`;
   table.innerHTML = head + `<tbody>${body}</tbody>` + foot;
 }
@@ -3012,10 +3015,14 @@ async function refreshDashboard() {
   for (const e of todayPlanEntries) {
     if (globalChannel && e.Channel !== globalChannel) continue;
     const id = e.AgentIdNumber || `__noid__:${e.AgentName || "ללא סוכן"}`;
-    if (!agentMeetingCounts.has(id)) agentMeetingCounts.set(id, { name: e.AgentName || "ללא סוכן", channels: new Set(), today: 0, performedToday: 0, performedMonthToDate: 0, month: 0 });
+    if (!agentMeetingCounts.has(id)) agentMeetingCounts.set(id, { name: e.AgentName || "ללא סוכן", channels: new Set(), today: 0, performedToday: 0, performedMonthToDate: 0, month: 0, unscheduled: 0 });
     const g = agentMeetingCounts.get(id);
     if (e.Channel) g.channels.add(e.Channel);
     g.month++;
+    // PlannedDate is null when the generator couldn't find the agent any open capacity this month
+    // (see VisitPlanGenerator's "Unscheduled" result) - already silently folded into "month" above,
+    // but worth surfacing on its own so a full agent isn't hidden behind a normal-looking total.
+    if (!e.PlannedDate) g.unscheduled++;
     customerToAgentMeetingsId.set(e.CustomerNumber, id);
     if ((e.PlannedDate || "").slice(0, 10) === todayIso) {
       g.today++;

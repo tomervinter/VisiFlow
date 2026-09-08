@@ -1871,6 +1871,30 @@ async function withLoading(btn, fn, loadingText = "מבצע...") {
   }
 }
 
+/* ==================== ERROR EXPLANATIONS ====================
+   The server almost always writes a specific Hebrew message into a failed response's body
+   (Results.BadRequest("..."), etc.) - that's passed through unchanged below. But a handful of failures
+   never reach the app's own code at all and come back with a COMPLETELY EMPTY body, so showing it
+   directly produces a bare "שגיאה: " that explains nothing (this is exactly what a session that expired
+   - or was never logged in on this browser - looks like: the cookie-auth middleware's
+   OnRedirectToLogin/OnRedirectToAccessDenied in Program.cs only set the 401/403 status code, they never
+   write a body). Every "שגיאה: ..." message in this file goes through this so a blank server response
+   still tells the admin something concrete instead of nothing. */
+async function describeError(res) {
+  const body = (await res.text()).trim();
+  if (body) return body;
+  const byStatus = {
+    401: "פג תוקף ההתחברות שלכם (או שהיא נחסמה) - רעננו את הדף והתחברו מחדש, ואז נסו שוב.",
+    403: "אין לכם הרשאה לבצע את הפעולה הזו.",
+    413: "הקובץ/הבקשה גדולים מדי מבחינת השרת - נסו קובץ קטן יותר, או פצלו אותו לכמה חלקים.",
+    429: "יותר מדי בקשות בזמן קצר - המתינו כמה דקות ונסו שוב.",
+    502: "תקלה זמנית בשרת (Bad Gateway) - נסו שוב בעוד רגע; אם זה חוזר, ייתכן שהשרת עדיין באתחול.",
+    503: "השרת אינו זמין כרגע (Service Unavailable) - נסו שוב בעוד רגע.",
+    504: "השרת לא הגיב בזמן (Gateway Timeout) - ייתכן עומס זמני או חיבור אינטרנט איטי. נסו שוב."
+  };
+  return byStatus[res.status] || `השרת החזיר שגיאה ללא פירוט (קוד HTTP ${res.status}) - נסו שוב, ואם זה חוזר פנו לתמיכה.`;
+}
+
 /* ==================== VIEW SWITCHING ==================== */
 const VIEW_TITLES = {
   dashboard: ["בית", "תמונת מצב כללית"],
@@ -2244,7 +2268,7 @@ document.getElementById("adminCompaniesList").addEventListener("click", async (e
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ IsActive: nextActive })
         });
-        if (!res.ok) { alert(await res.text()); return; }
+        if (!res.ok) { alert(await describeError(res)); return; }
         await loadCompanies();
       } catch { alert("שגיאת תקשורת עם השרת"); }
     });
@@ -2279,7 +2303,7 @@ document.getElementById("btnConfirmDeleteCompany").addEventListener("click", asy
   msg.className = "form-msg"; msg.textContent = "מוחק...";
   try {
     const res = await fetch(`/api/companies/${deleteCompanyId}`, { method: "DELETE" });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await res.text(); btn.disabled = false; return; }
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await describeError(res); btn.disabled = false; return; }
     msg.className = "form-msg success"; msg.textContent = "החברה נמחקה.";
     await loadCompanies();
     refreshAllCompanyScopedViews();
@@ -2298,7 +2322,7 @@ document.getElementById("addCompanyForm").addEventListener("submit", async (e) =
   fd.append("Name", name);
   try {
     const res = await fetch("/api/companies", { method: "POST", body: fd });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
     const created = await res.json();
     msg.className = "form-msg success"; msg.textContent = `החברה "${created.Name}" נוספה בהצלחה - היא כבר נבחרת למעלה.`;
     nameInput.value = "";
@@ -3120,7 +3144,7 @@ function handleImportFile(file) {
   msg.className = "form-msg"; msg.textContent = "טוען...";
   fetch("/api/customers/import", { method: "POST", body: fd })
     .then(async (res) => {
-      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
       const result = await res.json();
       const parts = [`נוספו ${result.Created} לקוחות חדשים, עודכנו ${result.Updated} לקוחות קיימים.`];
       if (result.Errors.length > 0) parts.push(`${result.Errors.length} שורות נפסלו: ${result.Errors.slice(0, 5).join(" · ")}${result.Errors.length > 5 ? " ..." : ""}`);
@@ -3187,7 +3211,7 @@ btnConfirmDeleteCustomers.addEventListener("click", async () => {
   msg.className = "form-msg"; msg.textContent = "מוחק...";
   try {
     const res = await fetch(`/api/customers?companyId=${companyId}&year=${ym.year}&month=${ym.month}`, { method: "DELETE" });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; btnConfirmDeleteCustomers.disabled = false; return; }
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; btnConfirmDeleteCustomers.disabled = false; return; }
     const result = await res.json();
     msg.className = "form-msg success"; msg.textContent = `נמחקו ${result.Deleted} לקוחות.`;
     await refreshCustomersView();
@@ -3268,7 +3292,7 @@ document.getElementById("reasonsList").addEventListener("click", async (e) => {
   await withLoading(btn, async () => {
     try {
       const res = await fetch(`/api/nonvisitreasons/${btn.dataset.id}`, { method: "DELETE" });
-      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await res.text(); return; }
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await describeError(res); return; }
       await refreshReasonsView();
     } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
   }, "מוחק...");
@@ -3286,7 +3310,7 @@ document.getElementById("reasonsList").addEventListener("click", async (e) => {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ IsActive: nextActive })
       });
-      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await res.text(); return; }
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = await describeError(res); return; }
       await refreshReasonsView();
     } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
   }, "מבצע...");
@@ -3439,7 +3463,7 @@ document.getElementById("btnDeleteVlSelected").addEventListener("click", async (
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ Ids: [...vlSelected] })
       });
-      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
       const result = await res.json();
       msg.className = "form-msg success"; msg.textContent = `נמחקו ${result.Deleted} שורות.`;
       await refreshVisitLogView();
@@ -3553,7 +3577,7 @@ function handleDistFile(file) {
   msg.className = "form-msg"; msg.textContent = "טוען...";
   fetch("/api/distributiondays/import", { method: "POST", body: fd })
     .then(async (res) => {
-      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
       const result = await res.json();
       const scopeTxt = applyToWholeYear ? `על פני כל 12 חודשי ${ym.year}` : `עבור ${HE_MONTHS[ym.month - 1]} ${ym.year}`;
       const parts = [`נוספו ${result.Created} רשומות חדשות, עודכנו ${result.Updated} רשומות קיימות (${scopeTxt}).`];
@@ -3613,7 +3637,7 @@ btnConfirmDeleteDist.addEventListener("click", async () => {
   msg.className = "form-msg"; msg.textContent = "מוחק...";
   try {
     const res = await fetch(`/api/distributiondays?companyId=${companyId}`, { method: "DELETE" });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; btnConfirmDeleteDist.disabled = false; return; }
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; btnConfirmDeleteDist.disabled = false; return; }
     const result = await res.json();
     msg.className = "form-msg success"; msg.textContent = `נמחקו ${result.Deleted} רשומות.`;
     await refreshDistView();
@@ -3766,7 +3790,7 @@ async function applyVisitStandardToSelection(visitsPerWeek) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ CompanyId: companyId, CustomerNumbers: [...vsSelected], RequiredVisitsPerWeek: visitsPerWeek })
     });
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
     const result = await res.json();
     msg.className = "form-msg success"; msg.textContent = `התקן עודכן עבור ${result.Updated} לקוחות.`;
     vsSelected.clear();
@@ -4064,7 +4088,7 @@ async function saveVpWeights(msgElId = "vpWeightsMsg", btnId = "btnSaveWeights")
   await withLoading(btn, async () => {
     try {
       const res = await fetch("/api/visitplan/weights", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
       msg.className = "form-msg success"; msg.textContent = "ההגדרות נשמרו! ניתן ליצור תוכנית מחדש כדי שהשינוי ישפיע.";
       vpTouchedWeights = new Set(); // the saved values are the new baseline - next edit starts fresh
     } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
@@ -4236,7 +4260,7 @@ document.getElementById("vpTable").addEventListener("change", async (e) => {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ NewDate: input.value, Source: "Admin", ReasonText: null })
     });
-    if (!res.ok) alert(`שגיאה: ${await res.text()}`);
+    if (!res.ok) alert(`שגיאה: ${await describeError(res)}`);
   } catch { alert("שגיאת תקשורת עם השרת"); }
   await refreshVpTable();
 });
@@ -4256,7 +4280,7 @@ async function saveVpNote(planId, value) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ Note: value })
     });
-    if (!res.ok) alert(`שגיאה: ${await res.text()}`);
+    if (!res.ok) alert(`שגיאה: ${await describeError(res)}`);
   } catch { alert("שגיאת תקשורת עם השרת"); }
   await refreshVpTable();
 }
@@ -4412,7 +4436,7 @@ document.getElementById("btnMoveVpSelectedToNextMonth").addEventListener("click"
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ Ids: [...vpSelected], NewDate: newDate })
       });
-      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
       const result = await res.json();
       msg.className = "form-msg success"; msg.textContent = `${result.Rescheduled} פגישות הועברו ל-${fmtDate(newDate)}.`;
       vpSelected.clear();
@@ -4432,7 +4456,7 @@ document.getElementById("btnDeleteVpSelected").addEventListener("click", async (
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ Ids: [...vpSelected] })
       });
-      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
       const result = await res.json();
       msg.className = "form-msg success"; msg.textContent = `נמחקו ${result.Deleted} שורות.`;
       await refreshVpTable();
@@ -4486,7 +4510,7 @@ document.getElementById("btnGeneratePlan").addEventListener("click", async () =>
       if (!proceed) { msg.className = "form-msg"; msg.textContent = "יצירת התוכנית בוטלה - הנתונים הקיימים לא נמחקו."; btn.disabled = false; return; }
       res = await generateVpPlan(companyId, ym, true);
     }
-    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; btn.disabled = false; return; }
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; btn.disabled = false; return; }
     const result = await res.json();
     // Unscheduled > 0 is NOT a failure - the plan was created successfully, just not everyone fit in
     // the available daily capacity. Styled as a warning (not error/red) so a partial fit doesn't read
@@ -4516,7 +4540,7 @@ document.getElementById("btnOptimizeByCity").addEventListener("click", async () 
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ CompanyId: companyId, Year: ym.year, Month: ym.month })
       });
-      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
       const result = await res.json();
       if (result.SwapsApplied === 0) {
         msg.className = "form-msg"; msg.textContent = "לא נמצאו שיפורים אפשריים - התוכנית כבר מרוכזת ככל שניתן לפי האילוצים הקיימים.";
@@ -4604,7 +4628,7 @@ document.getElementById("btnAddCityGroup").addEventListener("click", async () =>
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ CompanyId: companyId, Name: name, Cities: cities })
       });
-      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
       msg.className = "form-msg success"; msg.textContent = "האשכול נוסף בהצלחה.";
       document.getElementById("newCityGroupName").value = "";
       await refreshCityGroupsModal();
@@ -4687,9 +4711,15 @@ async function attemptLogin() {
     if (!res.ok) {
       msg.className = "form-msg error";
       // 403 = correct credentials but blocked for a real reason (frozen company) - show that specific
-      // message. Any other failure (401 etc.) stays generic, same as always, so a wrong password never
-      // reveals whether the username itself exists.
-      msg.textContent = res.status === 403 ? await res.text() : "שם משתמש או סיסמה שגויים";
+      // message. 429 = too many failed attempts from this IP in the last 15 minutes (server-side login
+      // rate limit) - the server sends no body for this one (see Program.cs's RateLimiter OnRejected),
+      // so it needs its own explicit message here rather than falling into the generic branch, which
+      // would wrongly tell someone with the CORRECT password that their password is wrong. Any other
+      // failure (401 etc.) stays generic, same as always, so a wrong password never reveals whether the
+      // username itself exists.
+      msg.textContent = res.status === 403 ? await res.text()
+        : res.status === 429 ? "יותר מדי ניסיונות התחברות כושלים - נחסמתם זמנית. נסו שוב בעוד כמה דקות."
+        : "שם משתמש או סיסמה שגויים";
       btn.disabled = false; return;
     }
     CURRENT_USER = await res.json();
@@ -4788,7 +4818,7 @@ document.getElementById("addUserForm").addEventListener("submit", async (e) => {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ CompanyId: companyId, Username: username, DisplayName: displayName, Password: password, AllowedChannels: allowedChannels })
       });
-      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
       msg.className = "form-msg success"; msg.textContent = "המשתמש נוצר בהצלחה.";
       document.getElementById("addUserForm").reset();
       await refreshUsersView();
@@ -4814,7 +4844,7 @@ document.getElementById("btnConfirmResetPassword").addEventListener("click", asy
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ Password: password })
       });
-      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
       msg.className = "form-msg success"; msg.textContent = "הסיסמה עודכנה!";
       setTimeout(closeResetPasswordModal, 900);
     } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
@@ -4838,7 +4868,7 @@ document.getElementById("btnConfirmEditChannels").addEventListener("click", asyn
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ AllowedChannels: allowedChannels })
       });
-      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await res.text()}`; return; }
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
       msg.className = "form-msg success"; msg.textContent = "הערוצים עודכנו!";
       await refreshUsersView();
       setTimeout(closeEditChannelsModal, 900);

@@ -123,6 +123,7 @@
     font-size: 1rem; color: var(--brand); font-weight: 600; text-align: center;
   }
   .empty-state { text-align: center; color: var(--text-muted); padding: 40px 20px; font-size: 1.05rem; }
+  .error-state { text-align: center; color: var(--crit-fg); background: var(--crit-bg); border-radius: 10px; padding: 20px; font-size: 0.98rem; }
   .loading-state { text-align: center; color: var(--text-muted); padding: 24px 20px; font-size: 1rem; }
 
   /* Compact list row (screenList) - tap anywhere on the row to expand/collapse the full card inline
@@ -368,6 +369,7 @@
     <div class="loading-state" id="loadingState" style="display:none;">טוען...</div>
     <div id="customerCards"></div>
     <div class="empty-state" id="emptyState" style="display:none;">אין ביקורים מתוכננים לתאריך זה.</div>
+    <div class="error-state" id="errorState" style="display:none;"></div>
   </div>
 
 </div>
@@ -399,6 +401,22 @@
 function esc(s) {
   if (s === null || s === undefined) return "";
   return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// The server almost always writes a specific Hebrew message into a failed response's body - passed
+// through unchanged. Some failures never reach the app's own code (a proxy/gateway hiccup) and come
+// back with an empty body, which would otherwise surface as a blank/meaningless error to a field agent
+// mid-visit - this fills in a plain-language reason for the status codes that show up that way.
+async function describeError(res) {
+  const body = (await res.text()).trim();
+  if (body) return body;
+  const byStatus = {
+    413: "הקובץ/הבקשה גדולים מדי מבחינת השרת.",
+    502: "תקלה זמנית בשרת - נסו שוב בעוד רגע.",
+    503: "השרת אינו זמין כרגע - נסו שוב בעוד רגע.",
+    504: "השרת לא הגיב בזמן - ייתכן חיבור אינטרנט איטי. נסו שוב."
+  };
+  return byStatus[res.status] || `השרת החזיר שגיאה ללא פירוט (קוד ${res.status}) - נסו שוב.`;
 }
 
 const AGENT_ID_KEY = "visiflowAgentIdNumber";
@@ -633,12 +651,12 @@ function fmtTimeHHMM(dateIso) {
 
 async function loadAgentVisitPlan(agentIdNumber, dateIso) {
   const res = await fetch(`/api/agent/visitplan?agentIdNumber=${encodeURIComponent(agentIdNumber)}&date=${encodeURIComponent(dateIso)}`);
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await describeError(res));
   agentVisits = await res.json();
 }
 async function loadAgentVisitPlanRange(agentIdNumber, startIso, endIso) {
   const res = await fetch(`/api/agent/visitplan/range?agentIdNumber=${encodeURIComponent(agentIdNumber)}&startDate=${startIso}&endDate=${endIso}`);
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await describeError(res));
   agentVisits = await res.json();
 }
 
@@ -658,9 +676,11 @@ async function refreshList() {
   // that are genuine navigation (date/range picked, search result jumped to) explicitly scroll back
   // to the top themselves right after calling this, since landing on new content there SHOULD reset.
   const scrollY = window.scrollY;
+  const errorEl = document.getElementById("errorState");
   document.getElementById("loadingState").style.display = "block";
   document.getElementById("customerCards").innerHTML = "";
   document.getElementById("emptyState").style.display = "none";
+  errorEl.style.display = "none";
   try {
     if (viewMode === "day") {
       await loadAgentVisitPlan(agentIdNumber, selectedDate);
@@ -668,8 +688,13 @@ async function refreshList() {
       const r = viewMode === "week" ? weekRangeOf(selectedDate) : monthRangeOf(selectedDate);
       await loadAgentVisitPlanRange(agentIdNumber, r.start, r.end);
     }
-  } catch {
+  } catch (err) {
     agentVisits = [];
+    // Was previously silent (agentVisits just went empty, indistinguishable from "no visits today") -
+    // now shows the actual reason (server message, or describeError's fallback for an empty-bodied
+    // failure) so a real connectivity/server problem doesn't look identical to a genuinely empty day.
+    errorEl.textContent = `לא ניתן היה לטעון את רשימת הביקורים: ${(err && err.message) || "שגיאת תקשורת עם השרת"}`;
+    errorEl.style.display = "block";
   }
   document.getElementById("loadingState").style.display = "none";
   document.getElementById("dayBanner").textContent = currentBannerText();
@@ -687,8 +712,8 @@ async function identify(agentIdNumber) {
   document.getElementById("visitDateInput").value = selectedDate;
   try {
     await loadAgentVisitPlan(agentIdNumber, selectedDate);
-  } catch {
-    msg.textContent = "שגיאת תקשורת עם השרת";
+  } catch (err) {
+    msg.textContent = (err && err.message) || "שגיאת תקשורת עם השרת";
     return;
   }
   localStorage.setItem(AGENT_ID_KEY, agentIdNumber);
@@ -823,7 +848,7 @@ async function submitVisit(planEntryId, outcome, reasonId, time = null) {
     Time: time
   };
   const res = await fetch("/api/customervisits", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await describeError(res));
   return res.json();
 }
 
@@ -856,9 +881,9 @@ document.getElementById("customerCards").addEventListener("click", async (e) => 
     try {
       await submitVisit(key, "Visited", null);
       await refreshList();
-    } catch {
+    } catch (err) {
       const msgEl = document.querySelector(`[data-msg="${key}"]`);
-      if (msgEl) { msgEl.className = "cc-msg error"; msgEl.textContent = "שגיאה בשמירה - נסו שוב"; }
+      if (msgEl) { msgEl.className = "cc-msg error"; msgEl.textContent = `שגיאה בשמירה: ${(err && err.message) || "נסו שוב"}`; }
     }
     return;
   }
@@ -881,9 +906,9 @@ document.getElementById("customerCards").addEventListener("click", async (e) => 
     try {
       await submitVisit(key, "Visited", null, input.value);
       await refreshList();
-    } catch {
+    } catch (err) {
       const msgEl = document.querySelector(`[data-msg="${key}"]`);
-      if (msgEl) { msgEl.className = "cc-msg error"; msgEl.textContent = "שגיאה בשמירה - נסו שוב"; }
+      if (msgEl) { msgEl.className = "cc-msg error"; msgEl.textContent = `שגיאה בשמירה: ${(err && err.message) || "נסו שוב"}`; }
     }
     return;
   }
@@ -903,9 +928,9 @@ document.getElementById("customerCards").addEventListener("click", async (e) => 
     const reasonText = select.selectedOptions[0] ? select.selectedOptions[0].textContent : "";
     try {
       await submitVisit(key, "NotVisited", reasonId);
-    } catch {
+    } catch (err) {
       const msgEl = document.querySelector(`[data-msg="${key}"]`);
-      if (msgEl) { msgEl.className = "cc-msg error"; msgEl.textContent = "שגיאה בשמירה - נסו שוב"; }
+      if (msgEl) { msgEl.className = "cc-msg error"; msgEl.textContent = `שגיאה בשמירה: ${(err && err.message) || "נסו שוב"}`; }
       return;
     }
     showReschedulePrompt(key, reasonText);
@@ -991,10 +1016,10 @@ async function doReschedule(planEntryId, newDateIso, reasonText) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ NewDate: newDateIso, Source: "Agent", ReasonText: reasonText || null })
     });
-    if (!res.ok) throw new Error(await res.text());
-  } catch {
+    if (!res.ok) throw new Error(await describeError(res));
+  } catch (err) {
     const msgEl = document.getElementById("reschedModalMsg");
-    if (msgEl) { msgEl.className = "cc-msg error"; msgEl.textContent = "שגיאה בהזזת הפגישה - נסו שוב"; }
+    if (msgEl) { msgEl.className = "cc-msg error"; msgEl.textContent = `שגיאה בהזזת הפגישה: ${(err && err.message) || "נסו שוב"}`; }
     return;
   }
   closeReschedModal();

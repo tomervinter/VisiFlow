@@ -215,6 +215,17 @@
   .cc-status-badge.visited { background: var(--good-bg); color: var(--good-fg); }
   .cc-status-badge.notvisited { background: var(--crit-bg); color: var(--crit-fg); }
   .cc-status-badge button { background: transparent; border: none; text-decoration: underline; color: inherit; font-family: inherit; font-size: 0.9rem; cursor: pointer; }
+  .cc-status-badge .cc-status-actions { display: flex; gap: 10px; flex-shrink: 0; }
+  /* Shown after tapping "עריכת שעה" - lets an agent who forgot to mark a visit at the actual time
+     correct the recorded time retroactively (see submitVisit's optional `time` param). */
+  .cc-time-edit-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .cc-time-edit-row input[type="time"] {
+    flex: 1; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--offwhite); color: var(--text); font-family: inherit; font-size: 0.95rem;
+  }
+  .cc-time-edit-row button { padding: 10px 14px; border-radius: 8px; border: none; font-family: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer; }
+  .cc-time-edit-row button[data-action="save-time"] { background: var(--good-fg); color: white; }
+  .cc-time-edit-row button[data-action="cancel-time-edit"] { background: var(--offwhite); border: 1px solid var(--border); color: var(--text); }
   .cc-reason-row { display: flex; gap: 8px; margin-top: 8px; }
   .cc-reason-row select {
     /* flex items default to min-width:auto, which lets a <select> refuse to shrink below its
@@ -470,7 +481,21 @@ function renderCustomerCard(c) {
 
   let statusHtml;
   if (c.Outcome === "Visited") {
-    statusHtml = `<div class="cc-status-badge visited"><span>✓ סומן כ"ביקרתי"</span><button type="button" data-action="change-status" data-key="${key}">שינוי</button></div>`;
+    const recordedTime = fmtTimeHHMM(c.VisitRecordedAt);
+    statusHtml = `
+      <div class="cc-status-badge visited">
+        <span>✓ סומן כ"ביקרתי"${recordedTime ? ` בשעה ${recordedTime}` : ""}</span>
+        <span class="cc-status-actions">
+          <button type="button" data-action="edit-time" data-key="${key}">עריכת שעה</button>
+          <button type="button" data-action="change-status" data-key="${key}">שינוי</button>
+        </span>
+      </div>
+      <div class="cc-time-edit-row" data-time-edit-row="${key}" style="display:none;">
+        <input type="time" data-time-input="${key}" value="${recordedTime || ""}" />
+        <button type="button" data-action="save-time" data-key="${key}">שמירה</button>
+        <button type="button" data-action="cancel-time-edit" data-key="${key}">ביטול</button>
+      </div>
+      <div class="cc-msg" data-msg="${key}"></div>`;
   } else if (c.Outcome === "NotVisited") {
     statusHtml = `<div class="cc-status-badge notvisited"><span>✗ לא ביקרתי - ${esc(c.ReasonText || "")}</span><button type="button" data-action="change-status" data-key="${key}">שינוי</button></div>`;
   } else {
@@ -595,6 +620,15 @@ async function toggleRowExpanded(key) {
 function formatBannerDate(dateIso) {
   const d = new Date(dateIso + "T00:00:00");
   return d.toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" });
+}
+// "HH:MM" for a CustomerVisit.CreatedAt (visit-recorded-at) timestamp - server sends a plain
+// "2026-09-08T10:30:00"-style string with no timezone suffix, which the Date constructor treats as
+// local wall-clock time already, matching how this value was entered (see submitVisit's `time` param).
+function fmtTimeHHMM(dateIso) {
+  if (!dateIso) return "";
+  const d = new Date(dateIso);
+  if (isNaN(d.getTime())) return "";
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 async function loadAgentVisitPlan(agentIdNumber, dateIso) {
@@ -777,7 +811,7 @@ document.getElementById("btnSwitchAgent").addEventListener("click", () => {
 // entry's own id disambiguates which row an action applies to. VisitDate/isEarly are derived from
 // that specific entry's own PlannedDate, not the global day-view selectedDate, so acting on a card
 // from a week/month list always records against the date the card is actually showing.
-async function submitVisit(planEntryId, outcome, reasonId) {
+async function submitVisit(planEntryId, outcome, reasonId, time = null) {
   const customer = agentVisits.find(c => String(c.PlanEntryId) === String(planEntryId));
   if (!customer) throw new Error("entry not found");
   const visitDate = customer.PlannedDate.slice(0, 10);
@@ -785,7 +819,8 @@ async function submitVisit(planEntryId, outcome, reasonId) {
   const body = {
     CompanyId: customer.CompanyId, CustomerNumber: customer.CustomerNumber, VisitDate: visitDate,
     AgentName: customer.AgentName, Outcome: outcome, NonVisitReasonId: reasonId,
-    Notes: isEarly ? `הפגישה הוקדמה - בוצעה בפועל ב-${formatBannerDate(todayIso())} עבור תאריך מתוכנן ${formatBannerDate(visitDate)}` : null
+    Notes: isEarly ? `הפגישה הוקדמה - בוצעה בפועל ב-${formatBannerDate(todayIso())} עבור תאריך מתוכנן ${formatBannerDate(visitDate)}` : null,
+    Time: time
   };
   const res = await fetch("/api/customervisits", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(await res.text());
@@ -820,6 +855,31 @@ document.getElementById("customerCards").addEventListener("click", async (e) => 
   if (action === "mark-visited") {
     try {
       await submitVisit(key, "Visited", null);
+      await refreshList();
+    } catch {
+      const msgEl = document.querySelector(`[data-msg="${key}"]`);
+      if (msgEl) { msgEl.className = "cc-msg error"; msgEl.textContent = "שגיאה בשמירה - נסו שוב"; }
+    }
+    return;
+  }
+  // Corrects the recorded visit time for an already-marked "ביקרתי" - e.g. the agent forgot to tap it
+  // during the actual visit and is marking it later, so the auto-captured time would otherwise show
+  // whenever they happened to remember instead of when they were actually there.
+  if (action === "edit-time") {
+    const row = document.querySelector(`[data-time-edit-row="${key}"]`);
+    if (row) row.style.display = "flex";
+    return;
+  }
+  if (action === "cancel-time-edit") {
+    const row = document.querySelector(`[data-time-edit-row="${key}"]`);
+    if (row) row.style.display = "none";
+    return;
+  }
+  if (action === "save-time") {
+    const input = document.querySelector(`[data-time-input="${key}"]`);
+    if (!input || !input.value) return;
+    try {
+      await submitVisit(key, "Visited", null, input.value);
       await refreshList();
     } catch {
       const msgEl = document.querySelector(`[data-msg="${key}"]`);

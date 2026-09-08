@@ -1257,6 +1257,14 @@ app.MapPost("/api/customervisits", async (CreateCustomerVisitRequest req, VisiFl
         visit = new CustomerVisit { CompanyId = req.CompanyId, CustomerNumber = req.CustomerNumber, VisitDate = visitDate, CreatedAt = DateTime.UtcNow };
         db.CustomerVisits.Add(visit);
     }
+    // Lets an agent correct the recorded visit TIME after the fact (e.g. they forgot to tap "ביקרתי"
+    // during the actual visit and are marking it later - without this, CreatedAt would show whenever
+    // they happened to remember, not when they were actually there). Combined with the visit's own
+    // VisitDate (not "today") since that's the date already shown next to this time everywhere it's
+    // displayed (see CustomerVisitDto/the visit-log's separate date+time columns) - only the time-of-day
+    // portion is ever agent-editable, never the date itself.
+    if (!string.IsNullOrWhiteSpace(req.Time) && TimeSpan.TryParse(req.Time, out var visitTimeOfDay))
+        visit.CreatedAt = visit.VisitDate.Date.Add(visitTimeOfDay);
     visit.AgentName = string.IsNullOrWhiteSpace(req.AgentName) ? null : req.AgentName;
     visit.Outcome = outcome;
     visit.NonVisitReasonId = outcome == VisitOutcome.NotVisited ? req.NonVisitReasonId : null;
@@ -1908,7 +1916,7 @@ record CustomerVisitDto(
 
 record CreateCustomerVisitRequest(
     int CompanyId, string CustomerNumber, DateTime VisitDate, string? AgentName,
-    string Outcome, int? NonVisitReasonId, string? Notes);
+    string Outcome, int? NonVisitReasonId, string? Notes, string? Time = null);
 
 record AgentVisitPlanEntryDto(
     int PlanEntryId, int CompanyId, string CustomerNumber, string CustomerName, string? Phone, string? Address,
@@ -1916,7 +1924,7 @@ record AgentVisitPlanEntryDto(
     DateTime PlannedDate, decimal PriorityScore, string? Outcome, string? ReasonText, int? VisitId,
     decimal? RequiredVisitsPerWeek, DateTime? LastVisitDate, int? DaysSinceLastVisit, string? AdminNote,
     bool DistSunday, bool DistMonday, bool DistTuesday, bool DistWednesday, bool DistThursday, bool DistFriday, bool DistSaturday, bool DistDefined,
-    int? VisitOrder)
+    int? VisitOrder, DateTime? VisitRecordedAt)
 {
     public static AgentVisitPlanEntryDto From(VisitPlanEntry e, Customer c, CustomerVisit? visit,
         DateTime? lastVisitDate, int? daysSinceLastVisit, CustomerDistributionDay? dist, decimal? requiredVisitsPerWeek) => new(
@@ -1926,7 +1934,7 @@ record AgentVisitPlanEntryDto(
         requiredVisitsPerWeek, lastVisitDate, daysSinceLastVisit, e.AdminNote,
         dist?.Sunday ?? false, dist?.Monday ?? false, dist?.Tuesday ?? false, dist?.Wednesday ?? false,
         dist?.Thursday ?? false, dist?.Friday ?? false, dist?.Saturday ?? false, dist != null,
-        e.VisitOrder);
+        e.VisitOrder, visit?.CreatedAt);
 }
 
 record AgentSearchResultDto(string CustomerNumber, string CustomerName, DateTime PlannedDate);

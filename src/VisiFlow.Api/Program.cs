@@ -1356,7 +1356,14 @@ app.MapGet("/api/customervisits", async (int companyId, bool? allChannels, HttpC
     // Channel/City are enriched from the customer snapshot matching the VISIT's own month (see
     // Customer.cs) - the closest approximation of "what the customer looked like around that visit".
     // Falls back to null gracefully if no snapshot exists for that exact month.
-    var customerByKey = (await db.Customers.Where(c => c.CompanyId == companyId).ToListAsync())
+    // Narrowed to only the customer numbers actually present among these visits, rather than every
+    // monthly snapshot the company has ever had - a customer number that never appears in `visits`
+    // could never be looked up below anyway, so this changes nothing in the result, only how much gets
+    // loaded from the database. Matters a lot for a company with a long history: without this, every
+    // call here reloaded every customer x every month ever uploaded, even ones with zero visits.
+    var visitCustomerNumbers = visits.Select(v => v.CustomerNumber).Distinct().ToList();
+    var customerByKey = (await db.Customers
+        .Where(c => c.CompanyId == companyId && visitCustomerNumbers.Contains(c.CustomerNumber)).ToListAsync())
         .ToDictionary(c => (c.CustomerNumber, c.Year, c.Month));
     // See /api/customers above for the allChannels bypass - same convention, dashboard-only.
     var allowed = allChannels == true ? null : await ResolveAllowedChannelsAsync(ctx, db);

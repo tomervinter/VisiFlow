@@ -1959,6 +1959,24 @@ const VIEW_TITLES = {
 const VIEW_ACTIVATION_HOOKS = {};
 
 let CURRENT_VIEW_KEY = "dashboard";
+
+// Switching between sidebar tabs used to re-fetch and recompute that whole screen's data from
+// scratch on EVERY click, even a click right back to a screen shown a few seconds ago - the main
+// cause of switching feeling slow once a company has real history (the dashboard and visit log in
+// particular each pull the company's full visit history). This cache skips that redundant refetch
+// when the same view was already loaded for the same company within VIEW_CACHE_TTL_MS.
+// Deliberately only guards THIS click-driven path - any place that calls a VIEW_ACTIVATION_HOOKS
+// function directly after a write (an import, a delete, a plan regeneration, etc.) is unaffected and
+// always gets a real, fresh reload, exactly like before this change.
+const VIEW_CACHE_TTL_MS = 15000;
+// The dashboard aggregates data written from nearly every other screen (customer import, visit-plan
+// generation/optimization, work-calendar edits, ...), most of which don't already self-refresh it the
+// way e.g. the customer-import handler does - caching it here risks showing stale KPIs right after an
+// admin makes a change elsewhere and switches back within the cache window. Every other view's own
+// writes already explicitly call that same view's refresh function directly (bypassing this cache
+// entirely), so they don't have that problem - only the dashboard is excluded.
+const VIEW_CACHE_EXCLUDED = new Set(["dashboard"]);
+const viewLastLoadedAt = {}; // view key -> { companyId, at }
 function activateView(key) {
   CURRENT_VIEW_KEY = key;
   document.querySelectorAll(".nav-item").forEach(b => b.classList.toggle("active", b.dataset.view === key));
@@ -1968,7 +1986,15 @@ function activateView(key) {
   document.getElementById("topbarSub").textContent = VIEW_TITLES[key][1];
   // Pointless on the guide screen itself - there's no guide-guide section to jump to.
   document.getElementById("btnTopbarGuide").style.display = key === "guide" ? "none" : "";
-  if (VIEW_ACTIVATION_HOOKS[key]) VIEW_ACTIVATION_HOOKS[key]();
+  const companyId = selectedCompanyId();
+  const cached = viewLastLoadedAt[key];
+  const isFresh = !VIEW_CACHE_EXCLUDED.has(key) && cached && cached.companyId === companyId
+    && (Date.now() - cached.at) < VIEW_CACHE_TTL_MS;
+  if (VIEW_ACTIVATION_HOOKS[key] && !isFresh) {
+    Promise.resolve(VIEW_ACTIVATION_HOOKS[key]()).then(() => {
+      viewLastLoadedAt[key] = { companyId, at: Date.now() };
+    });
+  }
 }
 document.querySelectorAll(".nav-item").forEach(btn => {
   btn.addEventListener("click", () => activateView(btn.dataset.view));
@@ -2273,6 +2299,12 @@ async function refreshAllCompanyScopedViews() {
     refreshDashboard(), refreshDistView(), refreshWorkCalendarView(), refreshVisitLogView(),
     refreshVisitPlanView(), refreshUsersView(), refreshVsView(), refreshAuditLogView()
   ]);
+  // Every view this function just loaded is fresh as of right now - record that so activateView's
+  // cache (see VIEW_CACHE_TTL_MS) doesn't immediately redo the same fetch on the very next tab click.
+  const companyId = selectedCompanyId();
+  const at = Date.now();
+  ["customers", "nonvisitreasons", "dashboard", "distributiondays", "workcalendar", "visitlog",
+    "visitplan", "users", "visitstandards", "auditlog"].forEach(key => { viewLastLoadedAt[key] = { companyId, at }; });
 }
 
 /* ---- add company modal ---- */

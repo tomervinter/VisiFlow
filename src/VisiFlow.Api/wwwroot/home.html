@@ -24,6 +24,11 @@
        separate from --warn-bg (which reads more amber/orange) per explicit request for yellow. */
     --cal-half-bg: #fef9c3;
     --cal-half-fg: #92720c;
+    /* Dashboard KPI cards: every "daily" card shares one color (blue, the app's own brand color)
+       and every "monthly" card shares a different one (purple) - a single glance says which section
+       a card belongs to, instead of each card's own good/warn/crit severity tint. */
+    --purple-bg: #ede9fe;
+    --purple-fg: #6d28d9;
     --chart-1: #1E40AF; --chart-2: #14b8a6; --chart-3: #f59e0b; --chart-4: #8b5cf6;
     --chart-5: #ec4899; --chart-6: #3B82F6; --chart-7: #64748b; --chart-8: #22c55e;
     --shadow: 0 1px 2px rgba(15,23,42,0.05), 0 4px 16px rgba(15,23,42,0.06);
@@ -53,6 +58,8 @@
       --crit-fg: #f0968a;
       --cal-half-bg: #3a3410;
       --cal-half-fg: #e8d76a;
+      --purple-bg: #2e2250;
+      --purple-fg: #c4b5fd;
       --chart-1: #3B82F6; --chart-2: #2dd4bf; --chart-3: #fbbf24; --chart-4: #a78bfa;
       --chart-5: #f472b6; --chart-6: #60a5fa; --chart-7: #94a3b8; --chart-8: #4ade80;
       --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 8px 24px rgba(0,0,0,0.4);
@@ -309,6 +316,7 @@
   .kpi-card.good::before { background: var(--good-fg); }
   .kpi-card.warn::before { background: var(--warn-fg); }
   .kpi-card.crit::before { background: var(--crit-fg); }
+  .kpi-card.monthly::before { background: var(--purple-fg); }
   .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 8px 22px rgba(15,23,42,0.16); }
   .kpi-card .kpi-icon {
     display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
@@ -317,11 +325,14 @@
   .kpi-card.good .kpi-icon { background: var(--good-bg); color: var(--good-fg); }
   .kpi-card.warn .kpi-icon { background: var(--warn-bg); color: var(--warn-fg); }
   .kpi-card.crit .kpi-icon { background: var(--crit-bg); color: var(--crit-fg); }
+  .kpi-card.monthly .kpi-icon { background: var(--purple-bg); color: var(--purple-fg); }
   .kpi-card .kpi-icon svg { width: 17px; height: 17px; }
   .kpi-card .kpi-n { font-size: 1.7rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; color: var(--text); position: relative; }
   .kpi-card.good .kpi-n { color: var(--good-fg); }
   .kpi-card.warn .kpi-n { color: var(--warn-fg); }
   .kpi-card.crit .kpi-n { color: var(--crit-fg); }
+  .kpi-card.daily .kpi-n { color: var(--brand); }
+  .kpi-card.monthly .kpi-n { color: var(--purple-fg); }
   .kpi-card .kpi-l { font-size: 0.8rem; color: var(--text); font-weight: 600; margin-top: 5px; position: relative; }
   .kpi-card .kpi-sub { font-size: 0.7rem; color: var(--text-muted); margin-top: 3px; position: relative; }
 
@@ -3056,11 +3067,11 @@ async function refreshDashboard() {
   // the label instead, so these cards never claim to be "today" when they're not.
   const todayWord = isRealToday ? "היום" : fmtDate(todayIso);
   renderKpiGrid("dashKpiGridDaily", [
-    { id: "plannedToday", value: fmtNumber(plannedTodayCount), label: `ביקורים מתוכננים ל${todayWord}`, sub: fmtDate(todayIso) },
-    { id: "visitsToday", value: fmtNumber(visitsToday.length), label: `ביקורים שבוצעו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso) },
-    { id: "postponedToday", value: fmtNumber(postponedToday.length), label: `ביקורים שנדחו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso) },
-    { id: "pendingToday", value: fmtNumber(agentsNotReportedToday.length), label: `סוכנים שטרם דיווחו ${todayWord}`, sub: fmtDate(todayIso) },
-    { id: "unplannedToday", value: fmtNumber(unplannedToday.length), label: "ביקורים יזומים עי סוכנים", sub: fmtDate(todayIso) }
+    { id: "plannedToday", value: fmtNumber(plannedTodayCount), label: `ביקורים מתוכננים ל${todayWord}`, sub: fmtDate(todayIso), tier: "daily" },
+    { id: "visitsToday", value: fmtNumber(visitsToday.length), label: `ביקורים שבוצעו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso), tier: "daily" },
+    { id: "postponedToday", value: fmtNumber(postponedToday.length), label: `ביקורים שנדחו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso), tier: "daily" },
+    { id: "pendingToday", value: fmtNumber(agentsNotReportedToday.length), label: `סוכנים שטרם דיווחו ${todayWord}`, sub: fmtDate(todayIso), tier: "daily" },
+    { id: "unplannedToday", value: fmtNumber(unplannedToday.length), label: "ביקורים יזומים עי סוכנים", sub: fmtDate(todayIso), tier: "daily" }
   ]);
   // Visits an agent logged on their own initiative (via customer search in the agent app), not from a
   // plan entry the algorithm generated for the selected month/channel (see CustomerVisit.IsUnplanned).
@@ -3068,11 +3079,11 @@ async function refreshDashboard() {
     && v.VisitDate.slice(0, 4) === String(selYear) && Number(v.VisitDate.slice(5, 7)) === selMonth
     && (!globalChannel || v.Channel === globalChannel));
   renderKpiGrid("dashKpiGridMonthly", [
-    { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel ? `בערוץ ${globalChannel}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים`, tier: "good" },
-    { id: "neglected", value: fmtNumber(neglected.length), label: "לקוחות שלא ביקרנו מעל 30 יום", sub: "לחצו לרשימה המלאה", tier: neglected.length === 0 ? "good" : (neglected.length > kpiCustomers.length * 0.2 ? "crit" : "warn") },
-    { id: "decliningNeglected", value: fmtNumber(decliningNeglected.length), label: "יורדים במכר וללא ביקור מספק", sub: "ירידה במכר + לא ביקרנו מעל 30 יום", tier: decliningNeglected.length === 0 ? "good" : "crit" },
-    { id: "unscheduled", value: fmtNumber(unscheduled.length), label: "לקוחות שלא שובצו", sub: "אין קיבולת פנויה ביומן הסוכן - לחצו לרשימה", tier: unscheduled.length === 0 ? "good" : "crit" },
-    { id: "unplannedVisits", value: fmtNumber(unplannedThisMonth.length), label: "ביקורים יזומים עי סוכנים", sub: "לא היו חלק מתוכנית הביקורים המתוכננת" }
+    { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel ? `בערוץ ${globalChannel}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים`, tier: "monthly" },
+    { id: "neglected", value: fmtNumber(neglected.length), label: "לקוחות שלא ביקרנו מעל 30 יום", sub: "לחצו לרשימה המלאה", tier: "monthly" },
+    { id: "decliningNeglected", value: fmtNumber(decliningNeglected.length), label: "יורדים במכר וללא ביקור מספק", sub: "ירידה במכר + לא ביקרנו מעל 30 יום", tier: "monthly" },
+    { id: "unscheduled", value: fmtNumber(unscheduled.length), label: "לקוחות שלא שובצו", sub: "אין קיבולת פנויה ביומן הסוכן - לחצו לרשימה", tier: "monthly" },
+    { id: "unplannedVisits", value: fmtNumber(unplannedThisMonth.length), label: "ביקורים יזומים עי סוכנים", sub: "לא היו חלק מתוכנית הביקורים המתוכננת", tier: "monthly" }
   ]);
   renderReasonsChart(reasonAgg);
   renderDonutChart("dashAgentDonut", agentComposition, { centerLabel: "לקוחות", drillAttr: "drill-agent-donut", inlineCount: true, showPct: false });

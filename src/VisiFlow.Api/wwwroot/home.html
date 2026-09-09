@@ -275,6 +275,27 @@
     background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.9rem; padding: 4px;
   }
   .dash-global-filter-bar .dash-mini-filter .btn-icon:hover { color: var(--crit-fg); }
+  /* Custom checkbox-dropdown for the channel filter (needs to allow more than one selection at once) -
+     same pill look as the plain <select> filters next to it, just a <button>+popover instead. */
+  .dash-multiselect { position: relative; }
+  .dash-multiselect-btn {
+    font-size: 0.84rem; font-weight: 600; color: var(--brand); background: var(--ice);
+    padding: 7px 14px; border-radius: 999px; border: 1px solid transparent; cursor: pointer;
+    font-family: inherit; transition: border-color 0.12s, background 0.12s;
+  }
+  .dash-multiselect-btn:hover { border-color: var(--brand); }
+  .dash-multiselect-btn:focus { outline: 2px solid var(--electric); outline-offset: 1px; }
+  .dash-multiselect-panel {
+    position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; background: var(--white);
+    border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 6px;
+    min-width: 170px; max-height: 260px; overflow-y: auto;
+  }
+  .dash-multiselect-panel label {
+    display: flex; align-items: center; gap: 7px; padding: 7px 8px; font-size: 0.84rem; font-weight: 500;
+    color: var(--text); cursor: pointer; border-radius: 6px; white-space: nowrap;
+  }
+  .dash-multiselect-panel label:hover { background: var(--ice); }
+  .dash-multiselect-panel .dash-multiselect-empty { padding: 7px 8px; font-size: 0.84rem; color: var(--text-muted); }
 
   /* Same pill/button look as the dashboard's global filter bar, generalized under its own class name
      so other screens (e.g. יומן ביקורים) can reuse it without depending on dashboard-specific markup. */
@@ -457,6 +478,17 @@
   .table-wrap { border: 1px solid var(--border); border-radius: 10px; }
   .load-more-row td { text-align: center; padding: 12px; background: var(--offwhite); }
   .load-more-btn { font-weight: 600; }
+  .table-loading-row td { text-align: center; padding: 34px 12px; color: var(--text-muted); font-size: 0.9rem; }
+  .table-loading-spinner {
+    display: inline-block; width: 14px; height: 14px; margin-inline-end: 8px; vertical-align: -2px;
+    border: 2px solid var(--border); border-top-color: var(--brand); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .table-loading-spinner { animation: none; } }
+  /* Same loading affordance as a table's (see .table-loading-row above), for non-table widgets like the
+     work calendar grid that show it directly instead of inside a <tbody>. */
+  .loading-inline { grid-column: 1 / -1; text-align: center; padding: 34px 12px; color: var(--text-muted); font-size: 0.9rem; }
   table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 0.78rem; }
   thead th {
     position: sticky; top: var(--tw-toolbar-h, 0px); background: var(--ice); color: var(--text-muted);
@@ -989,6 +1021,7 @@
 
     <!-- ===================== DASHBOARD ===================== -->
     <div class="view active" id="view-dashboard">
+      <div class="loading-inline" id="dashLoadingBanner" style="display:none;"><span class="table-loading-spinner"></span> טוען נתונים...</div>
       <div class="dash-greeting" id="dashGreeting"></div>
 
       <div class="no-company-banner" id="noCompanyBanner" style="display:none;">
@@ -1001,9 +1034,10 @@
            still needs to narrow further can do so with its own control (e.g. תקופה below), but
            channel/year/month are all set here, once. -->
       <section class="panel dash-global-filter-bar">
-        <div class="dash-mini-filter">
-          <label for="dashGlobalChannelFilter">ערוץ מכר:</label>
-          <select id="dashGlobalChannelFilter"><option value="">כל הערוצים</option></select>
+        <div class="dash-mini-filter dash-multiselect" id="dashChannelMultiselect">
+          <label for="dashChannelMultiselectBtn">ערוץ מכר:</label>
+          <button type="button" class="dash-multiselect-btn" id="dashChannelMultiselectBtn">כל הערוצים</button>
+          <div class="dash-multiselect-panel" id="dashChannelMultiselectPanel" style="display:none;"></div>
         </div>
         <div class="dash-mini-filter">
           <label for="dashYearSelect">שנה:</label>
@@ -1200,14 +1234,6 @@
         </div>
         <div class="table-wrap">
           <table id="customersTable"></table>
-        </div>
-      </section>
-
-      <section class="panel">
-        <h2>נתוני גביה</h2>
-        <p class="desc">חוב הגביה העדכני ללקוחות, לפי הקובץ האחרון שנטען (ראו כפתור "טעינת נתוני גביה" למעלה). מוצג גם בממשק הסוכן.</p>
-        <div class="table-wrap">
-          <table id="customerDebtTable"></table>
         </div>
       </section>
     </div>
@@ -2257,12 +2283,28 @@ function createDataTable({ tableId, emptyId, columns, getRows, searchInputId, ge
     syncStickyOffsets();
   }
 
+  // Shown by callers (see every refreshXView() below) right before they start an async fetch, so the
+  // table doesn't just sit there looking frozen/unchanged while data is still on its way - especially
+  // now that most screens load lazily on first visit (see refreshAllCompanyScopedViews) rather than
+  // already being populated by the time the admin gets there. Clears itself automatically the next time
+  // renderBody() actually runs (the normal end of any refresh), so callers only ever need to turn it ON.
+  function setLoading(isLoading) {
+    if (!isLoading) return;
+    const tbody = table.querySelector("tbody") || table.appendChild(document.createElement("tbody"));
+    const cols = orderedColumns();
+    tbody.innerHTML = `<tr class="table-loading-row"><td colspan="${Math.max(cols.length, 1)}">
+      <span class="table-loading-spinner"></span> טוען נתונים...
+    </td></tr>`;
+    const empty = emptyId ? document.getElementById(emptyId) : null;
+    if (empty) empty.style.display = "none";
+  }
+
   if (searchInputId) {
     const input = document.getElementById(searchInputId);
     if (input) input.addEventListener("input", () => { state.renderLimit = TABLE_PAGE_SIZE; debouncedRenderBody(); });
   }
   renderHead(); renderBody();
-  return { setPredicate, refresh: renderBody, getVisibleRows: sortedFilteredRows };
+  return { setPredicate, refresh: renderBody, getVisibleRows: sortedFilteredRows, setLoading };
 }
 
 /* ==================== HELPERS ==================== */
@@ -2481,6 +2523,7 @@ async function refreshAuditLogView() {
   if (!CURRENT_USER || !CURRENT_USER.IsSuperAdmin) { liveAuditLog = []; document.getElementById("auditLogCount").textContent = ""; auditLogTable.refresh(); return; }
   const companyId = selectedCompanyId();
   if (!companyId) { liveAuditLog = []; document.getElementById("auditLogCount").textContent = ""; auditLogTable.refresh(); return; }
+  auditLogTable.setLoading(true);
   try {
     const res = await fetch(`/api/auditlog?companyId=${companyId}`);
     liveAuditLog = res.ok ? await res.json() : [];
@@ -2510,16 +2553,25 @@ function navigateToCustomersFiltered({ status, channel, agent, search, customerN
   }
   activateView("customers");
 }
-function navigateToVisitLogFiltered({ search, date, outcome } = {}) {
+async function navigateToVisitLogFiltered({ search, date, outcome, unplanned, year, month } = {}) {
   const input = document.getElementById("vlSearch");
   input.value = search || "";
   activateView("visitlog");
+  // Force a real reload rather than relying on activateView's own cache (see VIEW_CACHE_TTL_MS) - a
+  // drill-down from the dashboard (which always fetches fresh) needs to actually match what the
+  // admin just saw there, not whatever the visit log happened to already have loaded up to 15s ago.
+  await refreshVisitLogView();
   input.dispatchEvent(new Event("input"));
-  // date/outcome are exact-match predicates (via setPredicate, same mechanism as the visit-plan
-  // drill-downs) rather than folded into the free-text search box - the search box does a single
-  // contiguous substring match across all columns, which can't express "this date AND this outcome".
-  vlTable.setPredicate("dateOutcome", (date || outcome)
-    ? v => (!date || v.VisitDate.slice(0, 10) === date) && (!outcome || v.Outcome === outcome)
+  // date/outcome/unplanned/year+month are exact-match predicates (via setPredicate, same mechanism as
+  // the visit-plan drill-downs) rather than folded into the free-text search box - the search box does
+  // a single contiguous substring match across all columns, which can't express "this date AND this
+  // outcome" (or "this month AND initiated by the agent").
+  const active = date || outcome || unplanned || (year && month);
+  vlTable.setPredicate("dateOutcome", active
+    ? v => (!date || v.VisitDate.slice(0, 10) === date)
+        && (!outcome || v.Outcome === outcome)
+        && (!unplanned || v.IsUnplanned === true)
+        && (!(year && month) || (v.VisitDate.slice(0, 4) === String(year) && Number(v.VisitDate.slice(5, 7)) === month))
     : null);
 }
 async function navigateToVisitPlanFiltered({ year, month, search, channel, agent, customerNumbers, date } = {}) {
@@ -2532,7 +2584,10 @@ async function navigateToVisitPlanFiltered({ year, month, search, channel, agent
   if (month) document.getElementById("vpTableMonthFilter").value = String(month);
   activateView("visitplan");
   if (year && month) await refreshVpTable(); // make sure the target month is actually loaded before filtering it
-  vpTable.setPredicate("channel", channel ? entry => entry.Channel === channel : null);
+  // channel may be a plain string (a single-value caller) or a Set (the dashboard's multi-select
+  // channel filter, e.g. DASH_STATE.globalChannel) - normalized to a Set either way.
+  const channelSet = channel instanceof Set ? channel : (channel ? new Set([channel]) : null);
+  vpTable.setPredicate("channel", channelSet && channelSet.size ? entry => channelSet.has(entry.Channel) : null);
   vpTable.setPredicate("agent", agent ? entry => entry.AgentIdNumber === agent : null);
   // For dashboard metrics that pick out a specific SET of customers (e.g. "neglected 30+ days")
   // rather than a single dropdown value - only rows for those customers stay visible. A customer in
@@ -2786,6 +2841,10 @@ document.querySelector(".dash-kpi-groups").addEventListener("click", (e) => {
     navigateToVisitLogFiltered({ search: d.todayIso });
   } else if (id === "postponedToday") {
     navigateToVisitLogFiltered({ date: d.todayIso, outcome: "NotVisited" });
+  } else if (id === "unplannedToday") {
+    navigateToVisitLogFiltered({ date: d.todayIso, unplanned: true });
+  } else if (id === "unplannedVisits") {
+    navigateToVisitLogFiltered({ year: d.selYear, month: d.selMonth, unplanned: true });
   }
 });
 
@@ -2924,7 +2983,41 @@ document.getElementById("dashAgentMeetingCountsTable").addEventListener("click",
   navigateToVisitPlanFiltered({ year: today.getFullYear(), month: today.getMonth() + 1, agent: row.dataset.drillAgentMeetings || undefined });
 });
 
-document.getElementById("dashGlobalChannelFilter").addEventListener("change", () => refreshDashboard());
+// Which channels the dashboard is currently scoped to - empty Set means "all channels" (same meaning
+// the old single-select's "" value had). Populated/pruned in refreshDashboard() itself (see
+// renderDashChannelMultiselect) since it needs the CURRENT month's actual channel list every refresh.
+let dashSelectedChannels = new Set();
+
+function dashChannelButtonLabel() {
+  if (dashSelectedChannels.size === 0) return "כל הערוצים";
+  if (dashSelectedChannels.size === 1) return [...dashSelectedChannels][0];
+  return `${dashSelectedChannels.size} ערוצים נבחרו`;
+}
+
+function renderDashChannelMultiselect(allChannels) {
+  document.getElementById("dashChannelMultiselectBtn").textContent = dashChannelButtonLabel();
+  const panel = document.getElementById("dashChannelMultiselectPanel");
+  panel.innerHTML = allChannels.length
+    ? allChannels.map(ch => `
+        <label><input type="checkbox" value="${esc(ch)}" ${dashSelectedChannels.has(ch) ? "checked" : ""}/> ${esc(ch)}</label>`).join("")
+    : `<div class="dash-multiselect-empty">אין ערוצים זמינים</div>`;
+}
+
+document.getElementById("dashChannelMultiselectBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const panel = document.getElementById("dashChannelMultiselectPanel");
+  panel.style.display = panel.style.display === "none" ? "block" : "none";
+});
+// Click-outside closes the panel - same convention as the app's other popovers.
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#dashChannelMultiselect")) document.getElementById("dashChannelMultiselectPanel").style.display = "none";
+});
+document.getElementById("dashChannelMultiselectPanel").addEventListener("change", (e) => {
+  if (e.target.type !== "checkbox") return;
+  if (e.target.checked) dashSelectedChannels.add(e.target.value); else dashSelectedChannels.delete(e.target.value);
+  document.getElementById("dashChannelMultiselectBtn").textContent = dashChannelButtonLabel();
+  refreshDashboard();
+});
 document.getElementById("dashDateFilter").addEventListener("change", (e) => {
   document.getElementById("btnClearDashDateFilter").style.display = e.target.value ? "" : "none";
   refreshDashboard();
@@ -2971,6 +3064,7 @@ async function refreshDashboard() {
   const isRealToday = !dateFilterValue;
   const isSameMonth = selYear === today.getFullYear() && selMonth === today.getMonth() + 1;
   let customers = [], visits = [], calendarDays = [], todayPlanEntries = [], selectedMonthPlanEntries = [];
+  document.getElementById("dashLoadingBanner").style.display = "flex";
   try {
     // allChannels=true - the dashboard always shows every channel to every user regardless of their
     // own view restriction, so cross-channel comparison stays possible even for a restricted user.
@@ -2992,9 +3086,10 @@ async function refreshDashboard() {
   const activeCustomers = customers.filter(c => c.Status === "Active");
   const customerByNumber = new Map(customers.map(c => [c.CustomerNumber, c]));
 
-  // One global channel filter (top of the page) scopes every table/chart on the dashboard at once.
-  const globalChannel = document.getElementById("dashGlobalChannelFilter").value || "";
-  const kpiCustomers = globalChannel ? activeCustomers.filter(c => c.Channel === globalChannel) : activeCustomers;
+  // One global channel filter (top of the page) scopes every table/chart on the dashboard at once -
+  // dashSelectedChannels is a Set (multi-select), empty meaning "all channels".
+  const globalChannel = dashSelectedChannels;
+  const kpiCustomers = globalChannel.size ? activeCustomers.filter(c => globalChannel.has(c.Channel)) : activeCustomers;
 
   // Latest logged "Visited" date per customer - visits[] is already server-sorted VisitDate desc,
   // so the first match per customer is automatically their most recent one.
@@ -3022,32 +3117,32 @@ async function refreshDashboard() {
   for (const v of visits) {
     if (v.Outcome !== "NotVisited") continue;
     if (!(v.VisitDate || "").startsWith(reasonMonthPrefix)) continue;
-    if (globalChannel && customerByNumber.get(v.CustomerNumber)?.Channel !== globalChannel) continue;
+    if (globalChannel.size && !globalChannel.has(customerByNumber.get(v.CustomerNumber)?.Channel)) continue;
     const r = v.NonVisitReasonText || "ללא סיבה מוגדרת";
     if (!reasonAgg.has(r)) reasonAgg.set(r, []);
     reasonAgg.get(r).push(v);
   }
 
   const visitsToday = visits.filter(v => v.Outcome === "Visited" && (v.VisitDate || "").slice(0, 10) === todayIso
-    && (!globalChannel || customerByNumber.get(v.CustomerNumber)?.Channel === globalChannel));
+    && (!globalChannel.size || globalChannel.has(customerByNumber.get(v.CustomerNumber)?.Channel)));
 
   const postponedToday = visits.filter(v => v.Outcome === "NotVisited" && (v.VisitDate || "").slice(0, 10) === todayIso
-    && (!globalChannel || customerByNumber.get(v.CustomerNumber)?.Channel === globalChannel));
+    && (!globalChannel.size || globalChannel.has(customerByNumber.get(v.CustomerNumber)?.Channel)));
 
   // Same idea as unplannedThisMonth below, scoped to just the day these "daily" cards are about.
   const unplannedToday = visits.filter(v => v.Outcome === "Visited" && v.IsUnplanned && (v.VisitDate || "").slice(0, 10) === todayIso
-    && (!globalChannel || customerByNumber.get(v.CustomerNumber)?.Channel === globalChannel));
+    && (!globalChannel.size || globalChannel.has(customerByNumber.get(v.CustomerNumber)?.Channel)));
 
   const plannedTodayCount = todayPlanEntries
     .filter(e => (e.PlannedDate || "").slice(0, 10) === todayIso)
-    .filter(e => !globalChannel || e.Channel === globalChannel).length;
+    .filter(e => !globalChannel.size || globalChannel.has(e.Channel)).length;
 
   // Agents who have at least one customer planned for today but haven't logged a single visit today
   // yet (visited OR postponed) - "hasn't started today at all", not "still has some left". Visits don't
   // carry AgentIdNumber directly, so each is attributed via today's plan entry for the same customer.
   const todayEntriesForChannel = todayPlanEntries
     .filter(e => (e.PlannedDate || "").slice(0, 10) === todayIso)
-    .filter(e => !globalChannel || e.Channel === globalChannel);
+    .filter(e => !globalChannel.size || globalChannel.has(e.Channel));
   const customerToAgentToday = new Map(todayEntriesForChannel.map(e => [e.CustomerNumber, { id: e.AgentIdNumber || `__noid__:${e.AgentName || "ללא סוכן"}`, name: e.AgentName || "ללא סוכן" }]));
   const agentsPlannedToday = new Map();
   for (const e of todayEntriesForChannel) agentsPlannedToday.set(e.AgentIdNumber || `__noid__:${e.AgentName || "ללא סוכן"}`, e.AgentName || "ללא סוכן");
@@ -3065,7 +3160,7 @@ async function refreshDashboard() {
   // the visit-plan screen for that month.
   const unscheduled = selectedMonthPlanEntries
     .filter(e => !e.PlannedDate)
-    .filter(e => !globalChannel || e.Channel === globalChannel);
+    .filter(e => !globalChannel.size || globalChannel.has(e.Channel));
 
   const frequencyBuckets = computeFrequencyBreakdown(kpiCustomers);
   const agentComposition = computeAgentComposition(kpiCustomers);
@@ -3075,7 +3170,7 @@ async function refreshDashboard() {
   // globally selected month, only counting entries whose planned date has actually arrived. ----
   const dueSelectedMonthEntries = selectedMonthPlanEntries
     .filter(e => e.PlannedDate && new Date(e.PlannedDate) <= today)
-    .filter(e => !globalChannel || e.Channel === globalChannel);
+    .filter(e => !globalChannel.size || globalChannel.has(e.Channel));
   // Keyed by AgentIdNumber (real identity, not the display name - see computeAgentComposition for
   // why) since this map's key is also what gets sent to navigateToVisitPlanFiltered() on drill-down,
   // which matches against entry.AgentIdNumber there.
@@ -3095,11 +3190,13 @@ async function refreshDashboard() {
     pendingToday, todayYear: today.getFullYear(), todayMonth: today.getMonth() + 1
   };
 
-  // Populate the one global channel dropdown (options only, keep the current selection if still valid).
+  // Populate the channel multiselect (options only, prune any previously-checked channel that no
+  // longer exists in this month's data instead of leaving a stale/invisible selection behind).
+  // Mutates dashSelectedChannels IN PLACE (rather than reassigning to a new Set) since `globalChannel`
+  // above is the very same Set object by reference - reassigning here would leave it stale.
   const allChannels = [...new Set(activeCustomers.map(c => c.Channel).filter(Boolean))].sort();
-  const globalChannelSel = document.getElementById("dashGlobalChannelFilter");
-  globalChannelSel.innerHTML = `<option value="">כל הערוצים</option>` + allChannels.map(ch => `<option value="${esc(ch)}">${esc(ch)}</option>`).join("");
-  if (allChannels.includes(globalChannel)) globalChannelSel.value = globalChannel;
+  for (const ch of [...dashSelectedChannels]) { if (!allChannels.includes(ch)) dashSelectedChannels.delete(ch); }
+  renderDashChannelMultiselect(allChannels);
 
   // "היום" only when this really is today - a picked dashDateFilter gets its own date spelled out in
   // the label instead, so these cards never claim to be "today" when they're not.
@@ -3115,9 +3212,9 @@ async function refreshDashboard() {
   // plan entry the algorithm generated for the selected month/channel (see CustomerVisit.IsUnplanned).
   const unplannedThisMonth = visits.filter(v => v.Outcome === "Visited" && v.IsUnplanned
     && v.VisitDate.slice(0, 4) === String(selYear) && Number(v.VisitDate.slice(5, 7)) === selMonth
-    && (!globalChannel || v.Channel === globalChannel));
+    && (!globalChannel.size || globalChannel.has(v.Channel)));
   renderKpiGrid("dashKpiGridMonthly", [
-    { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel ? `בערוץ ${globalChannel}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים`, tier: "good" },
+    { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel.size ? `בערוץ ${[...globalChannel].join(", ")}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים`, tier: "good" },
     { id: "neglected", value: fmtNumber(neglected.length), label: "לקוחות שלא ביקרנו מעל 30 יום", sub: "לחצו לרשימה המלאה", tier: neglected.length === 0 ? "good" : (neglected.length > kpiCustomers.length * 0.2 ? "crit" : "warn") },
     { id: "decliningNeglected", value: fmtNumber(decliningNeglected.length), label: "יורדים במכר וללא ביקור מספק", sub: "ירידה במכר + לא ביקרנו מעל 30 יום", tier: decliningNeglected.length === 0 ? "good" : "crit" },
     { id: "unscheduled", value: fmtNumber(unscheduled.length), label: "לקוחות שלא שובצו", sub: "אין קיבולת פנויה ביומן הסוכן - לחצו לרשימה", tier: unscheduled.length === 0 ? "good" : "crit" },
@@ -3139,7 +3236,7 @@ async function refreshDashboard() {
   const HOURLY_RANGE = Array.from({ length: 14 }, (_, i) => i + 7); // 07:00-20:00 - covers a full working day
   const monthVisited = visits.filter(v => v.Outcome === "Visited"
     && v.VisitDate.slice(0, 4) === String(selYear) && Number(v.VisitDate.slice(5, 7)) === selMonth
-    && (!globalChannel || v.Channel === globalChannel));
+    && (!globalChannel.size || globalChannel.has(v.Channel)));
   const hourCounts = new Map();
   for (const v of monthVisited) {
     const h = parseUtc(v.CreatedAt).getHours();
@@ -3152,7 +3249,7 @@ async function refreshDashboard() {
   const agentMeetingCounts = new Map();
   const customerToAgentMeetingsId = new Map();
   for (const e of todayPlanEntries) {
-    if (globalChannel && e.Channel !== globalChannel) continue;
+    if (globalChannel.size && !globalChannel.has(e.Channel)) continue;
     const id = e.AgentIdNumber || `__noid__:${e.AgentName || "ללא סוכן"}`;
     if (!agentMeetingCounts.has(id)) agentMeetingCounts.set(id, { name: e.AgentName || "ללא סוכן", channels: new Set(), today: 0, performedToday: 0, performedMonthToDate: 0, month: 0, unscheduled: 0 });
     const g = agentMeetingCounts.get(id);
@@ -3176,7 +3273,7 @@ async function refreshDashboard() {
     if (v.Outcome !== "Visited") continue;
     const vDate = (v.VisitDate || "").slice(0, 10);
     if (vDate < monthStartIso || vDate > todayIso) continue;
-    if (globalChannel && v.Channel !== globalChannel) continue;
+    if (globalChannel.size && !globalChannel.has(v.Channel)) continue;
     const id = customerToAgentMeetingsId.get(v.CustomerNumber);
     if (!id) continue; // customer has no entry in this month's plan at all - nothing to attribute this visit to here
     agentMeetingCounts.get(id).performedMonthToDate++;
@@ -3185,6 +3282,7 @@ async function refreshDashboard() {
 
   const lastUpdate = customers.reduce((max, c) => !max || c.UpdatedAt > max ? c.UpdatedAt : max, null);
   document.getElementById("dashUpdatedLine").textContent = lastUpdate ? `עדכון קובץ לקוחות אחרון: ${fmtDate(lastUpdate)}` : "";
+  document.getElementById("dashLoadingBanner").style.display = "none";
 }
 VIEW_ACTIVATION_HOOKS["dashboard"] = refreshDashboard;
 
@@ -3265,6 +3363,7 @@ async function refreshCustomersView() {
   const companyId = selectedCompanyId();
   const ym = customersSelectedYearMonth();
   if (!companyId || !ym) { liveCustomers = []; customersTable.refresh(); document.getElementById("customersCount").textContent = ""; document.getElementById("navCountCustomers").textContent = ""; return; }
+  customersTable.setLoading(true);
   try {
     const res = await fetch(`/api/customers?companyId=${companyId}&year=${ym.year}&month=${ym.month}`);
     if (res.ok) liveCustomers = await res.json();
@@ -3325,30 +3424,19 @@ importDropzone.addEventListener("drop", (e) => {
 });
 
 /* ---- customer debt (collection data) - not month-scoped, see CustomerDebt.cs ---- */
+// No longer has its own visible table (debt now shows as columns directly on customersTable, see
+// customerDebtLookup() above) - this array/fetch still exists purely to feed that join.
 let liveCustomerDebt = [];
-const customerDebtTable = createDataTable({
-  tableId: "customerDebtTable",
-  columns: [
-    { key: "customerNumber", label: "מספר לקוח", text: d => d.CustomerNumber, render: d => `<span class="mono name">${d.CustomerNumber}</span>` },
-    { key: "customerName", label: "שם לקוח", text: d => customerLookup().get(d.CustomerNumber)?.CustomerName || "", render: d => customerLookup().get(d.CustomerNumber)?.CustomerName ? esc(customerLookup().get(d.CustomerNumber).CustomerName) : `<span class="muted">—</span>` },
-    { key: "debtToCollect", label: "חוב לגביה", text: d => d.DebtToCollect ?? "", sortValue: d => d.DebtToCollect, render: d => `<span class="mono">${fmtCurrency(d.DebtToCollect)}</span>` },
-    { key: "overdueDebt", label: "חוב בפיגור", text: d => d.OverdueDebt ?? "", sortValue: d => d.OverdueDebt, render: d => `<span class="mono"${d.OverdueDebt > 0 ? ' style="color:var(--crit-fg);font-weight:700;"' : ""}>${fmtCurrency(d.OverdueDebt)}</span>` },
-    { key: "updatedAt", label: "עודכן לאחרונה", text: d => d.UpdatedAt, sortValue: d => d.UpdatedAt, render: d => `<span class="mono">${fmtDate(d.UpdatedAt)}</span>` }
-  ],
-  getRows: () => liveCustomerDebt,
-  entityLabel: "רשומות גביה"
-});
 
 async function refreshCustomerDebtView() {
   const companyId = selectedCompanyId();
-  if (!companyId) { liveCustomerDebt = []; customerDebtTable.refresh(); customersTable.refresh(); return; }
+  if (!companyId) { liveCustomerDebt = []; customersTable.refresh(); return; }
   try {
     const res = await fetch(`/api/customers/debt?companyId=${companyId}`);
     if (res.ok) liveCustomerDebt = await res.json();
   } catch { /* offline - keep last known data */ }
-  customerDebtTable.refresh();
   // The main customers table's own debt columns (see customerDebtLookup() above) read from
-  // liveCustomerDebt too - re-render it now that debt data has (re)loaded, since refreshCustomersView()
+  // liveCustomerDebt - re-render it now that debt data has (re)loaded, since refreshCustomersView()
   // already rendered it once before this finished (this hook always runs after that one).
   customersTable.refresh();
 }
@@ -3632,6 +3720,7 @@ document.getElementById("btnClearVlFilters").addEventListener("click", () => {
 async function refreshVisitLogView() {
   const companyId = selectedCompanyId();
   if (!companyId) { liveVisits = []; vlTable.refresh(); document.getElementById("vlCount").textContent = ""; document.getElementById("navCountVisits").textContent = ""; return; }
+  vlTable.setLoading(true);
   try {
     const res = await fetch(`/api/customervisits?companyId=${companyId}`);
     if (res.ok) liveVisits = await res.json();
@@ -3798,6 +3887,7 @@ async function refreshDistView() {
   const companyId = selectedCompanyId();
   const ym = distReportSelectedYearMonth();
   if (!companyId || !ym) { liveDistDays = []; distTable.refresh(); document.getElementById("distCount").textContent = ""; return; }
+  distTable.setLoading(true);
   try {
     const res = await fetch(`/api/distributiondays?companyId=${companyId}&year=${ym.year}&month=${ym.month}`);
     if (res.ok) liveDistDays = await res.json();
@@ -4210,6 +4300,7 @@ async function refreshWorkCalendarView() {
     `יום שישי חצי יום ויום שבת חופש - עד שתשנו זאת ידנית עבור יום ספציפי.`;
   calOverrides = new Map();
   if (companyId) {
+    document.getElementById("calGrid").innerHTML = `<div class="loading-inline"><span class="table-loading-spinner"></span> טוען נתונים...</div>`;
     try {
       const res = await fetch(`/api/workcalendar?companyId=${companyId}&year=${calYear}&month=${calMonth}`);
       if (res.ok) {
@@ -4625,6 +4716,7 @@ async function refreshVpTable() {
   vpSelected.clear(); // the previous selection's row IDs may not even exist in the newly loaded month
   vpShowingUnscheduledOnly = false;
   if (!companyId || !ym) { liveVpEntries = []; vpTable.refresh(); document.getElementById("vpCount").textContent = ""; updateVpSelectionBar(); updateUnscheduledButton(); return; }
+  vpTable.setLoading(true);
   try {
     const res = await fetch(`/api/visitplan?companyId=${companyId}&year=${ym.year}&month=${ym.month}`);
     if (res.ok) liveVpEntries = await res.json();
@@ -5095,6 +5187,7 @@ const usersTable = createDataTable({
 async function refreshUsersView() {
   const companyId = selectedCompanyId();
   if (!companyId) { liveUsers = []; document.getElementById("usersCount").textContent = ""; usersTable.refresh(); return; }
+  usersTable.setLoading(true);
   try {
     const res = await fetch(`/api/users?companyId=${companyId}`);
     if (res.ok) liveUsers = await res.json();

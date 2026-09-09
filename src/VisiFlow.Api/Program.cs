@@ -207,6 +207,8 @@ using (var scope = app.Services.CreateScope())
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_CustomerDebts_CompanyId_CustomerNumber\" ON \"CustomerDebts\" (\"CompanyId\", \"CustomerNumber\");");
         await db.Database.ExecuteSqlRawAsync(
             "ALTER TABLE \"CustomerVisits\" ADD COLUMN IF NOT EXISTS \"IsUnplanned\" boolean NOT NULL DEFAULT false;");
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE \"VisitPlanEntries\" ADD COLUMN IF NOT EXISTS \"RescheduledToEntryId\" integer;");
     }
     else
     {
@@ -1861,6 +1863,12 @@ app.MapPost("/api/visitplan/entries/{id:int}/reschedule", async (int id, Resched
             ManuallyModifiedNote = note
         };
         db.VisitPlanEntries.Add(resultEntry);
+        // Saved immediately (rather than only at the shared SaveChangesAsync below) so resultEntry.Id
+        // is populated - needed right away to point the old entry's RescheduledToEntryId at it (see
+        // agent.html's renderCustomerRow, which shows a dedicated "הועבר" marker instead of V/X on any
+        // entry carrying this field, regardless of whatever Outcome it happens to have).
+        await db.SaveChangesAsync();
+        entry.RescheduledToEntryId = resultEntry.Id;
 
         // Tag the CustomerVisit that was just logged as "not visited" on the old date, so the
         // dashboard's non-visit-reasons breakdown can show it was a postponement, not a dead end.
@@ -2181,7 +2189,7 @@ record AgentVisitPlanEntryDto(
     DateTime PlannedDate, decimal PriorityScore, string? Outcome, string? ReasonText, int? VisitId,
     decimal? RequiredVisitsPerWeek, DateTime? LastVisitDate, int? DaysSinceLastVisit, string? AdminNote,
     bool DistSunday, bool DistMonday, bool DistTuesday, bool DistWednesday, bool DistThursday, bool DistFriday, bool DistSaturday, bool DistDefined,
-    int? VisitOrder, DateTime? VisitRecordedAt, decimal? DebtToCollect, decimal? OverdueDebt, bool IsUnplanned)
+    int? VisitOrder, DateTime? VisitRecordedAt, decimal? DebtToCollect, decimal? OverdueDebt, bool IsUnplanned, bool WasRescheduled)
 {
     public static AgentVisitPlanEntryDto From(VisitPlanEntry e, Customer c, CustomerVisit? visit,
         DateTime? lastVisitDate, int? daysSinceLastVisit, CustomerDistributionDay? dist, decimal? requiredVisitsPerWeek, CustomerDebt? debt) => new(
@@ -2191,7 +2199,7 @@ record AgentVisitPlanEntryDto(
         requiredVisitsPerWeek, lastVisitDate, daysSinceLastVisit, e.AdminNote,
         dist?.Sunday ?? false, dist?.Monday ?? false, dist?.Tuesday ?? false, dist?.Wednesday ?? false,
         dist?.Thursday ?? false, dist?.Friday ?? false, dist?.Saturday ?? false, dist != null,
-        e.VisitOrder, visit?.CreatedAt, debt?.DebtToCollect, debt?.OverdueDebt, false);
+        e.VisitOrder, visit?.CreatedAt, debt?.DebtToCollect, debt?.OverdueDebt, false, e.RescheduledToEntryId != null);
 
     // A card with no backing VisitPlanEntry at all - logged directly via "+ הוספת ביקור" (see
     // CustomerVisit.IsUnplanned). PlanEntryId uses the NEGATIVE of the CustomerVisit's own Id so it can
@@ -2206,7 +2214,7 @@ record AgentVisitPlanEntryDto(
         v.VisitDate, 0m, v.Outcome.ToString(), v.NonVisitReason?.Text, v.Id,
         requiredVisitsPerWeek, lastVisitDate, daysSinceLastVisit, null,
         false, false, false, false, false, false, false, false,
-        null, v.CreatedAt, debt?.DebtToCollect, debt?.OverdueDebt, true);
+        null, v.CreatedAt, debt?.DebtToCollect, debt?.OverdueDebt, true, false);
 }
 
 record AgentSearchResultDto(string CustomerNumber, string CustomerName, DateTime PlannedDate);

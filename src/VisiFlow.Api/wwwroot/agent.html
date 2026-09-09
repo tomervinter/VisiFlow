@@ -149,6 +149,11 @@
   .cl-status-dot.visited { background: var(--good-bg); color: var(--good-fg); }
   .cl-status-dot.notvisited { background: var(--crit-bg); color: var(--crit-fg); }
   .cl-status-dot.pending { background: var(--offwhite); border: 1.5px dashed var(--border); }
+  /* Wider pill instead of the round dot the other states use - "הועבר" doesn't fit in a 24px circle. */
+  .cl-status-dot.moved {
+    width: auto; min-width: 24px; height: auto; border-radius: 999px; padding: 3px 9px;
+    background: var(--warn-bg); color: var(--warn-fg); font-size: 0.72rem; white-space: nowrap;
+  }
   .cl-row-toggle {
     flex-shrink: 0; font-size: 0.76rem; font-weight: 700; color: var(--brand);
     display: flex; align-items: center; gap: 3px; white-space: nowrap;
@@ -620,7 +625,12 @@ function renderCustomerRow(c) {
   // expandedKeys is built from dataset.rowKey (always a string) - compare as a string here too,
   // otherwise a numeric PlanEntryId here vs. its string form there never match in the Set.
   const isExpanded = expandedKeys.has(String(key));
-  const statusDot = c.Outcome === "Visited" ? `<span class="cl-status-dot visited">✓</span>`
+  // A rescheduled entry (the agent postponed it to another day - see RescheduledToEntryId) always
+  // shows this dedicated marker instead of V/X, even though it may still carry a "not visited" outcome
+  // recorded on its own original date - from here it just reads as a stale duplicate of a meeting that
+  // moved elsewhere, not a distinct missed visit.
+  const statusDot = c.WasRescheduled ? `<span class="cl-status-dot moved" title="הפגישה הועברה לתאריך אחר">הועבר</span>`
+    : c.Outcome === "Visited" ? `<span class="cl-status-dot visited">✓</span>`
     : c.Outcome === "NotVisited" ? `<span class="cl-status-dot notvisited">✗</span>`
     : `<span class="cl-status-dot pending"></span>`;
   const subParts = [];

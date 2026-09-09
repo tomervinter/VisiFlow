@@ -48,4 +48,10 @@ public class VisitPlanEntry
     /// (1 = ראשון בסדר ההליכה) - null עד שאופטימיזציית מסלול רצה על השורה, או כשאין מפתח Google Maps
     /// מוגדר (ראו RouteOptimizationService). לא קשור ל-PriorityScore - זה סדר תוך-יומי, לא עדיפות חודשית.</summary>
     public int? VisitOrder { get; set; }
+    /// <summary>Id של השורה החדשה שנוצרה כאשר סוכן דחה ביקור והזיז אותו לתאריך אחר (ראו
+    /// POST /api/visitplan/entries/{id}/reschedule, Source="Agent") - השורה המקורית הזו נשארת במקומה
+    /// בתאריך הישן (תיעוד של מה שתוכנן ולא בוצע), אבל הפגישה "האמיתית" עברה לשורה החדשה. null כברירת
+    /// מחדל, וגם כשמנהל מזיז שורה ידנית (שם אותה שורה עצמה פשוט מקבלת תאריך חדש, אין שורה כפולה).
+    /// משמש רק כדי שממשק הסוכן ידע להציג "הועבר" במקום V/X על השורה הישנה, ולא נועד לשום דבר אחר.</summary>
+    public int? RescheduledToEntryId { get; set; }
 }

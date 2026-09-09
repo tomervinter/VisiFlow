@@ -1168,10 +1168,15 @@
           </div>
           <a class="btn small" id="btnDownloadTemplate" href="/api/customers/import/template">&#8681; הורדת תבנית לדוגמה</a>
           <!-- Separate upload (own endpoint/entity, see CustomerDebt.cs) - not month-scoped like the
-               customer file above, a new upload always overwrites a customer's existing debt values. -->
+               customer file above, a new upload always overwrites a customer's existing debt values.
+               margin-inline-start:auto pins this pair to the far end of the row (the left edge, in our
+               RTL layout) instead of just flowing after the customer-import controls, so it stays
+               visually separated from them even as the row wraps at different widths. -->
           <input type="file" id="importDebtFileInput" accept=".xlsx,.xls" style="display:none" />
-          <button type="button" class="btn small" id="btnBrowseImportDebt">&#128193; טעינת נתוני גביה</button>
-          <a class="btn small" id="btnDownloadDebtTemplate" href="/api/customers/debt/import/template">&#8681; תבנית נתוני גביה</a>
+          <div style="display:flex; align-items:center; gap:10px; margin-inline-start:auto;">
+            <button type="button" class="btn small" id="btnBrowseImportDebt">&#128193; טעינת נתוני גביה</button>
+            <a class="btn small" id="btnDownloadDebtTemplate" href="/api/customers/debt/import/template">&#8681; תבנית נתוני גביה</a>
+          </div>
         </div>
         <p class="form-msg" id="importMsg" style="margin-top:0;"></p>
         <p class="form-msg" id="importDebtMsg" style="margin-top:0;"></p>

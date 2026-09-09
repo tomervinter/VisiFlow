@@ -631,12 +631,14 @@ function renderCustomerCard(c) {
         <span>מכר אשתקד: <b>${fmtCurrency(c.SalesYtdPreviousYear)}</b></span>
         ${fmtSalesTrend(c.SalesYtdCurrentYear, c.SalesYtdPreviousYear)}
       </div>
+      ${(c.DebtToCollect != null || c.OverdueDebt != null) ? `
+      <div class="cc-sales">
+        <span>חוב לגביה: <b>${fmtCurrency(c.DebtToCollect)}</b></span>
+        <span${c.OverdueDebt > 0 ? ' style="color:var(--crit-fg);"' : ""}>חוב בפיגור: <b>${fmtCurrency(c.OverdueDebt)}</b></span>
+      </div>` : ""}
       <div class="cc-info-grid">
         <div class="cc-info-item"><span class="cc-info-label">ביקור אחרון</span><span class="cc-info-value">${fmtLastVisit(c)}</span></div>
         <div class="cc-info-item"><span class="cc-info-label">תקן ביקורים</span><span class="cc-info-value">${fmtFrequency(c.RequiredVisitsPerWeek)}</span></div>
-        ${(c.DebtToCollect != null || c.OverdueDebt != null) ? `
-        <div class="cc-info-item"><span class="cc-info-label">חוב לגביה</span><span class="cc-info-value">${fmtCurrency(c.DebtToCollect)}</span></div>
-        <div class="cc-info-item"><span class="cc-info-label">חוב בפיגור</span><span class="cc-info-value"${c.OverdueDebt > 0 ? ' style="color:var(--crit-fg);font-weight:700;"' : ""}>${fmtCurrency(c.OverdueDebt)}</span></div>` : ""}
         <div class="cc-info-item" style="grid-column:1 / -1;"><span class="cc-info-label">ימי הפצה</span><span class="cc-info-value">${fmtDistDays(c)}</span></div>
       </div>
       <div class="cc-actions">

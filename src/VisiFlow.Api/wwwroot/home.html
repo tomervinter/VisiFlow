@@ -455,6 +455,8 @@
      overflow:auto container). See dashAgentMeetingCountsTable's own .table-wrap for the one table that
      intentionally keeps the old bounded-scroll behavior instead (not built by createDataTable). */
   .table-wrap { border: 1px solid var(--border); border-radius: 10px; }
+  .load-more-row td { text-align: center; padding: 12px; background: var(--offwhite); }
+  .load-more-btn { font-weight: 600; }
   table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 0.78rem; }
   thead th {
     position: sticky; top: var(--tw-toolbar-h, 0px); background: var(--ice); color: var(--text-muted);
@@ -2049,10 +2051,35 @@ function exportTableToExcel(columns, rows, filenameBase) {
   URL.revokeObjectURL(url);
 }
 
+// Delays fn until callers stop invoking it for `delay` ms - used below so a filter/search box re-runs
+// the (potentially large) sortedFilteredRows()+full-table-re-render pipeline once after the admin
+// pauses typing, instead of on every single keystroke. Typing itself stays instant either way (it's
+// just a text input); this only defers the expensive table refresh that keystroke would otherwise
+// trigger synchronously.
+function debounce(fn, delay) {
+  let timer = null;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
+// How many matching rows actually get built into DOM nodes at once (see renderBody's use of
+// state.visibleCount below) - a company with thousands of rows in a table was measured taking multiple
+// SECONDS to render (and to re-render on every sort/filter) when every matching row was rendered at
+// once, dwarfing the actual filter/sort computation itself (which stays over the full row set - see
+// sortedFilteredRows/getVisibleRows, both unaffected by this cap so export-to-Excel still exports
+// everything that matches, not just what's currently on screen). A "טען עוד" button appends another
+// page instead of raising this - see renderBody/the load-more button it creates.
+const TABLE_PAGE_SIZE = 200;
+
 function createDataTable({ tableId, emptyId, columns, getRows, searchInputId, getGlobalSearchText, entityLabel, initialSort }) {
   const table = document.getElementById(tableId);
-  const state = { order: columns.map(c => c.key), sortKey: initialSort ? initialSort.key : null, sortDir: initialSort && initialSort.dir ? initialSort.dir : 1, colFilters: {}, predicates: {} };
+  const state = { order: columns.map(c => c.key), sortKey: initialSort ? initialSort.key : null, sortDir: initialSort && initialSort.dir ? initialSort.dir : 1, colFilters: {}, predicates: {}, renderLimit: TABLE_PAGE_SIZE };
   let draggedKey = null;
+  // Shared across every filter box (per-column and the global search) so switching between them while
+  // typing still coalesces into one re-render, not one per box.
+  const debouncedRenderBody = debounce(() => renderBody(), 200);
 
   const toolbar = document.createElement("div");
   toolbar.className = "table-toolbar";
@@ -2103,7 +2130,7 @@ function createDataTable({ tableId, emptyId, columns, getRows, searchInputId, ge
     }
   }
 
-  function setPredicate(name, fn) { state.predicates[name] = fn || null; renderBody(); }
+  function setPredicate(name, fn) { state.predicates[name] = fn || null; state.renderLimit = TABLE_PAGE_SIZE; renderBody(); }
   function orderedColumns() { return state.order.map(k => columns.find(c => c.key === k)).filter(Boolean); }
 
   function matchesFilters(row) {
@@ -2188,24 +2215,38 @@ function createDataTable({ tableId, emptyId, columns, getRows, searchInputId, ge
       input.addEventListener("input", e => {
         state.colFilters[input.dataset.key] = e.target.value;
         input.classList.toggle("active-filter", !!e.target.value.trim());
-        renderBody();
+        state.renderLimit = TABLE_PAGE_SIZE;
+        debouncedRenderBody();
       });
     });
     syncStickyOffsets();
   }
 
   function renderBody() {
-    const rows = sortedFilteredRows();
+    const allRows = sortedFilteredRows();
     const cols = orderedColumns();
     const tbody = table.querySelector("tbody") || table.appendChild(document.createElement("tbody"));
     const empty = emptyId ? document.getElementById(emptyId) : null;
-    updateFilteredCount(rows.length, getRows().length);
-    if (rows.length === 0) {
+    updateFilteredCount(allRows.length, getRows().length);
+    if (allRows.length === 0) {
       tbody.innerHTML = "";
       if (empty) empty.style.display = "block";
     } else {
       if (empty) empty.style.display = "none";
-      tbody.innerHTML = rows.map(row => `<tr>${cols.map(col => `<td>${col.render(row)}</td>`).join("")}</tr>`).join("");
+      // Only the first state.renderLimit rows actually become DOM nodes (see TABLE_PAGE_SIZE) - the
+      // filtered/sorted set itself (allRows, used above for the count and below for "how many more are
+      // there") always covers everything that matches, so the count and export-to-Excel stay correct
+      // regardless of how much has been paged in on screen.
+      const rows = allRows.slice(0, state.renderLimit);
+      let html = rows.map(row => `<tr>${cols.map(col => `<td>${col.render(row)}</td>`).join("")}</tr>`).join("");
+      if (allRows.length > rows.length) {
+        html += `<tr class="load-more-row"><td colspan="${cols.length}">
+          <button type="button" class="btn small load-more-btn">טען עוד שורות (מוצגות ${rows.length} מתוך ${allRows.length})</button>
+        </td></tr>`;
+      }
+      tbody.innerHTML = html;
+      const loadMoreBtn = tbody.querySelector(".load-more-btn");
+      if (loadMoreBtn) loadMoreBtn.addEventListener("click", () => { state.renderLimit += TABLE_PAGE_SIZE; renderBody(); });
     }
     // Also re-measured here (not just in renderHead()) - this is what actually runs when a table's view
     // becomes visible after page load (every view's createDataTable() call runs up front while still
@@ -2218,7 +2259,7 @@ function createDataTable({ tableId, emptyId, columns, getRows, searchInputId, ge
 
   if (searchInputId) {
     const input = document.getElementById(searchInputId);
-    if (input) input.addEventListener("input", renderBody);
+    if (input) input.addEventListener("input", () => { state.renderLimit = TABLE_PAGE_SIZE; debouncedRenderBody(); });
   }
   renderHead(); renderBody();
   return { setPredicate, refresh: renderBody, getVisibleRows: sortedFilteredRows };
@@ -2297,19 +2338,22 @@ async function refreshAllCompanyScopedViews() {
   await refreshCustomersView();
   await refreshReasonsView();
   vsSelected.clear();
-  // The rest run in parallel (each already fetches/renders independently) - awaited together so
-  // callers (the boot-time loading screen) can tell when the app is actually fully populated,
-  // rather than only when the two views above are ready.
-  await Promise.all([
-    refreshDashboard(), refreshDistView(), refreshWorkCalendarView(), refreshVisitLogView(),
-    refreshVisitPlanView(), refreshUsersView(), refreshVsView(), refreshAuditLogView()
-  ]);
-  // Every view this function just loaded is fresh as of right now - record that so activateView's
-  // cache (see VIEW_CACHE_TTL_MS) doesn't immediately redo the same fetch on the very next tab click.
+  // Only the dashboard (the default landing screen) and the visit-log's own sidebar badge count get
+  // loaded eagerly here - every OTHER screen (distribution days, work calendar, visit plan, users,
+  // visit standards, audit log, and the visit log's own full table) is loaded lazily instead, the
+  // first time the admin actually opens that tab (see activateView's cache / VIEW_ACTIVATION_HOOKS).
+  // Eagerly fetching and fully rendering all 11 screens on every login/company-switch was real,
+  // measured, wasted work for whichever of them the admin never visits that session - on a company
+  // with a lot of history, each one of those renders is not free, and paying for all of them upfront
+  // is exactly what made switching feel sluggish right after opening the app.
+  await Promise.all([refreshDashboard(), refreshVisitLogBadgeOnly()]);
+  // customers/nonvisitreasons are fresh as of right now - record that so activateView's cache (see
+  // VIEW_CACHE_TTL_MS) doesn't immediately redo the same fetch on the very next tab click. Every other
+  // key is deliberately left unstamped - it hasn't actually been loaded yet, so activateView must still
+  // treat it as a cache MISS the first time the admin opens it.
   const companyId = selectedCompanyId();
   const at = Date.now();
-  ["customers", "nonvisitreasons", "dashboard", "distributiondays", "workcalendar", "visitlog",
-    "visitplan", "users", "visitstandards", "auditlog"].forEach(key => { viewLastLoadedAt[key] = { companyId, at }; });
+  ["customers", "nonvisitreasons"].forEach(key => { viewLastLoadedAt[key] = { companyId, at }; });
 }
 
 /* ---- add company modal ---- */
@@ -3157,6 +3201,10 @@ const customersTable = createDataTable({
     { key: "channel", label: "ערוץ מכר", text: c => c.Channel || "", render: c => c.Channel ? `<span class="badge accent">${esc(c.Channel)}</span>` : `<span class="muted">—</span>` },
     { key: "salesCurrent", label: "מכירות השנה", text: c => c.SalesYtdCurrentYear ?? "", sortValue: c => c.SalesYtdCurrentYear, render: c => `<span class="mono">${fmtCurrency(c.SalesYtdCurrentYear)}</span>` },
     { key: "salesPrevious", label: "מכירות אשתקד", text: c => c.SalesYtdPreviousYear ?? "", sortValue: c => c.SalesYtdPreviousYear, render: c => `<span class="mono">${fmtCurrency(c.SalesYtdPreviousYear)}</span>` },
+    // Joined in from the separately-uploaded, non-month-scoped debt file (see "נתוני גביה" above) by
+    // customer number - not part of the monthly customer snapshot itself.
+    { key: "debtToCollect", label: "חוב לגביה", text: c => customerDebtLookup().get(c.CustomerNumber)?.DebtToCollect ?? "", sortValue: c => customerDebtLookup().get(c.CustomerNumber)?.DebtToCollect, render: c => `<span class="mono">${fmtCurrency(customerDebtLookup().get(c.CustomerNumber)?.DebtToCollect)}</span>` },
+    { key: "overdueDebt", label: "חוב בפיגור", text: c => customerDebtLookup().get(c.CustomerNumber)?.OverdueDebt ?? "", sortValue: c => customerDebtLookup().get(c.CustomerNumber)?.OverdueDebt, render: c => { const v = customerDebtLookup().get(c.CustomerNumber)?.OverdueDebt; return `<span class="mono"${v > 0 ? ' style="color:var(--crit-fg);font-weight:700;"' : ""}>${fmtCurrency(v)}</span>`; } },
     { key: "size", label: "גודל לקוח", text: c => c.CustomerSize || "", render: c => c.CustomerSize ? `<span class="badge">${esc(c.CustomerSize)}</span>` : `<span class="muted">—</span>` },
     { key: "phone", label: "טלפון", text: c => c.Phone || "", render: c => c.Phone ? `<span class="mono">${esc(c.Phone)}</span>` : `<span class="muted">—</span>` },
     { key: "address", label: "כתובת", text: c => c.Address || "", render: c => c.Address ? esc(c.Address) : `<span class="muted">—</span>` },
@@ -3293,12 +3341,16 @@ const customerDebtTable = createDataTable({
 
 async function refreshCustomerDebtView() {
   const companyId = selectedCompanyId();
-  if (!companyId) { liveCustomerDebt = []; customerDebtTable.refresh(); return; }
+  if (!companyId) { liveCustomerDebt = []; customerDebtTable.refresh(); customersTable.refresh(); return; }
   try {
     const res = await fetch(`/api/customers/debt?companyId=${companyId}`);
     if (res.ok) liveCustomerDebt = await res.json();
   } catch { /* offline - keep last known data */ }
   customerDebtTable.refresh();
+  // The main customers table's own debt columns (see customerDebtLookup() above) read from
+  // liveCustomerDebt too - re-render it now that debt data has (re)loaded, since refreshCustomersView()
+  // already rendered it once before this finished (this hook always runs after that one).
+  customersTable.refresh();
 }
 // Piggybacks on the existing "customers" view-activation hook (same screen, same "which company"
 // context) rather than registering a second entry for the same view key - reassigns the MAP ENTRY
@@ -3593,6 +3645,23 @@ async function refreshVisitLogView() {
 }
 VIEW_ACTIVATION_HOOKS["visitlog"] = refreshVisitLogView;
 
+// Lightweight stand-in for refreshVisitLogView() used only at boot/company-switch (see
+// refreshAllCompanyScopedViews) - fetches just enough to keep the sidebar's live visit count
+// accurate, without paying for populating the actual (potentially large) table while that screen
+// isn't even visible yet. The real refreshVisitLogView() still runs - and pays the full render cost -
+// the first time the admin actually opens "יומן ביקורים" that session (see activateView's cache).
+async function refreshVisitLogBadgeOnly() {
+  const companyId = selectedCompanyId();
+  if (!companyId) { document.getElementById("navCountVisits").textContent = ""; return; }
+  try {
+    const res = await fetch(`/api/customervisits?companyId=${companyId}`);
+    if (res.ok) {
+      const visits = await res.json();
+      document.getElementById("navCountVisits").textContent = visits.length;
+    }
+  } catch { /* offline */ }
+}
+
 document.getElementById("vlTable").addEventListener("click", async (e) => {
   const btn = e.target.closest('[data-action="delete-visit"]');
   if (!btn) return;
@@ -3669,6 +3738,19 @@ function customerLookup() {
     _customerLookupSource = liveCustomers;
   }
   return _customerLookupCache;
+}
+
+// Same memoization pattern as customerLookup() above, over liveCustomerDebt instead - debt records
+// aren't month-scoped (see CustomerDebt.cs), so this one lookup is valid regardless of which month
+// the customers table is currently showing.
+let _customerDebtLookupCache = null;
+let _customerDebtLookupSource = null;
+function customerDebtLookup() {
+  if (_customerDebtLookupSource !== liveCustomerDebt) {
+    _customerDebtLookupCache = new Map(liveCustomerDebt.map(d => [d.CustomerNumber, d]));
+    _customerDebtLookupSource = liveCustomerDebt;
+  }
+  return _customerDebtLookupCache;
 }
 
 const distTable = createDataTable({

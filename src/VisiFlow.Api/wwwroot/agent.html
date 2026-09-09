@@ -303,6 +303,17 @@
   .search-result-num { font-weight: 400; color: var(--text-muted); font-size: 0.84rem; }
   .search-result-dates { font-size: 0.82rem; color: var(--brand); margin-top: 2px; }
   .search-empty { font-size: 0.86rem; color: var(--text-muted); padding: 6px 2px; }
+  /* Slightly larger type in the "add unplanned visit" customer search specifically - a field agent
+     often taps this one-handed mid-visit, so it gets its own bump rather than changing every
+     .search-result-* usage in the app (the toolbar customer search stays as-is). */
+  #addVisitSearchInput {
+    width: 100%; box-sizing: border-box; padding: 12px 12px; border-radius: 9px; border: 1px solid var(--border);
+    background: var(--offwhite); color: var(--text); font-family: inherit; font-size: 1.05rem;
+  }
+  #addVisitSearchInput:focus { outline: 2px solid var(--electric); outline-offset: 1px; }
+  #addVisitSearchResults .search-result-name { font-size: 1.02rem; }
+  #addVisitSearchResults .search-result-num { font-size: 0.92rem; }
+  #addVisitSearchResults .search-result-dates { font-size: 0.92rem; }
   .range-quick-btns { display: flex; gap: 8px; margin-bottom: 10px; }
   .range-btn {
     flex: 1; padding: 10px 6px; border-radius: 9px; border: 1.5px solid var(--border); background: var(--offwhite);

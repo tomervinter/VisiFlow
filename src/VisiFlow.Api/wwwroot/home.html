@@ -821,6 +821,21 @@
   .login-box .mark { width: 52px; height: 52px; border-radius: 14px; background: var(--brand); margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; }
   .login-box h1 { text-align: center; margin: 0 0 4px; font-size: 1.3rem; }
   .login-box .sub { text-align: center; color: var(--text-muted); margin: 0 0 22px; font-size: 0.88rem; }
+
+  /* Shown between a successful login (or an already-valid session cookie) and the moment the
+     dashboard actually has data to show - covers the gap where refreshAllCompanyScopedViews() is
+     still fetching, so the app doesn't sit on a blank layout for a couple of seconds. Reuses the
+     same landing-pin brand mark as the login box, just bigger. */
+  .loading-screen { position: fixed; inset: 0; background: var(--navy); display: flex; align-items: center; justify-content: center; z-index: 210; flex-direction: column; gap: 18px; }
+  .loading-screen .mark { width: 68px; height: 68px; border-radius: 18px; background: var(--brand); display: flex; align-items: center; justify-content: center; }
+  .loading-screen .loading-text { color: white; font-size: 0.98rem; font-weight: 600; }
+  .loading-screen .loading-text .dots span { animation: loadingDots 1.4s infinite; opacity: 0; }
+  .loading-screen .loading-text .dots span:nth-child(2) { animation-delay: 0.2s; }
+  .loading-screen .loading-text .dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes loadingDots { 0%, 20% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .loading-screen .loading-text .dots span { animation: none; opacity: 1; }
+  }
 </style>
 
 <div class="login-screen" id="loginScreen" style="display:none;">
@@ -844,6 +859,16 @@
     <button type="button" class="btn primary" id="btnLogin" style="width:100%;box-sizing:border-box;">כניסה</button>
     <p class="form-msg" id="loginMsg" style="text-align:center;margin-top:10px;"></p>
   </div>
+</div>
+
+<div class="loading-screen" id="loadingScreen" style="display:none;">
+  <div class="mark">
+    <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <ellipse class="pin-pulse" cx="12" cy="20.5" rx="5" ry="1.6" fill="white" stroke="none"/>
+      <g class="pin-body"><path d="M12 21s7-7.5 7-12a7 7 0 1 0-14 0c0 4.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></g>
+    </svg>
+  </div>
+  <div class="loading-text">טוען את הנתונים<span class="dots"><span>.</span><span>.</span><span>.</span></span></div>
 </div>
 
 <div class="sidebar">
@@ -2240,15 +2265,14 @@ async function refreshAllCompanyScopedViews() {
   // those don't render blank until something else happens to trigger a re-render.
   await refreshCustomersView();
   await refreshReasonsView();
-  refreshDashboard();
-  refreshDistView();
-  refreshWorkCalendarView();
-  refreshVisitLogView();
-  refreshVisitPlanView();
-  refreshUsersView();
   vsSelected.clear();
-  refreshVsView();
-  refreshAuditLogView();
+  // The rest run in parallel (each already fetches/renders independently) - awaited together so
+  // callers (the boot-time loading screen) can tell when the app is actually fully populated,
+  // rather than only when the two views above are ready.
+  await Promise.all([
+    refreshDashboard(), refreshDistView(), refreshWorkCalendarView(), refreshVisitLogView(),
+    refreshVisitPlanView(), refreshUsersView(), refreshVsView(), refreshAuditLogView()
+  ]);
 }
 
 /* ---- add company modal ---- */
@@ -4835,13 +4859,18 @@ async function checkAuth() {
 
 async function startApp() {
   hideLoginScreen();
+  document.getElementById("loadingScreen").style.display = "flex";
   initVsFrequencyPresetSelect();
   initCustomersYearMonthSelectors();
   initDistYearMonthSelectors();
   initVpYearMonthSelectors();
   initDashYearMonthSelectors();
-  await loadCompanies();
-  refreshAllCompanyScopedViews();
+  try {
+    await loadCompanies();
+    await refreshAllCompanyScopedViews();
+  } finally {
+    document.getElementById("loadingScreen").style.display = "none";
+  }
 }
 
 async function attemptLogin() {

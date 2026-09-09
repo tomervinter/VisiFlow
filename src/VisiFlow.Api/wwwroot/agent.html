@@ -879,11 +879,18 @@ async function submitVisit(planEntryId, outcome, reasonId, time = null) {
   if (!customer) throw new Error("entry not found");
   const visitDate = customer.PlannedDate.slice(0, 10);
   const isEarly = outcome === "Visited" && visitDate > todayIso();
+  // This same function also handles "change-status"/"עריכת שעה" on an already-unplanned card (see
+  // AgentVisitPlanEntryDto.FromUnplannedVisit) - without carrying IsUnplanned/its note text forward,
+  // re-submitting through here (e.g. just to correct the time) would silently strip both, since the
+  // server always takes whatever this request says rather than merging with what's already stored.
+  const isUnplanned = !!customer.IsUnplanned;
   const body = {
     CompanyId: customer.CompanyId, CustomerNumber: customer.CustomerNumber, VisitDate: visitDate,
     AgentName: customer.AgentName, Outcome: outcome, NonVisitReasonId: reasonId,
-    Notes: isEarly ? `הפגישה הוקדמה - בוצעה בפועל ב-${formatBannerDate(todayIso())} עבור תאריך מתוכנן ${formatBannerDate(visitDate)}` : null,
-    Time: time
+    Notes: isUnplanned ? "פגישה יזומה ע\"י הסוכן שלא נקבעה מראש"
+      : isEarly ? `הפגישה הוקדמה - בוצעה בפועל ב-${formatBannerDate(todayIso())} עבור תאריך מתוכנן ${formatBannerDate(visitDate)}` : null,
+    Time: time,
+    IsUnplanned: isUnplanned
   };
   const res = await fetch("/api/customervisits", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(await describeError(res));
@@ -1127,7 +1134,8 @@ document.getElementById("addVisitSearchResults").addEventListener("click", async
   try {
     const body = {
       CompanyId: r.CompanyId, CustomerNumber: r.CustomerNumber, VisitDate: todayIso(),
-      AgentName: null, Outcome: "Visited", NonVisitReasonId: null, Notes: null, IsUnplanned: true
+      AgentName: null, Outcome: "Visited", NonVisitReasonId: null,
+      Notes: "פגישה יזומה ע\"י הסוכן שלא נקבעה מראש", IsUnplanned: true
     };
     const res = await fetch("/api/customervisits", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error(await describeError(res));

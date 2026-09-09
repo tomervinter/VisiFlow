@@ -1542,22 +1542,53 @@ app.MapGet("/api/agent/visitplan", async (string agentIdNumber, DateTime date, V
     var day = date.Date;
 
     var entries = await db.VisitPlanEntries.Where(e => e.PlannedDate == day).ToListAsync();
-    if (entries.Count == 0) return Results.Ok(new List<AgentVisitPlanEntryDto>());
+
+    // Visits an agent logged on their own initiative for this exact day (see "+ הוספת ביקור" / GET
+    // /api/agent/customers/search) - shown on the agent's own board alongside algorithm-planned
+    // entries, not only in the admin's visit log, so it doesn't look like the tap silently did nothing.
+    var unplannedVisits = await db.CustomerVisits.Include(v => v.NonVisitReason)
+        .Where(v => v.VisitDate == day && v.IsUnplanned)
+        .ToListAsync();
+
+    if (entries.Count == 0 && unplannedVisits.Count == 0) return Results.Ok(new List<AgentVisitPlanEntryDto>());
 
     // CustomerNumber is only unique within its own company - match/join on (CompanyId,
     // CustomerNumber) pairs throughout, not CustomerNumber alone. Every matched entry's PlannedDate is
     // this same single `day`, so its PlanYear/PlanMonth is always day.Year/day.Month too (a plan
     // entry's month always matches its own PlannedDate - see the reschedule endpoint) - one Year/Month
     // filter on the customer snapshot is therefore correct for the whole batch.
-    var companyIds = entries.Select(e => e.CompanyId).Distinct().ToList();
-    var customerNumbers = entries.Select(e => e.CustomerNumber).Distinct().ToList();
+    var companyIds = entries.Select(e => e.CompanyId).Concat(unplannedVisits.Select(v => v.CompanyId)).Distinct().ToList();
+    var customerNumbers = entries.Select(e => e.CustomerNumber).Concat(unplannedVisits.Select(v => v.CustomerNumber)).Distinct().ToList();
     var customerByKey = await db.Customers
         .Where(c => companyIds.Contains(c.CompanyId) && customerNumbers.Contains(c.CustomerNumber)
             && c.Year == day.Year && c.Month == day.Month && c.AgentIdNumber == agentIdNumber)
         .ToDictionaryAsync(c => (c.CompanyId, c.CustomerNumber));
 
     var matched = entries.Where(e => customerByKey.ContainsKey((e.CompanyId, e.CustomerNumber))).ToList();
-    if (matched.Count == 0) return Results.Ok(new List<AgentVisitPlanEntryDto>());
+
+    // An unplanned visit's customer is resolved via their MOST RECENT snapshot (any month), separately
+    // from customerByKey above (deliberately scoped to THIS month, like every real plan entry) - it
+    // must still show up even when the current month's customer file hasn't been uploaded yet, which a
+    // normal plan entry could never do (it can only exist for an already-uploaded month).
+    var unplannedCustomerByKey = new Dictionary<(int, string), Customer>();
+    if (unplannedVisits.Count > 0)
+    {
+        var candidates = await db.Customers
+            .Where(c => companyIds.Contains(c.CompanyId) && customerNumbers.Contains(c.CustomerNumber) && c.AgentIdNumber == agentIdNumber)
+            .ToListAsync();
+        unplannedCustomerByKey = candidates
+            .GroupBy(c => (c.CompanyId, c.CustomerNumber))
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.Year).ThenByDescending(c => c.Month).First());
+    }
+    // Defensive de-dup against a real plan entry for the same customer/day - shouldn't normally happen
+    // (the agent app already blocks logging an unplanned visit for a customer already on today's list),
+    // but never show the same visit twice on the board.
+    var matchedUnplanned = unplannedVisits
+        .Where(v => unplannedCustomerByKey.ContainsKey((v.CompanyId, v.CustomerNumber))
+            && !matched.Any(e => e.CompanyId == v.CompanyId && e.CustomerNumber == v.CustomerNumber))
+        .ToList();
+
+    if (matched.Count == 0 && matchedUnplanned.Count == 0) return Results.Ok(new List<AgentVisitPlanEntryDto>());
 
     var visits = await db.CustomerVisits.Include(v => v.NonVisitReason)
         .Where(v => companyIds.Contains(v.CompanyId) && v.VisitDate == day && customerNumbers.Contains(v.CustomerNumber))
@@ -1589,7 +1620,7 @@ app.MapGet("/api/agent/visitplan", async (string agentIdNumber, DateTime date, V
         .ToDictionaryAsync(d => (d.CompanyId, d.CustomerNumber));
 
     var today = DateTime.Today;
-    var result = matched.Select(e =>
+    var fromEntries = matched.Select(e =>
     {
         visitByKey.TryGetValue((e.CompanyId, e.CustomerNumber), out var visit);
         lastVisitByKey.TryGetValue((e.CompanyId, e.CustomerNumber), out var lastVisit);
@@ -1599,11 +1630,22 @@ app.MapGet("/api/agent/visitplan", async (string agentIdNumber, DateTime date, V
         debtByKey.TryGetValue((e.CompanyId, e.CustomerNumber), out var debt);
         return AgentVisitPlanEntryDto.From(e, customerByKey[(e.CompanyId, e.CustomerNumber)], visit,
             lastVisit == default ? null : lastVisit, daysSince, dist, standard?.RequiredVisitsPerWeek, debt);
+    });
+    var fromUnplanned = matchedUnplanned.Select(v =>
+    {
+        lastVisitByKey.TryGetValue((v.CompanyId, v.CustomerNumber), out var lastVisit);
+        int? daysSince = lastVisit == default ? null : (today - lastVisit).Days;
+        standardByKey.TryGetValue((v.CompanyId, v.CustomerNumber), out var standard);
+        debtByKey.TryGetValue((v.CompanyId, v.CustomerNumber), out var debt);
+        return AgentVisitPlanEntryDto.FromUnplannedVisit(v, unplannedCustomerByKey[(v.CompanyId, v.CustomerNumber)],
+            lastVisit == default ? null : lastVisit, daysSince, standard?.RequiredVisitsPerWeek, debt);
+    });
     // VisitOrder (walking-route sequence, when route optimization has run) takes priority over
     // PriorityScore for display order - an agent should see their day in the order they'll actually
     // drive it, not by administrative urgency. Entries with no VisitOrder yet (no key configured, or
     // optimizebycity never run) fall back to the original PriorityScore-only ordering.
-    }).OrderBy(x => x.VisitOrder ?? int.MaxValue).ThenByDescending(x => x.PriorityScore).ToList(); // in-memory sort - SQLite can't ORDER BY decimal
+    var result = fromEntries.Concat(fromUnplanned)
+        .OrderBy(x => x.VisitOrder ?? int.MaxValue).ThenByDescending(x => x.PriorityScore).ToList(); // in-memory sort - SQLite can't ORDER BY decimal
     return Results.Ok(result);
 });
 
@@ -2139,7 +2181,7 @@ record AgentVisitPlanEntryDto(
     DateTime PlannedDate, decimal PriorityScore, string? Outcome, string? ReasonText, int? VisitId,
     decimal? RequiredVisitsPerWeek, DateTime? LastVisitDate, int? DaysSinceLastVisit, string? AdminNote,
     bool DistSunday, bool DistMonday, bool DistTuesday, bool DistWednesday, bool DistThursday, bool DistFriday, bool DistSaturday, bool DistDefined,
-    int? VisitOrder, DateTime? VisitRecordedAt, decimal? DebtToCollect, decimal? OverdueDebt)
+    int? VisitOrder, DateTime? VisitRecordedAt, decimal? DebtToCollect, decimal? OverdueDebt, bool IsUnplanned)
 {
     public static AgentVisitPlanEntryDto From(VisitPlanEntry e, Customer c, CustomerVisit? visit,
         DateTime? lastVisitDate, int? daysSinceLastVisit, CustomerDistributionDay? dist, decimal? requiredVisitsPerWeek, CustomerDebt? debt) => new(
@@ -2149,7 +2191,22 @@ record AgentVisitPlanEntryDto(
         requiredVisitsPerWeek, lastVisitDate, daysSinceLastVisit, e.AdminNote,
         dist?.Sunday ?? false, dist?.Monday ?? false, dist?.Tuesday ?? false, dist?.Wednesday ?? false,
         dist?.Thursday ?? false, dist?.Friday ?? false, dist?.Saturday ?? false, dist != null,
-        e.VisitOrder, visit?.CreatedAt, debt?.DebtToCollect, debt?.OverdueDebt);
+        e.VisitOrder, visit?.CreatedAt, debt?.DebtToCollect, debt?.OverdueDebt, false);
+
+    // A card with no backing VisitPlanEntry at all - logged directly via "+ הוספת ביקור" (see
+    // CustomerVisit.IsUnplanned). PlanEntryId uses the NEGATIVE of the CustomerVisit's own Id so it can
+    // never collide with a real (always-positive) VisitPlanEntry.Id - the agent app's card actions
+    // (change-status, edit-time) key off this exact field, and both already work against this synthetic
+    // id without modification since they only ever call the CustomerVisit-based endpoints, never one
+    // that expects a real VisitPlanEntry to exist.
+    public static AgentVisitPlanEntryDto FromUnplannedVisit(CustomerVisit v, Customer c,
+        DateTime? lastVisitDate, int? daysSinceLastVisit, decimal? requiredVisitsPerWeek, CustomerDebt? debt) => new(
+        -v.Id, v.CompanyId, v.CustomerNumber, c.CustomerName, c.Phone, c.Address,
+        c.SalesYtdCurrentYear, c.SalesYtdPreviousYear, c.AgentName,
+        v.VisitDate, 0m, v.Outcome.ToString(), v.NonVisitReason?.Text, v.Id,
+        requiredVisitsPerWeek, lastVisitDate, daysSinceLastVisit, null,
+        false, false, false, false, false, false, false, false,
+        null, v.CreatedAt, debt?.DebtToCollect, debt?.OverdueDebt, true);
 }
 
 record AgentSearchResultDto(string CustomerNumber, string CustomerName, DateTime PlannedDate);

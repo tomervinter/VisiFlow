@@ -3012,11 +3012,17 @@ async function refreshDashboard() {
     { id: "postponedToday", value: fmtNumber(postponedToday.length), label: `ביקורים שנדחו ${isRealToday ? "היום" : "ב" + todayWord}`, sub: fmtDate(todayIso) },
     { id: "pendingToday", value: fmtNumber(agentsNotReportedToday.length), label: `סוכנים שטרם דיווחו ${todayWord}`, sub: fmtDate(todayIso) }
   ]);
+  // Visits an agent logged on their own initiative (via customer search in the agent app), not from a
+  // plan entry the algorithm generated for the selected month/channel (see CustomerVisit.IsUnplanned).
+  const unplannedThisMonth = visits.filter(v => v.Outcome === "Visited" && v.IsUnplanned
+    && v.VisitDate.slice(0, 4) === String(selYear) && Number(v.VisitDate.slice(5, 7)) === selMonth
+    && (!globalChannel || v.Channel === globalChannel));
   renderKpiGrid("dashKpiGridMonthly", [
     { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel ? `בערוץ ${globalChannel}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים`, tier: "good" },
     { id: "neglected", value: fmtNumber(neglected.length), label: "לקוחות שלא ביקרנו מעל 30 יום", sub: "לחצו לרשימה המלאה", tier: neglected.length === 0 ? "good" : (neglected.length > kpiCustomers.length * 0.2 ? "crit" : "warn") },
     { id: "decliningNeglected", value: fmtNumber(decliningNeglected.length), label: "יורדים במכר וללא ביקור מספק", sub: "ירידה במכר + לא ביקרנו מעל 30 יום", tier: decliningNeglected.length === 0 ? "good" : "crit" },
-    { id: "unscheduled", value: fmtNumber(unscheduled.length), label: "לקוחות שלא שובצו", sub: "אין קיבולת פנויה ביומן הסוכן - לחצו לרשימה", tier: unscheduled.length === 0 ? "good" : "crit" }
+    { id: "unscheduled", value: fmtNumber(unscheduled.length), label: "לקוחות שלא שובצו", sub: "אין קיבולת פנויה ביומן הסוכן - לחצו לרשימה", tier: unscheduled.length === 0 ? "good" : "crit" },
+    { id: "unplannedVisits", value: fmtNumber(unplannedThisMonth.length), label: "ביקורים יזומים על ידי סוכנים", sub: "לא היו חלק מתוכנית הביקורים המתוכננת" }
   ]);
   renderReasonsChart(reasonAgg);
   renderDonutChart("dashAgentDonut", agentComposition, { centerLabel: "לקוחות", drillAttr: "drill-agent-donut", inlineCount: true, showPct: false });
@@ -3436,7 +3442,11 @@ function fmtVisitOutcome(v) {
   // via a Notes marker at submission time; surface it here so it doesn't read as an ordinary on-
   // schedule visit.
   const isEarly = v.Outcome === "Visited" && (v.Notes || "").includes("הפגישה הוקדמה");
-  return isEarly ? `${base} <span class="badge warn" title="${esc(v.Notes)}">⏩ הוקדם</span>` : base;
+  const earlyBadge = isEarly ? ` <span class="badge warn" title="${esc(v.Notes)}">⏩ הוקדם</span>` : "";
+  // A visit the agent logged on their own initiative, via customer search in the agent app, not from
+  // a plan entry the algorithm generated (see CustomerVisit.IsUnplanned).
+  const unplannedBadge = v.IsUnplanned ? ` <span class="badge accent" title="נרשם על ידי הסוכן דרך חיפוש לקוח - לא היה חלק מתוכנית הביקורים המתוכננת">✨ ביקור יזום</span>` : "";
+  return base + earlyBadge + unplannedBadge;
 }
 
 let vlSelected = new Set(); // CustomerVisit.Id -> selected for bulk delete

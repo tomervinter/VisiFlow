@@ -344,6 +344,7 @@
   <div class="screen" id="screenList">
     <div class="toolbar-row" style="display:flex;gap:8px;">
       <button type="button" class="btn-toolbar" id="btnToggleDrawer" style="flex:1;">🔍 חיפוש ותאריכים</button>
+      <button type="button" class="btn-toolbar btn-toolbar-compact" id="btnOpenAddVisit">+ הוספת ביקור</button>
       <button type="button" class="btn-toolbar btn-toolbar-compact" id="btnExpandAll" style="flex:0 0 auto;">פתח הכל</button>
     </div>
     <div class="settings-drawer" id="settingsDrawer" style="display:none;">
@@ -390,6 +391,40 @@
     </div>
     <input type="date" class="cc-resched-date-input" id="reschedModalDateInput" style="display:none;" />
     <div class="cc-msg" id="reschedModalMsg"></div>
+  </div>
+</div>
+
+<!-- ===================== ADD UNPLANNED VISIT ===================== -->
+<!-- For a customer the agent is visiting OUTSIDE the planned schedule (wasn't on today's list at all) -
+     free-text search across the agent's whole customer book (not just already-scheduled ones, see
+     GET /api/agent/customers/search), then log today's visit for whichever one they pick. -->
+<div class="resched-modal-overlay" id="addVisitModalOverlay">
+  <div class="resched-modal-box">
+    <p class="cc-resched-q">הוספת ביקור שלא תוכנן</p>
+    <input type="text" id="addVisitSearchInput" placeholder="חיפוש לקוח (שם או מספר)..." autocomplete="off" />
+    <div class="search-results" id="addVisitSearchResults"></div>
+    <div class="cc-msg" id="addVisitMsg"></div>
+    <div class="cc-resched-actions" style="margin-top:10px;">
+      <button type="button" class="cc-resched-btn secondary" id="btnCloseAddVisit">סגירה</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shown automatically right after logging an unplanned visit, only when that customer already has a
+     future scheduled meeting (see NextPlanEntryId/NextPlannedDate on the search result) - lets the
+     agent immediately resolve it instead of it silently sitting on the calendar as if nothing changed. -->
+<div class="resched-modal-overlay" id="nextVisitModalOverlay">
+  <div class="resched-modal-box">
+    <div class="cc-status-badge visited" id="nextVisitModalInfo"><span></span></div>
+    <p class="cc-resched-q">מה לעשות עם הפגישה המתוכננת?</p>
+    <div class="cc-resched-actions">
+      <button type="button" class="cc-resched-btn" data-nextvisit="today">📅 להעביר להיום</button>
+      <button type="button" class="cc-resched-btn" data-nextvisit="pick">🗓️ להזיז לתאריך אחר</button>
+      <button type="button" class="cc-resched-btn" data-nextvisit="cancel">✗ לבטל את הפגישה</button>
+      <button type="button" class="cc-resched-btn secondary" data-nextvisit="skip">להשאיר כמו שזה</button>
+    </div>
+    <input type="date" class="cc-resched-date-input" id="nextVisitDateInput" style="display:none;" />
+    <div class="cc-msg" id="nextVisitMsg"></div>
   </div>
 </div>
 
@@ -1028,6 +1063,156 @@ async function doReschedule(planEntryId, newDateIso, reasonText) {
   closeReschedModal();
   await refreshList();
 }
+
+/* ==================== ADD UNPLANNED VISIT ====================
+   Lets an agent who walked into a customer OUTSIDE the planned schedule log it anyway - search across
+   their whole customer book (not just today's/already-scheduled entries, see GET
+   /api/agent/customers/search), log a "ביקרתי" for today, then - if that customer already has a future
+   meeting on the calendar - immediately offer to resolve it instead of leaving it stranded. */
+let addVisitSearchDebounce = null;
+let addVisitResults = [];
+
+function openAddVisitModal() {
+  document.getElementById("addVisitSearchInput").value = "";
+  document.getElementById("addVisitSearchResults").innerHTML = "";
+  document.getElementById("addVisitMsg").textContent = "";
+  addVisitResults = [];
+  document.getElementById("addVisitModalOverlay").classList.add("open");
+  document.getElementById("addVisitSearchInput").focus();
+}
+function closeAddVisitModal() {
+  document.getElementById("addVisitModalOverlay").classList.remove("open");
+}
+document.getElementById("btnOpenAddVisit").addEventListener("click", openAddVisitModal);
+document.getElementById("btnCloseAddVisit").addEventListener("click", closeAddVisitModal);
+document.getElementById("addVisitModalOverlay").addEventListener("click", (e) => {
+  if (e.target.id === "addVisitModalOverlay") closeAddVisitModal();
+});
+
+function renderAddVisitResults() {
+  const el = document.getElementById("addVisitSearchResults");
+  if (addVisitResults.length === 0) { el.innerHTML = ""; return; }
+  el.innerHTML = addVisitResults.map((r, i) => `
+    <div class="search-result-item" data-add-visit-index="${i}">
+      <div class="search-result-name">${esc(r.CustomerName)} <span class="search-result-num">(${r.CustomerNumber})</span></div>
+      ${r.Address ? `<div class="search-result-dates">${esc(r.Address)}</div>` : ""}
+      ${r.HasEntryToday
+        ? `<div class="cc-msg" style="margin-top:4px;">כבר ברשימה שלכם היום - סמנו אותו מהרשימה הרגילה במקום כאן.</div>`
+        : `<button type="button" class="cc-resched-btn" style="margin-top:6px;" data-add-visit-confirm="${i}">✓ הוספת ביקור להיום</button>`}
+    </div>`).join("");
+}
+
+document.getElementById("addVisitSearchInput").addEventListener("input", (e) => {
+  clearTimeout(addVisitSearchDebounce);
+  const q = e.target.value.trim();
+  if (q.length < 2) { addVisitResults = []; renderAddVisitResults(); return; }
+  addVisitSearchDebounce = setTimeout(async () => {
+    const agentIdNumber = localStorage.getItem(AGENT_ID_KEY);
+    if (!agentIdNumber) return;
+    try {
+      const res = await fetch(`/api/agent/customers/search?agentIdNumber=${encodeURIComponent(agentIdNumber)}&query=${encodeURIComponent(q)}`);
+      addVisitResults = res.ok ? await res.json() : [];
+    } catch { addVisitResults = []; }
+    renderAddVisitResults();
+  }, 300);
+});
+
+document.getElementById("addVisitSearchResults").addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-add-visit-confirm]");
+  if (!btn) return;
+  const r = addVisitResults[Number(btn.dataset.addVisitConfirm)];
+  if (!r) return;
+  const msg = document.getElementById("addVisitMsg");
+  msg.className = "cc-msg"; msg.textContent = "שומר...";
+  try {
+    const body = {
+      CompanyId: r.CompanyId, CustomerNumber: r.CustomerNumber, VisitDate: todayIso(),
+      AgentName: null, Outcome: "Visited", NonVisitReasonId: null, Notes: null, IsUnplanned: true
+    };
+    const res = await fetch("/api/customervisits", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(await describeError(res));
+  } catch (err) {
+    msg.className = "cc-msg error"; msg.textContent = `שגיאה בשמירה: ${(err && err.message) || "נסו שוב"}`;
+    return;
+  }
+  closeAddVisitModal();
+  await refreshList();
+  if (r.NextPlanEntryId && r.NextPlannedDate) {
+    showNextVisitPrompt(r.NextPlanEntryId, r.CustomerName, r.NextPlannedDate);
+  }
+});
+
+let nextVisitEntryId = null;
+
+function showNextVisitPrompt(planEntryId, customerName, nextPlannedDateIso) {
+  nextVisitEntryId = planEntryId;
+  const days = Math.round((new Date(nextPlannedDateIso.slice(0, 10) + "T00:00:00") - new Date(todayIso() + "T00:00:00")) / 86400000);
+  const whenText = days === 1 ? "מחר" : `בעוד ${days} ימים`;
+  document.getElementById("nextVisitModalInfo").innerHTML =
+    `<span>ל${esc(customerName)} כבר יש פגישה מתוכננת ${whenText} (${formatBannerDate(nextPlannedDateIso.slice(0, 10))})</span>`;
+  const dateInput = document.getElementById("nextVisitDateInput");
+  dateInput.style.display = "none";
+  dateInput.value = "";
+  dateInput.min = todayIso();
+  document.getElementById("nextVisitMsg").textContent = "";
+  document.getElementById("nextVisitModalOverlay").classList.add("open");
+}
+function closeNextVisitModal() {
+  document.getElementById("nextVisitModalOverlay").classList.remove("open");
+  nextVisitEntryId = null;
+}
+document.getElementById("nextVisitModalOverlay").addEventListener("click", (e) => {
+  if (e.target.id === "nextVisitModalOverlay") closeNextVisitModal();
+});
+
+async function doNextVisitReschedule(newDateIso) {
+  const msg = document.getElementById("nextVisitMsg");
+  msg.className = "cc-msg"; msg.textContent = "מבצע...";
+  try {
+    const res = await fetch(`/api/visitplan/entries/${nextVisitEntryId}/reschedule`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ NewDate: newDateIso, Source: "Agent", ReasonText: null })
+    });
+    if (!res.ok) throw new Error(await describeError(res));
+  } catch (err) {
+    msg.className = "cc-msg error"; msg.textContent = `שגיאה: ${(err && err.message) || "נסו שוב"}`;
+    return;
+  }
+  closeNextVisitModal();
+  await refreshList();
+}
+
+document.getElementById("nextVisitModalOverlay").addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-nextvisit]");
+  if (!btn || !nextVisitEntryId) return;
+  const action = btn.dataset.nextvisit;
+  if (action === "skip") { closeNextVisitModal(); return; }
+  if (action === "today") { await doNextVisitReschedule(todayIso()); return; }
+  if (action === "pick") {
+    const dateInput = document.getElementById("nextVisitDateInput");
+    dateInput.style.display = "block";
+    dateInput.focus();
+    if (dateInput.showPicker) { try { dateInput.showPicker(); } catch { /* not supported */ } }
+    return;
+  }
+  if (action === "cancel") {
+    const msg = document.getElementById("nextVisitMsg");
+    msg.className = "cc-msg"; msg.textContent = "מבטל...";
+    try {
+      const res = await fetch(`/api/agent/visitplan/entries/${nextVisitEntryId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(await describeError(res));
+    } catch (err) {
+      msg.className = "cc-msg error"; msg.textContent = `שגיאה בביטול: ${(err && err.message) || "נסו שוב"}`;
+      return;
+    }
+    closeNextVisitModal();
+    await refreshList();
+  }
+});
+document.getElementById("nextVisitDateInput").addEventListener("change", async (e) => {
+  if (!e.target.value) return;
+  await doNextVisitReschedule(e.target.value);
+});
 
 (function init() {
   // Always land on the login screen by default (it's already shown by default in the HTML/CSS) -

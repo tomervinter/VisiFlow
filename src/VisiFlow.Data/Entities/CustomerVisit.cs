@@ -21,4 +21,7 @@ public class CustomerVisit
     public NonVisitReason? NonVisitReason { get; set; }
     public string? Notes { get; set; }
     public DateTime CreatedAt { get; set; }
+    /// <summary>ביקור יזום - נוצר על ידי הסוכן דרך חיפוש לקוח חופשי באפליקציית הסוכן, לא מתוך תוכנית
+    /// הביקורים שנוצרה על ידי האלגוריתם. False עבור כל ביקור "רגיל" (גם אם הוזז/נדחה בהמשך).</summary>
+    public bool IsUnplanned { get; set; }
 }

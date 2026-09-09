@@ -205,6 +205,8 @@ using (var scope = app.Services.CreateScope())
             """);
         await db.Database.ExecuteSqlRawAsync(
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_CustomerDebts_CompanyId_CustomerNumber\" ON \"CustomerDebts\" (\"CompanyId\", \"CustomerNumber\");");
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE \"CustomerVisits\" ADD COLUMN IF NOT EXISTS \"IsUnplanned\" boolean NOT NULL DEFAULT false;");
     }
     else
     {
@@ -1407,6 +1409,7 @@ app.MapPost("/api/customervisits", async (CreateCustomerVisitRequest req, VisiFl
     visit.Outcome = outcome;
     visit.NonVisitReasonId = outcome == VisitOutcome.NotVisited ? req.NonVisitReasonId : null;
     visit.Notes = string.IsNullOrWhiteSpace(req.Notes) ? null : req.Notes;
+    visit.IsUnplanned = req.IsUnplanned;
 
     await db.SaveChangesAsync();
     visit.NonVisitReason = reason;
@@ -1699,6 +1702,64 @@ app.MapGet("/api/agent/visitplan/search", async (string agentIdNumber, string qu
         .Select(e => new AgentSearchResultDto(e.CustomerNumber, nameByKey[(e.CompanyId, e.CustomerNumber)], e.PlannedDate!.Value))
         .ToList();
     return Results.Ok(results);
+});
+
+// Broader than the search above - finds ANY of the agent's own customers (deduplicated across every
+// month they've ever been assigned, using the most recently-updated snapshot for display fields), not
+// only ones who already have a plan entry somewhere. Powers "add a visit for a customer I wasn't
+// scheduled to see" (see POST /api/customervisits's IsUnplanned flag below) - that flow needs to work
+// even for a customer with zero existing VisitPlanEntry rows, which the entries-first search above
+// can never surface. Also reports whether the customer already has an entry TODAY (the caller should
+// steer the agent to the normal list instead of double-logging) and their nearest FUTURE entry, if
+// any, so the caller can offer to cancel/move it right after logging the unplanned visit.
+app.MapGet("/api/agent/customers/search", async (string agentIdNumber, string query, VisiFlowDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(agentIdNumber) || string.IsNullOrWhiteSpace(query) || query.Trim().Length < 2)
+        return Results.Ok(new List<AgentCustomerSearchResultDto>());
+    var q = query.Trim();
+
+    var matches = await db.Customers
+        .Where(c => c.AgentIdNumber == agentIdNumber && (c.CustomerName.Contains(q) || c.CustomerNumber.Contains(q)))
+        .ToListAsync();
+    if (matches.Count == 0) return Results.Ok(new List<AgentCustomerSearchResultDto>());
+
+    var latestByNumber = matches
+        .GroupBy(c => (c.CompanyId, c.CustomerNumber))
+        .Select(g => g.OrderByDescending(c => c.Year).ThenByDescending(c => c.Month).First())
+        .ToList();
+
+    var companyIds = latestByNumber.Select(c => c.CompanyId).Distinct().ToList();
+    var customerNumbers = latestByNumber.Select(c => c.CustomerNumber).Distinct().ToList();
+    var today = DateTime.Today;
+    var entriesByCustomer = (await db.VisitPlanEntries
+        .Where(e => companyIds.Contains(e.CompanyId) && customerNumbers.Contains(e.CustomerNumber) && e.PlannedDate != null)
+        .ToListAsync())
+        .GroupBy(e => (e.CompanyId, e.CustomerNumber))
+        .ToDictionary(g => g.Key, g => g.ToList());
+
+    var results = latestByNumber.Select(c =>
+    {
+        entriesByCustomer.TryGetValue((c.CompanyId, c.CustomerNumber), out var custEntries);
+        custEntries ??= new List<VisitPlanEntry>();
+        var hasToday = custEntries.Any(e => e.PlannedDate!.Value.Date == today);
+        var next = custEntries.Where(e => e.PlannedDate!.Value.Date > today).OrderBy(e => e.PlannedDate).FirstOrDefault();
+        return new AgentCustomerSearchResultDto(c.CompanyId, c.CustomerNumber, c.CustomerName, c.Phone, c.Address,
+            hasToday, next?.Id, next?.PlannedDate);
+    }).OrderBy(r => r.CustomerName).ToList();
+    return Results.Ok(results);
+});
+
+// Cancels a customer's own future plan entry - the agent-facing counterpart to the admin-only DELETE
+// /api/visitplan/entries/{id} above (that one requires a login the agent app deliberately doesn't
+// have). Used right after logging an unplanned visit, when the agent chooses to cancel (rather than
+// move) the customer's already-scheduled next meeting instead of leaving it stranded on the calendar.
+app.MapDelete("/api/agent/visitplan/entries/{id:int}", async (int id, VisiFlowDbContext db) =>
+{
+    var entry = await db.VisitPlanEntries.FindAsync(id);
+    if (entry == null) return Results.NotFound("שורת תוכנית הביקורים לא נמצאה");
+    db.VisitPlanEntries.Remove(entry);
+    await db.SaveChangesAsync();
+    return Results.NoContent();
 });
 
 // Manually moves one plan entry to a new date - used both by an admin dragging/editing a row on the
@@ -2060,17 +2121,17 @@ record WorkCalendarDayDto(int Id, int CompanyId, DateTime Date, string DayType)
 record CustomerVisitDto(
     int Id, int CompanyId, string CustomerNumber, DateTime VisitDate, string? AgentName,
     string Outcome, int? NonVisitReasonId, string? NonVisitReasonText, string? Notes, DateTime CreatedAt,
-    string? Channel, string? City)
+    string? Channel, string? City, bool IsUnplanned)
 {
     public static CustomerVisitDto From(CustomerVisit v, Customer? customer = null) => new(
         v.Id, v.CompanyId, v.CustomerNumber, v.VisitDate, v.AgentName,
         v.Outcome.ToString(), v.NonVisitReasonId, v.NonVisitReason?.Text, v.Notes, v.CreatedAt,
-        customer?.Channel, customer?.City);
+        customer?.Channel, customer?.City, v.IsUnplanned);
 }
 
 record CreateCustomerVisitRequest(
     int CompanyId, string CustomerNumber, DateTime VisitDate, string? AgentName,
-    string Outcome, int? NonVisitReasonId, string? Notes, string? Time = null);
+    string Outcome, int? NonVisitReasonId, string? Notes, string? Time = null, bool IsUnplanned = false);
 
 record AgentVisitPlanEntryDto(
     int PlanEntryId, int CompanyId, string CustomerNumber, string CustomerName, string? Phone, string? Address,
@@ -2092,6 +2153,10 @@ record AgentVisitPlanEntryDto(
 }
 
 record AgentSearchResultDto(string CustomerNumber, string CustomerName, DateTime PlannedDate);
+
+record AgentCustomerSearchResultDto(
+    int CompanyId, string CustomerNumber, string CustomerName, string? Phone, string? Address,
+    bool HasEntryToday, int? NextPlanEntryId, DateTime? NextPlannedDate);
 
 record VisitPlanWeightsDto(
     int CompanyId, decimal SalesDropWeight, decimal DistributionWeight, decimal FrequencyWeight,

@@ -21,6 +21,7 @@ public class VisiFlowDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<CityGroup> CityGroups => Set<CityGroup>();
     public DbSet<AuditLogEntry> AuditLogEntries => Set<AuditLogEntry>();
+    public DbSet<CustomerDebt> CustomerDebts => Set<CustomerDebt>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -172,6 +173,17 @@ public class VisiFlowDbContext : DbContext
             entity.Property(a => a.TargetDescription).IsRequired().HasMaxLength(300);
             entity.HasIndex(a => new { a.CompanyId, a.CreatedAt });
             entity.HasOne(a => a.Company).WithMany().HasForeignKey(a => a.CompanyId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CustomerDebt>(entity =>
+        {
+            entity.ToTable("CustomerDebts");
+            entity.HasKey(d => d.Id);
+            entity.Property(d => d.CustomerNumber).IsRequired().HasMaxLength(30);
+            // One current row per real customer (company + number), independent of any month's Customer
+            // snapshot - a fresh upload overwrites this row in place rather than adding a new dated one.
+            entity.HasIndex(d => new { d.CompanyId, d.CustomerNumber }).IsUnique();
+            entity.HasOne(d => d.Company).WithMany().HasForeignKey(d => d.CompanyId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

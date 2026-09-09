@@ -1164,6 +1164,33 @@
           <table id="customersTable"></table>
         </div>
       </section>
+
+      <section class="panel">
+        <h2>טעינת נתוני גביה</h2>
+        <p class="desc">
+          העלו קובץ אקסל (.xlsx) עם חוב הגביה העדכני ללקוחות, לפי מספר לקוח. בשונה מקובץ הלקוחות
+          למעלה - נתוני גביה אינם משוייכים לחודש מסויים, הם תמיד "נכון להיום": טעינה חדשה של לקוח
+          מסויים דורסת ומחליפה את נתוני הגביה הקודמים שלו, ולא נשמרת כתמונת מצב היסטורית נפרדת.
+          הנתונים המעודכנים מוצגים גם בממשק הסוכן.
+        </p>
+        <div class="controls" style="margin-bottom:10px;">
+          <div class="dropzone dropzone-compact" id="importDebtDropzone">
+            <input type="file" id="importDebtFileInput" accept=".xlsx,.xls" style="display:none" />
+            <div class="dropzone-body">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M12 16V4M12 4 7 9M12 4l5 5"/><path d="M20 16v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/></svg>
+              <span>גררו לכאן קובץ אקסל, או</span>
+              <div class="dropzone-actions">
+                <button type="button" class="btn small primary" id="btnBrowseImportDebt">&#128193; טעינת נתוני גביה</button>
+              </div>
+            </div>
+          </div>
+          <a class="btn small" id="btnDownloadDebtTemplate" href="/api/customers/debt/import/template">&#8681; הורדת תבנית לדוגמה</a>
+        </div>
+        <p class="form-msg" id="importDebtMsg" style="margin-top:0;"></p>
+        <div class="table-wrap">
+          <table id="customerDebtTable"></table>
+        </div>
+      </section>
     </div>
 
     <!-- ===================== NON-VISIT REASONS ===================== -->
@@ -3186,6 +3213,76 @@ importDropzone.addEventListener("drop", (e) => {
   importDropzone.classList.remove("dragover");
   const file = e.dataTransfer.files[0];
   if (file) handleImportFile(file);
+});
+
+/* ---- customer debt (collection data) - not month-scoped, see CustomerDebt.cs ---- */
+let liveCustomerDebt = [];
+const customerDebtTable = createDataTable({
+  tableId: "customerDebtTable",
+  columns: [
+    { key: "customerNumber", label: "מספר לקוח", text: d => d.CustomerNumber, render: d => `<span class="mono name">${d.CustomerNumber}</span>` },
+    { key: "customerName", label: "שם לקוח", text: d => customerLookup().get(d.CustomerNumber)?.CustomerName || "", render: d => customerLookup().get(d.CustomerNumber)?.CustomerName ? esc(customerLookup().get(d.CustomerNumber).CustomerName) : `<span class="muted">—</span>` },
+    { key: "debtToCollect", label: "חוב לגביה", text: d => d.DebtToCollect ?? "", sortValue: d => d.DebtToCollect, render: d => `<span class="mono">${fmtCurrency(d.DebtToCollect)}</span>` },
+    { key: "overdueDebt", label: "חוב בפיגור", text: d => d.OverdueDebt ?? "", sortValue: d => d.OverdueDebt, render: d => `<span class="mono"${d.OverdueDebt > 0 ? ' style="color:var(--crit-fg);font-weight:700;"' : ""}>${fmtCurrency(d.OverdueDebt)}</span>` },
+    { key: "updatedAt", label: "עודכן לאחרונה", text: d => d.UpdatedAt, sortValue: d => d.UpdatedAt, render: d => `<span class="mono">${fmtDate(d.UpdatedAt)}</span>` }
+  ],
+  getRows: () => liveCustomerDebt,
+  entityLabel: "רשומות גביה"
+});
+
+async function refreshCustomerDebtView() {
+  const companyId = selectedCompanyId();
+  if (!companyId) { liveCustomerDebt = []; customerDebtTable.refresh(); return; }
+  try {
+    const res = await fetch(`/api/customers/debt?companyId=${companyId}`);
+    if (res.ok) liveCustomerDebt = await res.json();
+  } catch { /* offline - keep last known data */ }
+  customerDebtTable.refresh();
+}
+// Piggybacks on the existing "customers" view-activation hook (same screen, same "which company"
+// context) rather than registering a second entry for the same view key - reassigns the MAP ENTRY
+// itself (not the refreshCustomersView function/variable), since VIEW_ACTIVATION_HOOKS["customers"]
+// already captured a reference to the original function at the point it was first assigned above and
+// wouldn't see a later reassignment of the variable it was copied from.
+VIEW_ACTIVATION_HOOKS["customers"] = async function () {
+  await refreshCustomersView();
+  await refreshCustomerDebtView();
+};
+
+function handleImportDebtFile(file) {
+  if (!file) return;
+  const companyId = selectedCompanyId();
+  const msg = document.getElementById("importDebtMsg");
+  if (!companyId) { msg.className = "form-msg error"; msg.textContent = "יש לבחור חברה לפני הטעינה"; return; }
+
+  const fd = new FormData();
+  fd.append("CompanyId", String(companyId));
+  fd.append("file", file);
+
+  msg.className = "form-msg"; msg.textContent = "טוען...";
+  fetch("/api/customers/debt/import", { method: "POST", body: fd })
+    .then(async (res) => {
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
+      const result = await res.json();
+      const parts = [`נוספו ${result.Created} רשומות גביה חדשות, עודכנו ${result.Updated} קיימות.`];
+      if (result.Errors.length > 0) parts.push(`${result.Errors.length} שורות נפסלו: ${result.Errors.slice(0, 5).join(" · ")}${result.Errors.length > 5 ? " ..." : ""}`);
+      msg.className = result.Errors.length > 0 ? "form-msg error" : "form-msg success";
+      msg.textContent = parts.join(" ");
+      await refreshCustomerDebtView();
+    })
+    .catch(() => { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; })
+    .finally(() => { document.getElementById("importDebtFileInput").value = ""; });
+}
+document.getElementById("btnBrowseImportDebt").addEventListener("click", () => document.getElementById("importDebtFileInput").click());
+document.getElementById("importDebtFileInput").addEventListener("change", (e) => handleImportDebtFile(e.target.files[0]));
+const importDebtDropzone = document.getElementById("importDebtDropzone");
+["dragover", "dragleave", "drop"].forEach(evt => importDebtDropzone.addEventListener(evt, (e) => e.preventDefault()));
+importDebtDropzone.addEventListener("dragover", () => importDebtDropzone.classList.add("dragover"));
+importDebtDropzone.addEventListener("dragleave", () => importDebtDropzone.classList.remove("dragover"));
+importDebtDropzone.addEventListener("drop", (e) => {
+  importDebtDropzone.classList.remove("dragover");
+  const file = e.dataTransfer.files[0];
+  if (file) handleImportDebtFile(file);
 });
 
 /* ---- delete all customers (danger button + type-to-confirm modal) ---- */

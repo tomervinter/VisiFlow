@@ -109,6 +109,32 @@
   .btn-block:active { background: var(--brand-hover); }
   .identify-msg { font-size: 0.92rem; color: var(--crit-fg); margin-top: 12px; min-height: 1.2em; }
 
+  /* Shown from the moment "כניסה" is tapped until the visit list has actually loaded - same visual
+     language as the admin app's own boot-time loading screen (home.html), including the same
+     landing-pin brand mark, just scoped to the identify->list gap instead of login->dashboard. */
+  .loading-screen { position: fixed; inset: 0; background: var(--navy); display: flex; align-items: center; justify-content: center; z-index: 210; flex-direction: column; gap: 18px; }
+  .loading-screen .mark { width: 68px; height: 68px; border-radius: 18px; background: var(--brand); display: flex; align-items: center; justify-content: center; }
+  .loading-screen .loading-text { color: white; font-size: 0.98rem; font-weight: 600; }
+  .loading-screen .loading-text .dots span { animation: loadingDots 1.4s infinite; opacity: 0; }
+  .loading-screen .loading-text .dots span:nth-child(2) { animation-delay: 0.2s; }
+  .loading-screen .loading-text .dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes loadingDots { 0%, 20% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+  .mark .pin-pulse { transform-box: fill-box; transform-origin: 50% 50%; animation: markPinPulse 1.8s ease-out infinite; }
+  .mark .pin-body { transform-box: fill-box; transform-origin: 50% 100%; animation: markPinBob 1.8s ease-in-out infinite; }
+  @keyframes markPinBob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+  }
+  @keyframes markPinPulse {
+    0% { transform: scale(0.5); opacity: 0; }
+    35% { opacity: 0.45; }
+    100% { transform: scale(1.6); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mark .pin-pulse, .mark .pin-body { animation: none; }
+    .loading-screen .loading-text .dots span { animation: none; opacity: 1; }
+  }
+
   .date-bar {
     display: flex; align-items: center; gap: 10px; background: var(--white); border: 1px solid var(--border);
     border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; box-shadow: var(--shadow);
@@ -338,6 +364,16 @@
     <div class="sub" id="topbarSub">אזור סוכן</div>
   </div>
   <button type="button" id="btnSwitchAgent" style="display:none;">החלפת סוכן</button>
+</div>
+
+<div class="loading-screen" id="loadingScreen" style="display:none;">
+  <div class="mark">
+    <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <ellipse class="pin-pulse" cx="12" cy="20.5" rx="5" ry="1.6" fill="white" stroke="none"/>
+      <g class="pin-body"><path d="M12 21s7-7.5 7-12a7 7 0 1 0-14 0c0 4.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></g>
+    </svg>
+  </div>
+  <div class="loading-text">טוען את הנתונים<span class="dots"><span>.</span><span>.</span><span>.</span></span></div>
 </div>
 
 <div class="content">
@@ -769,11 +805,14 @@ async function identify(agentIdNumber) {
   selectedDate = todayIso();
   viewMode = "day";
   document.getElementById("visitDateInput").value = selectedDate;
+  document.getElementById("loadingScreen").style.display = "flex";
   try {
     await loadAgentVisitPlan(agentIdNumber, selectedDate);
   } catch (err) {
     msg.textContent = (err && err.message) || "שגיאת תקשורת עם השרת";
     return;
+  } finally {
+    document.getElementById("loadingScreen").style.display = "none";
   }
   localStorage.setItem(AGENT_ID_KEY, agentIdNumber);
   document.getElementById("topbarSub").textContent = agentVisits[0] ? (agentVisits[0].AgentName || "") : "";
@@ -992,11 +1031,24 @@ document.getElementById("customerCards").addEventListener("click", async (e) => 
       return;
     }
     const reasonText = select.selectedOptions[0] ? select.selectedOptions[0].textContent : "";
+    // Read BEFORE submitVisit() - it doesn't mutate agentVisits itself, but there's no reason to rely
+    // on that once refreshList() runs elsewhere; safer to capture what we need from the live entry now.
+    const customer = agentVisits.find(c => String(c.PlanEntryId) === String(key));
     try {
       await submitVisit(key, "NotVisited", reasonId);
     } catch (err) {
       const msgEl = document.querySelector(`[data-msg="${key}"]`);
       if (msgEl) { msgEl.className = "cc-msg error"; msgEl.textContent = `שגיאה בשמירה: ${(err && err.message) || "נסו שוב"}`; }
+      return;
+    }
+    // An unplanned visit (see AgentVisitPlanEntryDto.FromUnplannedVisit) has no backing VisitPlanEntry
+    // at all - PlanEntryId is a synthetic negative number, and POST /api/visitplan/entries/{id}/
+    // reschedule always 404s against it ("שורת תוכנית הביקורים לא נמצאה"). There's nothing to move in
+    // the first place (it was never part of a plan), so just leave the plain "not visited" status
+    // instead of offering a reschedule that can only fail.
+    if (customer && customer.IsUnplanned) {
+      const area = document.querySelector(`[data-status-area="${key}"]`);
+      if (area) area.innerHTML = notVisitedBadgeHtml(key, reasonText);
       return;
     }
     showReschedulePrompt(key, reasonText);
@@ -1015,12 +1067,17 @@ document.getElementById("customerCards").addEventListener("click", async (e) => 
 let reschedModalKey = null;
 let reschedModalReasonText = "";
 
+// Shared with the unplanned-visit "no reschedule to offer" branch above - same markup either way.
+function notVisitedBadgeHtml(key, reasonText) {
+  return `<div class="cc-status-badge notvisited"><span>✗ לא ביקרתי - ${esc(reasonText)}</span><button type="button" data-action="change-status" data-key="${key}">שינוי</button></div>`;
+}
+
 function showReschedulePrompt(key, reasonText) {
   // Update the card itself to the plain "not visited" state (matches renderCustomerCard's own
   // c.Outcome === "NotVisited" branch) - no inline resched controls anymore, those live in the modal.
   const area = document.querySelector(`[data-status-area="${key}"]`);
   if (area) {
-    area.innerHTML = `<div class="cc-status-badge notvisited"><span>✗ לא ביקרתי - ${esc(reasonText)}</span><button type="button" data-action="change-status" data-key="${key}">שינוי</button></div>`;
+    area.innerHTML = notVisitedBadgeHtml(key, reasonText);
   }
 
   reschedModalKey = key;

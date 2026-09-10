@@ -382,11 +382,6 @@
      this panel a flex column so its chart can grow to fill whatever height the row gives it. */
   .dash-city-panel { display: flex; flex-direction: column; }
   .dash-city-panel #dashCityChart { flex: 1; height: auto; min-height: 210px; }
-  /* Capped to at most 13 columns (12 cities + one "כל יתר הערים" bucket, see renderCityChart) - no
-     need for the shared .vbar-chart's horizontal scroll here, so columns share the panel's own width
-     instead of each claiming a fixed 76px (which is what made it scroll in the first place). */
-  .dash-city-panel #dashCityChart { overflow-x: visible; }
-  .dash-city-panel #dashCityChart .vbar-col { flex: 1 1 0; width: auto; min-width: 0; }
 
   /* Ranked bar lists (reasons, etc.) */
   .bar-chart { display: flex; flex-direction: column; gap: 12px; }
@@ -402,13 +397,16 @@
   .bar-trend.up { color: var(--good-fg); }
   .bar-trend.down { color: var(--crit-fg); }
 
-  /* Vertical column chart (non-visit reasons) */
-  .vbar-chart { display: flex; align-items: flex-end; gap: 16px; height: 210px; padding: 10px 4px 0; overflow-x: auto; }
+  /* Vertical column chart (non-visit reasons) - columns share the panel's own width (flex:1 1 0,
+     shrinking below their natural size as needed) instead of each claiming a fixed 76px, so the whole
+     chart always fits the page width with no horizontal scroll no matter how many columns it has
+     (first proven on the city chart, now the shared default for every .vbar-chart on the dashboard). */
+  .vbar-chart { display: flex; align-items: flex-end; gap: 16px; height: 210px; padding: 10px 4px 0; overflow-x: visible; }
   .vbar-chart .bar-empty { color: var(--text-muted); font-size: 0.84rem; text-align: center; padding: 16px 0; width: 100%; }
-  .vbar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; flex: 0 0 76px; width: 76px; height: 100%; cursor: pointer; border-radius: 8px; padding-top: 4px; transition: background .12s; }
+  .vbar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; flex: 1 1 0; width: auto; min-width: 0; height: 100%; cursor: pointer; border-radius: 8px; padding-top: 4px; transition: background .12s; }
   .vbar-col:hover { background: var(--ice); }
   .vbar-value { font-size: 0.8rem; font-weight: 700; color: var(--text); margin-bottom: 5px; height: 1.1em; line-height: 1.1em; flex-shrink: 0; }
-  .vbar-track { width: 38px; background: var(--offwhite); border-radius: 7px 7px 0 0; flex: 1; display: flex; align-items: flex-end; overflow: hidden; }
+  .vbar-track { width: 100%; max-width: 38px; background: var(--offwhite); border-radius: 7px 7px 0 0; flex: 1; display: flex; align-items: flex-end; overflow: hidden; }
   .vbar-fill { width: 100%; min-height: 3px; border-radius: 7px 7px 0 0; background: linear-gradient(180deg, var(--chart-6), var(--chart-1)); transition: height .4s; }
   .vbar-fill.tier-good { background: var(--good-fg); }
   .vbar-fill.tier-warn { background: var(--warn-fg); }
@@ -1208,10 +1206,10 @@
         <section class="panel">
           <h2 class="dash-section-title">
             <svg class="dash-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-            אחוז ביצוע לפי סוכן - החודש הנבחר
+            אחוז ביצוע לפי ערוץ - החודש הנבחר
           </h2>
-          <p class="dash-section-sub">פגישות שבוצעו מתוך פגישות שנקבעו (שתאריכן כבר הגיע), לכל סוכן. לחצו על עמודה למעבר לתוכנית הביקורים שלו.</p>
-          <div class="vbar-chart" id="dashAgentPerfChart"></div>
+          <p class="dash-section-sub">פגישות שבוצעו מתוך פגישות שנקבעו (שתאריכן כבר הגיע), סכום כל הסוכנים בכל ערוץ מכר. לחצו על עמודה למעבר לתוכנית הביקורים המסוננת לערוץ.</p>
+          <div class="vbar-chart" id="dashChannelPerfChart"></div>
         </section>
         <section class="panel">
           <h2 class="dash-section-title">
@@ -3053,22 +3051,23 @@ document.getElementById("dashCityChart").addEventListener("click", (e) => {
    contribute 0 to the target (they have no defined quota, so they shouldn't inflate one). */
 function isoDateLocal(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 
-// Vertical column chart, one column per agent: אחוז ביצוע = performed (logged as Visited) out of
-// scheduled (plan entries whose planned date has already arrived) for the globally selected
-// month/channel. Deliberately excludes not-yet-due entries so a mid-month check doesn't unfairly
-// show a low % just because the rest of the month hasn't happened yet.
-function renderAgentPerfChart(agentPerf) {
-  const el = document.getElementById("dashAgentPerfChart");
-  const entries = [...agentPerf.entries()].sort((a, b) => b[1].scheduled - a[1].scheduled);
+// Vertical column chart, one column per sales channel: אחוז ביצוע = performed (logged as Visited)
+// out of scheduled (plan entries whose planned date has already arrived), SUMMED ACROSS EVERY AGENT
+// in that channel, for the globally selected month/channel filter. Deliberately excludes not-yet-due
+// entries so a mid-month check doesn't unfairly show a low % just because the rest of the month
+// hasn't happened yet.
+function renderChannelPerfChart(channelPerf) {
+  const el = document.getElementById("dashChannelPerfChart");
+  const entries = [...channelPerf.entries()].sort((a, b) => b[1].scheduled - a[1].scheduled);
   if (entries.length === 0) { el.innerHTML = `<div class="bar-empty">אין ביקורים מתוכננים שכבר הגיע מועדם, בחודש/ערוץ שנבחרו למעלה.</div>`; return; }
-  el.innerHTML = entries.map(([agentId, g]) => {
+  el.innerHTML = entries.map(([channel, g]) => {
     const pct = g.scheduled > 0 ? Math.round(g.performed / g.scheduled * 100) : 0;
     const tier = pct >= 80 ? "good" : pct >= 50 ? "warn" : "crit";
     return `
-    <div class="vbar-col" data-drill-agent-perf="${esc(agentId)}">
+    <div class="vbar-col" data-drill-channel-perf="${esc(channel)}">
       <div class="vbar-value">${pct}%</div>
       <div class="vbar-track"><div class="vbar-fill tier-${tier}" style="height:${pct}%"></div></div>
-      <div class="vbar-label">${esc(g.name)}<br><span style="color:var(--text-muted);">${fmtNumber(g.performed)}/${fmtNumber(g.scheduled)}</span></div>
+      <div class="vbar-label">${esc(channel)}<br><span style="color:var(--text-muted);">${fmtNumber(g.performed)}/${fmtNumber(g.scheduled)}</span></div>
     </div>`;
   }).join("");
 }
@@ -3219,11 +3218,11 @@ document.getElementById("btnClearDashDateFilter").addEventListener("click", () =
   refreshDashboard();
 });
 
-document.getElementById("dashAgentPerfChart").addEventListener("click", (e) => {
-  const col = e.target.closest("[data-drill-agent-perf]");
+document.getElementById("dashChannelPerfChart").addEventListener("click", (e) => {
+  const col = e.target.closest("[data-drill-channel-perf]");
   const d = DASH_STATE;
   if (!col || !d) return;
-  navigateToVisitPlanFiltered({ year: d.selYear, month: d.selMonth, agent: col.dataset.drillAgentPerf });
+  navigateToVisitPlanFiltered({ year: d.selYear, month: d.selMonth, channel: col.dataset.drillChannelPerf });
 });
 
 let DASH_STATE = null;
@@ -3238,7 +3237,7 @@ async function refreshDashboard() {
     document.getElementById("dashFrequencyDonut").innerHTML = "";
     document.getElementById("dashCalGrid").innerHTML = "";
     document.getElementById("dashCalTitle").textContent = "";
-    document.getElementById("dashAgentPerfChart").innerHTML = "";
+    document.getElementById("dashChannelPerfChart").innerHTML = "";
     document.getElementById("dashHourlyChart").innerHTML = "";
     document.getElementById("dashAgentMeetingCountsTable").innerHTML = "";
     document.getElementById("dashUpdatedLine").textContent = "";
@@ -3357,19 +3356,19 @@ async function refreshDashboard() {
   const agentComposition = computeAgentComposition(kpiCustomers);
   const cityBreakdown = computeCityBreakdown(kpiCustomers);
 
-  // ---- per-agent performance: planned (scheduled) vs performed (logged as Visited), for the
-  // globally selected month, only counting entries whose planned date has actually arrived. ----
+  // ---- per-channel performance: planned (scheduled) vs performed (logged as Visited), SUMMED ACROSS
+  // EVERY AGENT in that channel, for the globally selected month, only counting entries whose planned
+  // date has actually arrived. ----
   const dueSelectedMonthEntries = selectedMonthPlanEntries
     .filter(e => e.PlannedDate && new Date(e.PlannedDate) <= today)
     .filter(e => !globalChannel.size || globalChannel.has(e.Channel));
-  // Keyed by AgentIdNumber (real identity, not the display name - see computeAgentComposition for
-  // why) since this map's key is also what gets sent to navigateToVisitPlanFiltered() on drill-down,
-  // which matches against entry.AgentIdNumber there.
-  const agentPerf = new Map();
+  // Keyed by channel name - matches what navigateToVisitPlanFiltered()'s own `channel` param expects
+  // on drill-down.
+  const channelPerf = new Map();
   for (const e of dueSelectedMonthEntries) {
-    const id = e.AgentIdNumber || `__noid__:${e.AgentName || "ללא סוכן"}`;
-    if (!agentPerf.has(id)) agentPerf.set(id, { name: e.AgentName || "ללא סוכן", scheduled: 0, performed: 0 });
-    const g = agentPerf.get(id);
+    const channel = e.Channel || "ללא ערוץ";
+    if (!channelPerf.has(channel)) channelPerf.set(channel, { scheduled: 0, performed: 0 });
+    const g = channelPerf.get(channel);
     g.scheduled++;
     const visit = visits.find(v => v.CustomerNumber === e.CustomerNumber && (v.VisitDate || "").slice(0, 10) === (e.PlannedDate || "").slice(0, 10));
     if (visit && visit.Outcome === "Visited") g.performed++;
@@ -3377,7 +3376,7 @@ async function refreshDashboard() {
 
   DASH_STATE = {
     selYear, selMonth, activeCustomers, neglected, decliningNeglected, reasonAgg, todayIso,
-    globalChannel, frequencyBuckets, agentComposition, agentPerf, cityBreakdown, unscheduled,
+    globalChannel, frequencyBuckets, agentComposition, channelPerf, cityBreakdown, unscheduled,
     pendingToday, todayYear: today.getFullYear(), todayMonth: today.getMonth() + 1
   };
 
@@ -3419,7 +3418,7 @@ async function refreshDashboard() {
     sortFn: (a, b) => FREQUENCY_SORT_VAL.get(b[0]) - FREQUENCY_SORT_VAL.get(a[0])
   });
   renderDashCalGrid(selYear, selMonth, calendarDays);
-  renderAgentPerfChart(agentPerf);
+  renderChannelPerfChart(channelPerf);
   renderCityChart(cityBreakdown);
 
   // Real time-of-day only exists on CreatedAt (VisitDate is date-only) - scoped to the selected

@@ -75,6 +75,12 @@
     padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
     box-shadow: var(--shadow); max-width: 520px; margin: 0 auto;
   }
+  .topbar .brand-row { display: flex; align-items: center; gap: 10px; }
+  .topbar .mark {
+    width: 32px; height: 32px; border-radius: 9px; background: var(--brand);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .topbar .mark svg { width: 18px; height: 18px; stroke: white; }
   .topbar .title { font-weight: 700; font-size: 1.15rem; }
   .topbar .sub { font-size: 0.86rem; color: rgba(255,255,255,0.7); }
   .topbar button {
@@ -199,23 +205,34 @@
     flex-shrink: 0; background: var(--ice); color: var(--brand); font-weight: 700; font-size: 0.82rem;
     padding: 4px 10px; border-radius: 999px; white-space: nowrap;
   }
-  .customer-card .cc-sales { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.92rem; color: var(--text-muted); margin-bottom: 12px; }
   .customer-card .cc-admin-note {
     background: var(--warn-bg); color: var(--warn-fg); border-radius: 8px; padding: 9px 11px;
     font-size: 0.9rem; line-height: 1.4; margin-bottom: 12px; word-break: break-word;
   }
   .customer-card .cc-admin-note b { font-weight: 700; }
-  .customer-card .cc-sales b { color: var(--text); font-variant-numeric: tabular-nums; }
-  .cc-trend { font-size: 0.86rem; font-weight: 700; margin-inline-start: 4px; }
+  .cc-trend { font-size: 0.8rem; font-weight: 700; margin-inline-start: 4px; white-space: nowrap; }
   .cc-trend.up { color: var(--good-fg); }
   .cc-trend.down { color: var(--crit-fg); }
-  .cc-info-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px;
-    background: var(--offwhite); border-radius: 10px; padding: 12px; margin-bottom: 12px;
+  /* Unified, centered stat grid - sales, debt, and the last-visit/standard/distribution-days block all
+     live in one place now, each cell separated by a thin 1px line (the gap-as-border trick: the grid's
+     own background shows through the gap, each cell paints over the rest) instead of several separate
+     left-aligned rows. Robust to how many cells actually render (debt is conditional) since it doesn't
+     rely on counting cells for which borders to draw. */
+  .cc-stats-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+    background: var(--border); border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden; margin-bottom: 12px;
   }
-  .cc-info-item { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-  .cc-info-label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
-  .cc-info-value { font-size: 0.94rem; color: var(--text); font-weight: 600; overflow-wrap: break-word; }
+  .cc-stat-item {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    padding: 10px 8px; text-align: center; background: var(--offwhite); min-width: 0;
+  }
+  .cc-stat-item.wide { grid-column: 1 / -1; }
+  .cc-stat-label { font-size: 0.78rem; color: var(--text-muted); font-weight: 600; }
+  .cc-stat-value {
+    font-size: 0.94rem; color: var(--text); font-weight: 700; overflow-wrap: break-word;
+    font-variant-numeric: tabular-nums;
+  }
   .cc-never { color: var(--text-muted); font-weight: 400; }
   .cc-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
   .cc-action-btn {
@@ -359,9 +376,17 @@
 </style>
 
 <div class="topbar">
-  <div>
-    <div class="title">VisiFlow</div>
-    <div class="sub" id="topbarSub">אזור סוכן</div>
+  <div class="brand-row">
+    <div class="mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse class="pin-pulse" cx="12" cy="20.5" rx="5" ry="1.6" fill="white" stroke="none"/>
+        <g class="pin-body"><path d="M12 21s7-7.5 7-12a7 7 0 1 0-14 0c0 4.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></g>
+      </svg>
+    </div>
+    <div>
+      <div class="title">VisiFlow</div>
+      <div class="sub" id="topbarSub">אזור סוכן</div>
+    </div>
   </div>
   <button type="button" id="btnSwitchAgent" style="display:none;">החלפת סוכן</button>
 </div>
@@ -626,20 +651,36 @@ function renderCustomerCard(c) {
         ${c.VisitOrder != null ? `<span class="cc-stop-badge">עצירה #${c.VisitOrder}</span>` : ""}
       </div>
       ${c.AdminNote ? `<div class="cc-admin-note">📌 <b>הערה מהמנהל:</b> ${esc(c.AdminNote)}</div>` : ""}
-      <div class="cc-sales">
-        <span>מכר השנה: <b>${fmtCurrency(c.SalesYtdCurrentYear)}</b></span>
-        <span>מכר אשתקד: <b>${fmtCurrency(c.SalesYtdPreviousYear)}</b></span>
-        ${fmtSalesTrend(c.SalesYtdCurrentYear, c.SalesYtdPreviousYear)}
-      </div>
-      ${(c.DebtToCollect != null || c.OverdueDebt != null) ? `
-      <div class="cc-sales">
-        <span>חוב לגביה: <b>${fmtCurrency(c.DebtToCollect)}</b></span>
-        <span${c.OverdueDebt > 0 ? ' style="color:var(--crit-fg);"' : ""}>חוב בפיגור: <b>${fmtCurrency(c.OverdueDebt)}</b></span>
-      </div>` : ""}
-      <div class="cc-info-grid">
-        <div class="cc-info-item"><span class="cc-info-label">ביקור אחרון</span><span class="cc-info-value">${fmtLastVisit(c)}</span></div>
-        <div class="cc-info-item"><span class="cc-info-label">תקן ביקורים</span><span class="cc-info-value">${fmtFrequency(c.RequiredVisitsPerWeek)}</span></div>
-        <div class="cc-info-item" style="grid-column:1 / -1;"><span class="cc-info-label">ימי הפצה</span><span class="cc-info-value">${fmtDistDays(c)}</span></div>
+      <div class="cc-stats-grid">
+        <div class="cc-stat-item">
+          <span class="cc-stat-label">מכר השנה</span>
+          <span class="cc-stat-value">${fmtCurrency(c.SalesYtdCurrentYear)}${fmtSalesTrend(c.SalesYtdCurrentYear, c.SalesYtdPreviousYear)}</span>
+        </div>
+        <div class="cc-stat-item">
+          <span class="cc-stat-label">מכר אשתקד</span>
+          <span class="cc-stat-value">${fmtCurrency(c.SalesYtdPreviousYear)}</span>
+        </div>
+        ${(c.DebtToCollect != null || c.OverdueDebt != null) ? `
+        <div class="cc-stat-item">
+          <span class="cc-stat-label">חוב לגביה</span>
+          <span class="cc-stat-value">${fmtCurrency(c.DebtToCollect)}</span>
+        </div>
+        <div class="cc-stat-item">
+          <span class="cc-stat-label">חוב בפיגור</span>
+          <span class="cc-stat-value"${c.OverdueDebt > 0 ? ' style="color:var(--crit-fg);"' : ""}>${fmtCurrency(c.OverdueDebt)}</span>
+        </div>` : ""}
+        <div class="cc-stat-item">
+          <span class="cc-stat-label">ביקור אחרון</span>
+          <span class="cc-stat-value">${fmtLastVisit(c)}</span>
+        </div>
+        <div class="cc-stat-item">
+          <span class="cc-stat-label">תקן ביקורים</span>
+          <span class="cc-stat-value">${fmtFrequency(c.RequiredVisitsPerWeek)}</span>
+        </div>
+        <div class="cc-stat-item wide">
+          <span class="cc-stat-label">ימי הפצה</span>
+          <span class="cc-stat-value">${fmtDistDays(c)}</span>
+        </div>
       </div>
       <div class="cc-actions">
         ${telUrl ? `<a class="cc-action-btn tel-btn" href="${telUrl}">📞 ${esc(c.Phone)}</a>` : ""}

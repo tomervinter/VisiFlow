@@ -993,15 +993,6 @@
     </button>
   </nav>
 
-  <div class="nav-group-label">טעינת נתונים</div>
-  <nav class="main-nav">
-    <button class="nav-item" data-view="customers">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.3 2.9-6 6.5-6s6.5 2.7 6.5 6"/><circle cx="17" cy="7" r="2.3"/><path d="M14.8 14.3c.6-.3 1.3-.4 2-.4 2.9 0 5.2 2.4 5.2 5.3"/></svg>
-      <span>טעינת לקוחות</span>
-      <span class="count" id="navCountCustomers"></span>
-    </button>
-  </nav>
-
   <div class="nav-group-label">דוחות</div>
   <nav class="main-nav">
     <button class="nav-item" data-view="visitplan">
@@ -1059,6 +1050,15 @@
     <button class="nav-item" data-view="guide">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>
       <span>הדרכה</span>
+    </button>
+  </nav>
+
+  <div class="nav-group-label">טעינת נתונים</div>
+  <nav class="main-nav">
+    <button class="nav-item" data-view="customers">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.3 2.9-6 6.5-6s6.5 2.7 6.5 6"/><circle cx="17" cy="7" r="2.3"/><path d="M14.8 14.3c.6-.3 1.3-.4 2-.4 2.9 0 5.2 2.4 5.2 5.3"/></svg>
+      <span>טעינת לקוחות</span>
+      <span class="count" id="navCountCustomers"></span>
     </button>
   </nav>
 
@@ -1161,13 +1161,21 @@
       </div>
 
       <div class="dash-charts-row">
-        <section class="panel" style="flex:1 1 100%;">
+        <section class="panel">
           <h2 class="dash-section-title">
             <svg class="dash-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
             כמות ביקורים לפי שעה ביום
           </h2>
           <p class="dash-section-sub">ביקורים שבוצעו בפועל בחודש שנבחר למעלה, לפי השעה שבה נרשמו.</p>
           <div class="vbar-chart" id="dashHourlyChart"></div>
+        </section>
+        <section class="panel">
+          <h2 class="dash-section-title">
+            <svg class="dash-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+            לקוחות שלא ביקרנו מעל 30 יום - לפי ערוץ
+          </h2>
+          <p class="dash-section-sub">התפלגות לקוחות שלא ביקרנו אצלם למעלה מ-30 יום, לפי ערוץ מכר. לחצו על פלח לרשימת הלקוחות.</p>
+          <div class="donut-panel-body" id="dashNeglectedChannelDonut"></div>
         </section>
       </div>
 
@@ -2863,6 +2871,19 @@ function computeCityBreakdown(activeCustomers) {
   return map;
 }
 
+// Same shape as computeCityBreakdown, grouping the already-computed "neglected" list (30+ days since
+// last visit, see refreshDashboard) by sales channel instead of city - feeds the donut next to the
+// hourly-visits chart.
+function computeNeglectedChannelBreakdown(neglectedList) {
+  const map = new Map();
+  for (const c of neglectedList) {
+    const label = c.Channel || "ללא ערוץ";
+    if (!map.has(label)) map.set(label, []);
+    map.get(label).push(c);
+  }
+  return map;
+}
+
 const DONUT_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)", "var(--chart-7)", "var(--chart-8)"];
 
 // Generic SVG donut (composition/parts-of-a-whole) - stroke-dasharray segments around a circle,
@@ -3022,6 +3043,17 @@ document.getElementById("dashFrequencyDonut").addEventListener("click", (e) => {
   const bucket = d.frequencyBuckets.get(el.dataset.drillFrequency);
   if (!bucket) return;
   navigateToCustomersFiltered({ status: "Active", customerNumbers: bucket.map(c => c.CustomerNumber) });
+});
+// Same drill target as the "לקוחות שלא ביקרנו מעל 30 יום" KPI card itself (navigateToVisitPlanFiltered,
+// not navigateToCustomersFiltered like the donuts above) - both point at the same underlying neglected
+// list, just this one pre-filtered to one channel's slice of it.
+document.getElementById("dashNeglectedChannelDonut").addEventListener("click", (e) => {
+  const el = e.target.closest("[data-drill-neglected-channel]");
+  const d = DASH_STATE;
+  if (!el || !d) return;
+  const list = d.neglectedChannelBreakdown.get(el.dataset.drillNeglectedChannel);
+  if (!list) return;
+  navigateToVisitPlanFiltered({ year: d.selYear, month: d.selMonth, customerNumbers: list.map(c => c.CustomerNumber) });
 });
 document.getElementById("dashAgentDonut").addEventListener("click", (e) => {
   const el = e.target.closest("[data-drill-agent-donut]");
@@ -3239,6 +3271,7 @@ async function refreshDashboard() {
     document.getElementById("dashCalTitle").textContent = "";
     document.getElementById("dashChannelPerfChart").innerHTML = "";
     document.getElementById("dashHourlyChart").innerHTML = "";
+    document.getElementById("dashNeglectedChannelDonut").innerHTML = "";
     document.getElementById("dashAgentMeetingCountsTable").innerHTML = "";
     document.getElementById("dashUpdatedLine").textContent = "";
     DASH_STATE = null;
@@ -3355,6 +3388,7 @@ async function refreshDashboard() {
   const frequencyBuckets = computeFrequencyBreakdown(kpiCustomers);
   const agentComposition = computeAgentComposition(kpiCustomers);
   const cityBreakdown = computeCityBreakdown(kpiCustomers);
+  const neglectedChannelBreakdown = computeNeglectedChannelBreakdown(neglected);
 
   // ---- per-channel performance: planned (scheduled) vs performed (logged as Visited), SUMMED ACROSS
   // EVERY AGENT in that channel, for the globally selected month, only counting entries whose planned
@@ -3377,7 +3411,7 @@ async function refreshDashboard() {
   DASH_STATE = {
     selYear, selMonth, activeCustomers, neglected, decliningNeglected, reasonAgg, todayIso,
     globalChannel, frequencyBuckets, agentComposition, channelPerf, cityBreakdown, unscheduled,
-    pendingToday, todayYear: today.getFullYear(), todayMonth: today.getMonth() + 1
+    neglectedChannelBreakdown, pendingToday, todayYear: today.getFullYear(), todayMonth: today.getMonth() + 1
   };
 
   // Populate the channel multiselect (options only, prune any previously-checked channel that no
@@ -3420,6 +3454,7 @@ async function refreshDashboard() {
   renderDashCalGrid(selYear, selMonth, calendarDays);
   renderChannelPerfChart(channelPerf);
   renderCityChart(cityBreakdown);
+  renderDonutChart("dashNeglectedChannelDonut", neglectedChannelBreakdown, { centerLabel: "לקוחות", drillAttr: "drill-neglected-channel", inlineCount: true, showPct: true });
 
   // Real time-of-day only exists on CreatedAt (VisitDate is date-only) - scoped to the selected
   // month/channel like the other monthly charts, bucketed by the hour the visit was actually recorded.

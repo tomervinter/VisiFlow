@@ -318,6 +318,12 @@
   }
   .dash-multiselect-panel label:hover { background: var(--ice); }
   .dash-multiselect-panel .dash-multiselect-empty { padding: 7px 8px; font-size: 0.84rem; color: var(--text-muted); }
+  .dash-multiselect-clear-btn {
+    display: block; width: 100%; text-align: right; background: transparent; border: none; cursor: pointer;
+    padding: 7px 8px; font-size: 0.84rem; font-weight: 700; color: var(--brand); border-radius: 6px; font-family: inherit;
+  }
+  .dash-multiselect-clear-btn:hover { background: var(--ice); }
+  .dash-multiselect-divider { height: 1px; background: var(--border); margin: 4px 2px; }
 
   /* Same pill/button look as the dashboard's global filter bar, generalized under its own class name
      so other screens (e.g. יומן ביקורים) can reuse it without depending on dashboard-specific markup. */
@@ -3147,10 +3153,14 @@ function dashChannelButtonLabel() {
 function renderDashChannelMultiselect(allChannels) {
   document.getElementById("dashChannelMultiselectBtn").textContent = dashChannelButtonLabel();
   const panel = document.getElementById("dashChannelMultiselectPanel");
-  panel.innerHTML = allChannels.length
-    ? allChannels.map(ch => `
-        <label><input type="checkbox" value="${esc(ch)}" ${dashSelectedChannels.has(ch) ? "checked" : ""}/> ${esc(ch)}</label>`).join("")
-    : `<div class="dash-multiselect-empty">אין ערוצים זמינים</div>`;
+  if (!allChannels.length) { panel.innerHTML = `<div class="dash-multiselect-empty">אין ערוצים זמינים</div>`; return; }
+  // "כל הערוצים" clears the selection outright rather than being just another checkbox - an empty Set
+  // already MEANS "all channels" everywhere this is read (see dashSelectedChannels above), so this is
+  // the same as unchecking every box at once, just one click instead of several.
+  const clearBtn = `<button type="button" class="dash-multiselect-clear-btn" data-clear-channels>כל הערוצים</button>`;
+  const checkboxes = allChannels.map(ch => `
+        <label><input type="checkbox" value="${esc(ch)}" ${dashSelectedChannels.has(ch) ? "checked" : ""}/> ${esc(ch)}</label>`).join("");
+  panel.innerHTML = clearBtn + `<div class="dash-multiselect-divider"></div>` + checkboxes;
 }
 
 document.getElementById("dashChannelMultiselectBtn").addEventListener("click", (e) => {
@@ -3167,6 +3177,11 @@ document.getElementById("dashChannelMultiselectPanel").addEventListener("change"
   if (e.target.checked) dashSelectedChannels.add(e.target.value); else dashSelectedChannels.delete(e.target.value);
   document.getElementById("dashChannelMultiselectBtn").textContent = dashChannelButtonLabel();
   refreshDashboard();
+});
+document.getElementById("dashChannelMultiselectPanel").addEventListener("click", (e) => {
+  if (!e.target.closest("[data-clear-channels]") || dashSelectedChannels.size === 0) return;
+  dashSelectedChannels.clear();
+  refreshDashboard(); // re-renders the panel too (see renderDashChannelMultiselect), unchecking every box
 });
 document.getElementById("dashDateFilter").addEventListener("change", (e) => {
   document.getElementById("btnClearDashDateFilter").style.display = e.target.value ? "" : "none";

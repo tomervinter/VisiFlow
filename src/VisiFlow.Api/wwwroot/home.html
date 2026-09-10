@@ -555,6 +555,17 @@
   tbody tr:last-child td { border-bottom: none; }
   tbody tr:hover td { background: var(--ice); }
 
+  /* "פגישות מתוכננות לסוכן" specifically - denser than the default table (smaller padding/font), fixed
+     layout so its 10 columns actually share the panel's own width instead of growing wide enough to
+     force horizontal scroll (this table intentionally kept that scroll - see the HTML comment above it
+     - the fix here is narrowing it, not removing the scroll wrapper), which is what lets long headers
+     like "בוצעו מתחילת החודש עד היום" actually wrap onto two lines instead of staying on one. A thin
+     line between columns (border-inline-end, skipped on the last column) instead of only row dividers. */
+  #dashAgentMeetingCountsTable { table-layout: fixed; width: 100%; min-width: 0; font-size: 0.72rem; }
+  #dashAgentMeetingCountsTable th, #dashAgentMeetingCountsTable td { padding: 5px 4px; border-inline-end: 1px solid var(--border); }
+  #dashAgentMeetingCountsTable th:last-child, #dashAgentMeetingCountsTable td:last-child { border-inline-end: none; }
+  #dashAgentMeetingCountsTable th { white-space: normal; word-break: break-word; line-height: 1.15; }
+
   .name { font-weight: 600; }
   .mono { font-variant-numeric: tabular-nums; }
   .muted { color: var(--text-muted); }

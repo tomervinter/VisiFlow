@@ -72,6 +72,12 @@
   }
 
   /* ---------- Sidebar ---------- */
+  /* position:fixed (not sticky) deliberately - body is display:flex with .main as its tall sibling,
+     and a flex row's own auto block-size stays pinned to the viewport instead of growing to contain a
+     taller flex child (a real Chromium quirk, confirmed live: body's own box stayed 100vh even once
+     .main's content correctly grew past it), which left sticky with no taller containing block to
+     stick within - it just scrolled away with the page. Fixed positioning sidesteps that entirely by
+     placing the sidebar relative to the viewport, independent of body's own box height. */
   .sidebar {
     width: var(--sidebar-w);
     flex-shrink: 0;
@@ -80,8 +86,9 @@
     display: flex;
     flex-direction: column;
     padding: 20px 14px;
-    position: sticky;
+    position: fixed;
     top: 0;
+    inset-inline-start: 0;
     height: 100vh;
     overflow-y: auto;
   }
@@ -195,7 +202,10 @@
   .sidebar-logout-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
 
   /* ---------- Main area ---------- */
-  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  /* margin-inline-start reserves the width the fixed .sidebar occupies (it's out of normal flow, so
+     nothing would otherwise make room for it) - reset to 0 in the mobile media query below, where the
+     sidebar becomes a static horizontal top bar instead. */
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; margin-inline-start: var(--sidebar-w); }
 
   .topbar {
     background: var(--white);
@@ -447,6 +457,10 @@
      deterministic across browsers instead of depending on multi-column layout support/quirks. */
   #dashAgentDonut .donut-legend.two-col { display: flex; flex-direction: row; gap: 14px; min-width: 460px; }
   #dashAgentDonut .donut-legend.two-col .donut-legend-col { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  /* Same two-column legend treatment, sized down for this donut's narrower panel and shorter channel
+     name labels (no need for #dashAgentDonut's wider 460px minimum). */
+  #dashNeglectedChannelDonut .donut-legend.two-col { display: flex; flex-direction: row; gap: 14px; min-width: 220px; }
+  #dashNeglectedChannelDonut .donut-legend.two-col .donut-legend-col { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 
   @media (max-width: 640px) {
     .donut-panel-body { flex-direction: column; align-items: stretch; text-align: center; }
@@ -800,6 +814,7 @@
   @media (max-width: 860px) {
     body { flex-direction: column; }
     .sidebar { position: static; height: auto; width: 100%; flex-direction: row; align-items: center; padding: 10px 14px; overflow-x: auto; }
+    .main { margin-inline-start: 0; }
     .sidebar .brand { border-bottom: none; margin-bottom: 0; padding: 0 10px 0 0; }
     .sidebar-foot { display: none; }
     nav.main-nav { flex-direction: row; }
@@ -3455,6 +3470,7 @@ async function refreshDashboard() {
   renderChannelPerfChart(channelPerf);
   renderCityChart(cityBreakdown);
   renderDonutChart("dashNeglectedChannelDonut", neglectedChannelBreakdown, { centerLabel: "לקוחות", drillAttr: "drill-neglected-channel", inlineCount: true, showPct: true });
+  splitDonutLegendIntoColumns("dashNeglectedChannelDonut", 2);
 
   // Real time-of-day only exists on CreatedAt (VisitDate is date-only) - scoped to the selected
   // month/channel like the other monthly charts, bucketed by the hour the visit was actually recorded.

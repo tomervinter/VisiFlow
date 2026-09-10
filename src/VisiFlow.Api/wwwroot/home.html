@@ -218,11 +218,33 @@
   .topbar-info-btn:hover { background: var(--brand); color: white; border-color: var(--brand); }
 
   .company-picker { display: flex; align-items: center; gap: 8px; }
-  #globalCompanySelector {
-    font-size: 0.78rem; font-weight: 600; color: var(--brand); background: var(--ice);
-    padding: 5px 12px; border-radius: 999px; border: none; cursor: pointer; white-space: nowrap; font-family: inherit;
+  /* Custom dropdown (not a <select>) specifically so the current company's uploaded logo (see "ניהול")
+     can render inside the closed control itself - a native <select> can only ever show plain text. */
+  .company-picker-btn {
+    display: flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 600; color: var(--brand);
+    background: var(--ice); padding: 5px 12px; border-radius: 999px; border: 1px solid transparent;
+    cursor: pointer; white-space: nowrap; font-family: inherit; transition: border-color .12s;
   }
-  #globalCompanySelector:focus { outline: 2px solid var(--electric); outline-offset: 1px; }
+  .company-picker-btn:hover { border-color: var(--brand); }
+  .company-picker-btn:focus { outline: 2px solid var(--electric); outline-offset: 1px; }
+  .company-picker-logo {
+    width: 20px; height: 20px; border-radius: 5px; overflow: hidden; flex-shrink: 0; background: var(--white);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .company-picker-logo img { width: 100%; height: 100%; object-fit: contain; }
+  .company-picker-chevron { flex-shrink: 0; }
+  .company-picker-panel {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; background: var(--white);
+    border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 6px;
+    min-width: 200px; max-height: 300px; overflow-y: auto;
+  }
+  .company-picker-item {
+    display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 7px; cursor: pointer;
+    font-size: 0.86rem; font-weight: 500; color: var(--text); white-space: nowrap;
+  }
+  .company-picker-item:hover { background: var(--ice); }
+  .company-picker-item.selected { background: var(--ice); font-weight: 700; color: var(--brand); }
+  .company-picker-item .company-picker-logo { width: 22px; height: 22px; }
   .btn-add-company {
     font-size: 0.78rem; font-weight: 600; color: var(--brand); background: transparent;
     border: 1px dashed var(--border); padding: 4px 11px; border-radius: 999px; cursor: pointer; font-family: inherit;
@@ -354,6 +376,11 @@
      this panel a flex column so its chart can grow to fill whatever height the row gives it. */
   .dash-city-panel { display: flex; flex-direction: column; }
   .dash-city-panel #dashCityChart { flex: 1; height: auto; min-height: 210px; }
+  /* Capped to at most 13 columns (12 cities + one "כל יתר הערים" bucket, see renderCityChart) - no
+     need for the shared .vbar-chart's horizontal scroll here, so columns share the panel's own width
+     instead of each claiming a fixed 76px (which is what made it scroll in the first place). */
+  .dash-city-panel #dashCityChart { overflow-x: visible; }
+  .dash-city-panel #dashCityChart .vbar-col { flex: 1 1 0; width: auto; min-width: 0; }
 
   /* Ranked bar lists (reasons, etc.) */
   .bar-chart { display: flex; flex-direction: column; gap: 12px; }
@@ -410,11 +437,11 @@
   .donut-legend-value { color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .donut-legend-pct { color: var(--text-muted); font-size: 0.74rem; font-variant-numeric: tabular-nums; min-width: 34px; text-align: left; }
 
-  /* Agent list specifically (not every donut's legend) can run long with many agents - split into 2
-     columns instead of one tall list. Two explicit side-by-side flex columns (built in JS, see
-     splitDonutLegendIntoColumns) rather than CSS multi-column - deterministic across browsers instead
-     of depending on multi-column layout support/quirks. */
-  #dashAgentDonut .donut-legend.two-col { display: flex; flex-direction: row; gap: 16px; min-width: 320px; }
+  /* Agent list specifically (not every donut's legend) can run long with many agents - split into
+     several columns instead of one tall list (currently 3, see splitDonutLegendIntoColumns's call
+     site). Explicit side-by-side flex columns (built in JS) rather than CSS multi-column -
+     deterministic across browsers instead of depending on multi-column layout support/quirks. */
+  #dashAgentDonut .donut-legend.two-col { display: flex; flex-direction: row; gap: 14px; min-width: 460px; }
   #dashAgentDonut .donut-legend.two-col .donut-legend-col { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 
   @media (max-width: 640px) {
@@ -765,6 +792,16 @@
     flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--ice); color: var(--brand);
     font-size: 0.76rem; font-weight: 700; display: flex; align-items: center; justify-content: center;
   }
+  /* Click-to-upload/replace - a small square thumbnail (the actual logo once one exists, an empty
+     "image" placeholder icon before that) on the company row in "ניהול". */
+  .company-logo-thumb {
+    flex-shrink: 0; width: 30px; height: 30px; border-radius: 7px; background: var(--offwhite);
+    border: 1px solid var(--border); color: var(--text-muted); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; overflow: hidden; transition: border-color .12s;
+  }
+  .company-logo-thumb:hover { border-color: var(--brand); }
+  .company-logo-thumb img { width: 100%; height: 100%; object-fit: contain; }
+  .company-logo-thumb svg { width: 15px; height: 15px; }
   .editable-row input {
     flex: 1 1 auto; padding: 8px 12px; border-radius: 8px; border: 1px solid transparent;
     background: transparent; color: var(--text); font-family: inherit; font-size: 0.9rem;
@@ -1013,7 +1050,14 @@
       <div class="sub" id="topbarSub">תמונת מצב כללית</div>
     </div>
     <div class="company-picker">
-      <select id="globalCompanySelector"></select>
+      <div style="position:relative;" id="companyPickerWrap">
+        <button type="button" class="company-picker-btn" id="companyPickerBtn">
+          <span class="company-picker-logo" id="companyPickerLogo"></span>
+          <span id="companyPickerLabel">טוען...</span>
+          <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 5 5 5-5"/></svg>
+        </button>
+        <div class="company-picker-panel" id="companyPickerPanel" style="display:none;"></div>
+      </div>
     </div>
   </div>
 
@@ -2340,36 +2384,69 @@ function agentDropdownOptionsHtml(items, idKey, nameKey) {
   return sorted.map(([id, name]) => `<option value="${id}">${name}</option>`).join("");
 }
 
-/* ==================== GLOBAL COMPANY SELECTOR ==================== */
+/* ==================== GLOBAL COMPANY PICKER ====================
+   Custom button+dropdown (not a <select>) so the current company's own uploaded logo (see "ניהול")
+   can actually render inside it - a native <select>'s closed box can only ever show plain text. */
 let COMPANIES = [];
-function selectedCompanyId() {
-  const v = document.getElementById("globalCompanySelector").value;
-  return v ? Number(v) : null;
+let selectedCompanyIdValue = null;
+function selectedCompanyId() { return selectedCompanyIdValue; }
+
+const COMPANY_LOGO_PLACEHOLDER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>`;
+function companyLogoHtml(c) {
+  return c.HasLogo ? `<img src="/api/companies/${c.Id}/logo?v=${adminCompaniesRenderStamp}" alt="" />` : COMPANY_LOGO_PLACEHOLDER_SVG;
 }
+
+function renderCompanyPicker() {
+  const current = COMPANIES.find(c => c.Id === selectedCompanyIdValue);
+  document.getElementById("companyPickerLabel").textContent = current ? current.Name : (COMPANIES.length ? "בחרו חברה" : "אין חברות");
+  document.getElementById("companyPickerLogo").innerHTML = current ? companyLogoHtml(current) : "";
+  document.getElementById("companyPickerPanel").innerHTML = COMPANIES.map(c => `
+    <div class="company-picker-item${c.Id === selectedCompanyIdValue ? " selected" : ""}" data-company-id="${c.Id}">
+      <span class="company-picker-logo">${companyLogoHtml(c)}</span>
+      <span>${esc(c.Name)}</span>
+    </div>`).join("") || `<div class="company-picker-item" style="cursor:default;color:var(--text-muted);">אין עדיין חברות</div>`;
+}
+
+function selectCompany(id) {
+  selectedCompanyIdValue = id;
+  localStorage.setItem("visiflowSelectedCompanyId", String(id));
+  renderCompanyPicker();
+  document.getElementById("companyPickerPanel").style.display = "none";
+  refreshAllCompanyScopedViews();
+}
+
+document.getElementById("companyPickerBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const panel = document.getElementById("companyPickerPanel");
+  panel.style.display = panel.style.display === "none" ? "block" : "none";
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#companyPickerWrap")) document.getElementById("companyPickerPanel").style.display = "none";
+});
+document.getElementById("companyPickerPanel").addEventListener("click", (e) => {
+  const item = e.target.closest("[data-company-id]");
+  if (!item) return;
+  const id = Number(item.dataset.companyId);
+  if (id !== selectedCompanyIdValue) selectCompany(id);
+  else document.getElementById("companyPickerPanel").style.display = "none";
+});
+
 async function loadCompanies() {
   try {
     const res = await fetch("/api/companies");
     COMPANIES = res.ok ? await res.json() : [];
   } catch { COMPANIES = []; }
 
-  const sel = document.getElementById("globalCompanySelector");
-  const remembered = localStorage.getItem("visiflowSelectedCompanyId");
-  const previous = sel.value;
-  sel.innerHTML = COMPANIES.map(c => `<option value="${c.Id}">${esc(c.Name)}</option>`).join("");
-
   document.getElementById("noCompanyBanner").style.display = COMPANIES.length === 0 ? "block" : "none";
   renderAdminCompaniesList();
 
-  if (COMPANIES.length === 0) { sel.value = ""; return; }
-  const wanted = previous || remembered;
-  sel.value = COMPANIES.some(c => String(c.Id) === wanted) ? wanted : String(COMPANIES[0].Id);
-  localStorage.setItem("visiflowSelectedCompanyId", sel.value);
+  if (COMPANIES.length === 0) { selectedCompanyIdValue = null; renderCompanyPicker(); return; }
+  const remembered = localStorage.getItem("visiflowSelectedCompanyId");
+  const wanted = selectedCompanyIdValue != null ? String(selectedCompanyIdValue) : remembered;
+  selectedCompanyIdValue = COMPANIES.some(c => String(c.Id) === wanted) ? Number(wanted) : COMPANIES[0].Id;
+  localStorage.setItem("visiflowSelectedCompanyId", String(selectedCompanyIdValue));
+  renderCompanyPicker();
 }
-
-document.getElementById("globalCompanySelector").addEventListener("change", (e) => {
-  localStorage.setItem("visiflowSelectedCompanyId", e.target.value);
-  refreshAllCompanyScopedViews();
-});
 
 async function refreshAllCompanyScopedViews() {
   // Distribution-days joins against liveCustomers (for the name/agent/channel columns), and the
@@ -2397,18 +2474,27 @@ async function refreshAllCompanyScopedViews() {
 }
 
 /* ---- add company modal ---- */
+// Cache-busting suffix so re-rendering right after an upload/removal actually shows the new image
+// instead of the browser reusing whatever it cached for this exact same URL a moment ago.
+let adminCompaniesRenderStamp = Date.now();
+
 function renderAdminCompaniesList() {
   const listEl = document.getElementById("adminCompaniesList");
   const countEl = document.getElementById("adminCompaniesCount");
   countEl.textContent = COMPANIES.length ? String(COMPANIES.length) : "";
+  adminCompaniesRenderStamp = Date.now();
   listEl.innerHTML = COMPANIES.map((c, i) => {
     const name = esc(c.Name);
     const nameAttr = esc(c.Name);
     const isActive = c.IsActive !== false;
+    const logoThumb = companyLogoHtml(c);
     return `
     <div class="editable-row" style="${isActive ? "" : "opacity:0.55;"}">
       <span class="reason-index">${i + 1}</span>
+      <div class="company-logo-thumb" data-action="upload-company-logo" data-id="${c.Id}" title="${c.HasLogo ? "לחצו להחלפת הלוגו" : "לחצו להעלאת לוגו"}">${logoThumb}</div>
+      <input type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" data-company-logo-input="${c.Id}" style="display:none" />
       <span style="flex:1;font-weight:600;">${name}</span>
+      ${c.HasLogo ? `<button type="button" class="btn-icon" data-action="remove-company-logo" data-id="${c.Id}" data-name="${nameAttr}" title="הסרת הלוגו">✕</button>` : ""}
       <span class="badge">מזהה ${c.Id}</span>
       <button type="button" class="btn-icon-badge badge${isActive ? " good" : ""}" data-action="toggle-company-active" data-id="${c.Id}" data-name="${nameAttr}" data-active="${isActive}" title="${isActive ? "לחצו להקפאה - יחסום התחברות לכל משתמשי החברה (הפיך)" : "לחצו להפשרה - יאפשר התחברות מחדש"}">${isActive ? "פעיל" : "מוקפא"}</button>
       <button type="button" class="btn-icon" data-action="delete-company" data-id="${c.Id}" data-name="${nameAttr}" title="מחיקה סופית - כל הנתונים">&#128465;</button>
@@ -2441,7 +2527,44 @@ document.getElementById("adminCompaniesList").addEventListener("click", async (e
     return;
   }
 
-  if (deleteBtn) openDeleteCompanyModal(deleteBtn.dataset.id, deleteBtn.dataset.name);
+  if (deleteBtn) { openDeleteCompanyModal(deleteBtn.dataset.id, deleteBtn.dataset.name); return; }
+
+  const logoThumb = e.target.closest('[data-action="upload-company-logo"]');
+  if (logoThumb) {
+    document.querySelector(`[data-company-logo-input="${logoThumb.dataset.id}"]`)?.click();
+    return;
+  }
+
+  const removeLogoBtn = e.target.closest('[data-action="remove-company-logo"]');
+  if (removeLogoBtn) {
+    if (!confirm(`להסיר את הלוגו של "${removeLogoBtn.dataset.name}"?`)) return;
+    await withLoading(removeLogoBtn, async () => {
+      try {
+        const res = await fetch(`/api/companies/${removeLogoBtn.dataset.id}/logo`, { method: "DELETE" });
+        if (!res.ok) { alert(await describeError(res)); return; }
+        await loadCompanies();
+      } catch { alert("שגיאת תקשורת עם השרת"); }
+    });
+  }
+});
+
+// File inputs are recreated on every renderAdminCompaniesList() call - delegated so a freshly-added
+// one is covered without re-binding a listener per row.
+document.getElementById("adminCompaniesList").addEventListener("change", async (e) => {
+  const input = e.target.closest("[data-company-logo-input]");
+  if (!input || !input.files[0]) return;
+  const companyId = input.dataset.companyLogoInput;
+  const fd = new FormData();
+  fd.append("file", input.files[0]);
+  const thumb = document.querySelector(`.company-logo-thumb[data-id="${companyId}"]`);
+  try {
+    const res = await fetch(`/api/companies/${companyId}/logo`, { method: "POST", body: fd });
+    if (!res.ok) { alert(await describeError(res)); return; }
+    // loadCompanies() re-renders both the admin list and the sidebar picker (see renderCompanyPicker
+    // at its end), so whichever one this logo belongs to updates either way.
+    await loadCompanies();
+  } catch { alert("שגיאת תקשורת עם השרת"); }
+  finally { input.value = ""; }
 });
 
 /* ---- delete-company modal: type the exact company name to confirm, same spirit as the "type מחיקה"
@@ -2493,9 +2616,7 @@ document.getElementById("addCompanyForm").addEventListener("submit", async (e) =
     msg.className = "form-msg success"; msg.textContent = `החברה "${created.Name}" נוספה בהצלחה - היא כבר נבחרת למעלה.`;
     nameInput.value = "";
     await loadCompanies();
-    document.getElementById("globalCompanySelector").value = String(created.Id);
-    localStorage.setItem("visiflowSelectedCompanyId", String(created.Id));
-    refreshAllCompanyScopedViews();
+    selectCompany(created.Id);
   } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
 });
 
@@ -2874,7 +2995,8 @@ document.getElementById("dashCityChart").addEventListener("click", (e) => {
   const el = e.target.closest("[data-drill-city]");
   const d = DASH_STATE;
   if (!el || !d) return;
-  const list = d.cityBreakdown.get(el.dataset.drillCity);
+  const found = lastCityChartEntries.find(([label]) => label === el.dataset.drillCity);
+  const list = found ? found[1] : null;
   if (!list) return;
   navigateToCustomersFiltered({ status: "Active", customerNumbers: list.map(c => c.CustomerNumber) });
 });
@@ -2909,15 +3031,35 @@ function renderAgentPerfChart(agentPerf) {
   }).join("");
 }
 
+// At most 12 individual cities, largest first - anything past that gets folded into one trailing
+// "כל יתר הערים" bar instead of widening the row indefinitely (see the CSS scoping .vbar-col to share
+// the panel's own width for this chart specifically, no more horizontal scroll).
+const CITY_CHART_MAX_BARS = 12;
+// The exact (label, customerList) pairs actually rendered, most recent call - lets the click handler
+// below drill into the aggregated "כל יתר הערים" bar correctly too (its customers span several real
+// cities, so DASH_STATE.cityBreakdown - keyed by real city name - has no entry for that combined
+// label on its own).
+let lastCityChartEntries = [];
+
 function renderCityChart(cityBreakdown) {
   const el = document.getElementById("dashCityChart");
-  const entries = [...cityBreakdown.entries()].sort((a, b) => b[1].length - a[1].length);
-  if (entries.length === 0) { el.innerHTML = `<div class="bar-empty">אין נתוני עיר להצגה.</div>`; return; }
+  const sorted = [...cityBreakdown.entries()].sort((a, b) => b[1].length - a[1].length);
+  if (sorted.length === 0) { el.innerHTML = `<div class="bar-empty">אין נתוני עיר להצגה.</div>`; lastCityChartEntries = []; return; }
+  const shown = sorted.slice(0, CITY_CHART_MAX_BARS);
+  const rest = sorted.slice(CITY_CHART_MAX_BARS);
+  const entries = rest.length > 0
+    ? [...shown, [`כל יתר הערים (${rest.length})`, rest.flatMap(([, list]) => list)]]
+    : shown;
+  lastCityChartEntries = entries;
   const max = Math.max(...entries.map(([, list]) => list.length), 1);
+  // Square-root scale (rather than linear) so one especially dominant city doesn't flatten every
+  // other bar down near zero - height differences between the SMALLER bars stay legible instead of
+  // all of them reading as "basically empty" next to the outlier.
+  const scaledMax = Math.sqrt(max);
   el.innerHTML = entries.map(([city, list]) => `
     <div class="vbar-col" data-drill-city="${esc(city)}">
       <div class="vbar-value">${fmtNumber(list.length)}</div>
-      <div class="vbar-track"><div class="vbar-fill" style="height:${Math.round(list.length / max * 100)}%"></div></div>
+      <div class="vbar-track"><div class="vbar-fill" style="height:${Math.round(Math.sqrt(list.length) / scaledMax * 100)}%"></div></div>
       <div class="vbar-label">${esc(city)}</div>
     </div>`).join("");
 }
@@ -3220,7 +3362,7 @@ async function refreshDashboard() {
   ]);
   renderReasonsChart(reasonAgg);
   renderDonutChart("dashAgentDonut", agentComposition, { centerLabel: "לקוחות", drillAttr: "drill-agent-donut", inlineCount: true, showPct: false });
-  splitDonutLegendIntoColumns("dashAgentDonut", 2);
+  splitDonutLegendIntoColumns("dashAgentDonut", 3);
   renderDonutChart("dashFrequencyDonut", frequencyBuckets, {
     centerLabel: "לקוחות", drillAttr: "drill-frequency", inlineCount: true, showPct: true,
     sortFn: (a, b) => FREQUENCY_SORT_VAL.get(b[0]) - FREQUENCY_SORT_VAL.get(a[0])
@@ -4073,21 +4215,28 @@ const vsTable = createDataTable({
 
 // createDataTable() above already built a toolbar (filtered-count + "ייצוא לאקסל") right before
 // #vsTable - move the whole select-customers-then-set-a-standard flow into that same row, per the
-// admin's request. Append order matters (RTL flex-start flow - each element lands further left, i.e.
-// later in reading order): selection controls first, then the divider, then the standard-setting
-// controls, so the packed row still tells the 2-step story left-to-right... right-to-left.
+// admin's request. The standard-setting controls (divider/frequency/visits/apply/clear) stay on the
+// right (flex-start's natural cluster point in RTL); export + every selection control (count text,
+// both "select all" buttons, clear-selection) are grouped into their own wrapper with
+// margin-inline-start:auto, which pins that whole group to the true far LEFT of the row regardless of
+// how much space the right-hand controls actually use - same technique as the debt-upload controls in
+// "טעינת לקוחות" (see btnBrowseImportDebt).
 const vsTableToolbar = document.querySelector("#vsTable").previousElementSibling;
 vsTableToolbar.classList.add("table-toolbar-packed");
-vsTableToolbar.appendChild(document.getElementById("vsSelectedCount"));
-vsTableToolbar.appendChild(document.getElementById("btnSelectAllVsFiltered"));
-vsTableToolbar.appendChild(document.getElementById("btnSelectAllVsCustomers"));
-vsTableToolbar.appendChild(document.getElementById("btnClearVsSelection"));
 vsTableToolbar.appendChild(document.querySelector(".toolbar-step-divider"));
 vsTableToolbar.appendChild(document.querySelector('label[for="vsFrequencyPreset"]').parentElement);
 vsTableToolbar.appendChild(document.querySelector('label[for="vsVisitsInput"]').parentElement);
 vsTableToolbar.appendChild(document.getElementById("btnApplyVisitStandard"));
 vsTableToolbar.appendChild(document.getElementById("btnClearVisitStandard"));
 vsTableToolbar.appendChild(document.getElementById("vsMsg"));
+const vsExportSelectionGroup = document.createElement("div");
+vsExportSelectionGroup.style.cssText = "display:flex;align-items:center;gap:8px;margin-inline-start:auto;";
+vsExportSelectionGroup.appendChild(vsTableToolbar.querySelector(".export-excel-btn"));
+vsExportSelectionGroup.appendChild(document.getElementById("vsSelectedCount"));
+vsExportSelectionGroup.appendChild(document.getElementById("btnSelectAllVsFiltered"));
+vsExportSelectionGroup.appendChild(document.getElementById("btnSelectAllVsCustomers"));
+vsExportSelectionGroup.appendChild(document.getElementById("btnClearVsSelection"));
+vsTableToolbar.appendChild(vsExportSelectionGroup);
 
 // "בחירת כל הלקוחות המסוננים" only makes sense once some filter has actually narrowed the table -
 // otherwise it's a confusing duplicate of "בחירת כל הלקוחות" right next to it. A cheap, engine-agnostic

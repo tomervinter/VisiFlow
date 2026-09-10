@@ -209,6 +209,10 @@ using (var scope = app.Services.CreateScope())
             "ALTER TABLE \"CustomerVisits\" ADD COLUMN IF NOT EXISTS \"IsUnplanned\" boolean NOT NULL DEFAULT false;");
         await db.Database.ExecuteSqlRawAsync(
             "ALTER TABLE \"VisitPlanEntries\" ADD COLUMN IF NOT EXISTS \"RescheduledToEntryId\" integer;");
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE \"Companies\" ADD COLUMN IF NOT EXISTS \"LogoData\" bytea;");
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE \"Companies\" ADD COLUMN IF NOT EXISTS \"LogoContentType\" character varying(100);");
     }
     else
     {
@@ -449,8 +453,11 @@ app.MapDelete("/api/users/{id:int}", async (int id, HttpContext ctx, VisiFlowDbC
 app.MapGet("/api/companies", async (HttpContext ctx, VisiFlowDbContext db) =>
 {
     var caller = await ResolveCallerAsync(ctx, db);
-    var companies = await db.Companies.Where(c => caller.IsSuperAdmin || c.Id == caller.CompanyId).OrderBy(c => c.Name).ToListAsync();
-    return companies.Select(CompanyDto.From);
+    // Projected (not CompanyDto.From over materialized entities) so LogoData's actual bytes never
+    // come back here - "!= null" translates to a plain SQL NULL check, the list only needs to know
+    // whether a logo exists (see GET /api/companies/{id}/logo for the bytes themselves).
+    return await db.Companies.Where(c => caller.IsSuperAdmin || c.Id == caller.CompanyId).OrderBy(c => c.Name)
+        .Select(c => new CompanyDto(c.Id, c.Name, c.IsActive, c.LogoData != null)).ToListAsync();
 }).RequireAuthorization();
 
 // Only a super-admin may create a new tenant - a regular user has no legitimate reason to spin up an
@@ -535,6 +542,59 @@ app.MapPost("/api/companies/{id:int}/active", async (int id, SetCompanyActiveReq
     company.IsActive = req.IsActive;
     await db.SaveChangesAsync();
     await LogAuditAsync(db, ctx, company.Id, req.IsActive ? "שחרור הקפאת חברה" : "הקפאת חברה", $"חברה #{company.Id} ({company.Name})");
+    return Results.Ok(CompanyDto.From(company));
+}).RequireAuthorization();
+
+// ---- company logo: stored as bytes IN THE DATABASE (not a file on disk) - Render's free tier disk is
+// ephemeral, wiped on every redeploy, so a logo saved to disk would vanish the next time this app
+// ships. Shown instead of/alongside the company name in the sidebar's company picker (see
+// #globalCompanySelector's replacement in home.html) and in the "ניהול" screen's own company list. ----
+var allowedLogoTypes = new HashSet<string> { "image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml" };
+const long MaxLogoUploadBytes = 2 * 1024 * 1024;
+
+// Same super-admin-only gate as creating/freezing a company - a regular admin has no path to another
+// company's logo anyway (see the GET below being scoped per company id), but uploading is still an
+// admin-only action, matching every other company-level setting on the "ניהול" screen.
+app.MapPost("/api/companies/{id:int}/logo", async (int id, HttpRequest request, HttpContext ctx, VisiFlowDbContext db) =>
+{
+    var caller = await ResolveCallerAsync(ctx, db);
+    if (!caller.IsSuperAdmin) return ForbiddenCompany();
+    var company = await db.Companies.FindAsync(id);
+    if (company == null) return Results.NotFound();
+
+    var form = await request.ReadFormAsync();
+    var file = form.Files.GetFile("file");
+    if (file == null || file.Length == 0) return Results.BadRequest("לא נבחר קובץ");
+    if (file.Length > MaxLogoUploadBytes) return Results.BadRequest("הקובץ גדול מדי (מקסימום 2MB)");
+    if (!allowedLogoTypes.Contains(file.ContentType)) return Results.BadRequest("סוג קובץ לא נתמך - יש להעלות תמונה (PNG, JPG, GIF, WEBP או SVG)");
+
+    using var ms = new MemoryStream();
+    await file.CopyToAsync(ms);
+    company.LogoData = ms.ToArray();
+    company.LogoContentType = file.ContentType;
+    await db.SaveChangesAsync();
+    return Results.Ok(CompanyDto.From(company));
+}).RequireAuthorization();
+
+// Deliberately NOT behind auth - loaded directly as an <img src="..."> from the sidebar of every
+// screen (and could, in principle, be shown to an agent too), the same way a public site's own logo
+// isn't gated behind a login. A logo image on its own isn't sensitive company data.
+app.MapGet("/api/companies/{id:int}/logo", async (int id, VisiFlowDbContext db) =>
+{
+    var company = await db.Companies.Where(c => c.Id == id).Select(c => new { c.LogoData, c.LogoContentType }).FirstOrDefaultAsync();
+    if (company?.LogoData == null || company.LogoContentType == null) return Results.NotFound();
+    return Results.File(company.LogoData, company.LogoContentType);
+});
+
+app.MapDelete("/api/companies/{id:int}/logo", async (int id, HttpContext ctx, VisiFlowDbContext db) =>
+{
+    var caller = await ResolveCallerAsync(ctx, db);
+    if (!caller.IsSuperAdmin) return ForbiddenCompany();
+    var company = await db.Companies.FindAsync(id);
+    if (company == null) return Results.NotFound();
+    company.LogoData = null;
+    company.LogoContentType = null;
+    await db.SaveChangesAsync();
     return Results.Ok(CompanyDto.From(company));
 }).RequireAuthorization();
 
@@ -2102,9 +2162,9 @@ app.MapPost("/api/billing/webhook", async (HttpRequest request, VisiFlowDbContex
 
 app.Run();
 
-record CompanyDto(int Id, string Name, bool IsActive)
+record CompanyDto(int Id, string Name, bool IsActive, bool HasLogo)
 {
-    public static CompanyDto From(Company c) => new(c.Id, c.Name, c.IsActive);
+    public static CompanyDto From(Company c) => new(c.Id, c.Name, c.IsActive, c.LogoData != null);
 }
 
 record SetCompanyActiveRequest(bool IsActive);

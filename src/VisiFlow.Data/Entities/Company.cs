@@ -13,4 +13,9 @@ public class Company
     /// ראו StripeService), וגם אז רק לחברות שנוצרו דרך ה-signup הציבורי, לא חברות שנוצרו ע"י מנהל-על
     /// דרך "ניהול". המפתח שדרכו webhook.cs מזהה איזו חברה להקפיא כשמנוי מבוטל/תשלום נכשל.</summary>
     public string? StripeCustomerId { get; set; }
+    /// <summary>לוגו החברה, כפי שהועלה במסך "ניהול" - נשמר כבייטים בבסיס הנתונים עצמו (לא כקובץ על
+    /// הדיסק), כדי לשרוד דיפלוי מחדש על תשתית עם דיסק זמני (כמו Render). null אם לא הועלה לוגו.</summary>
+    public byte[]? LogoData { get; set; }
+    /// <summary>Content-Type של הלוגו שהועלה (למשל "image/png") - דרוש כדי להגיש אותו נכון ב-GET.</summary>
+    public string? LogoContentType { get; set; }
 }

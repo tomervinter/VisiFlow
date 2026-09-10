@@ -3379,11 +3379,11 @@ async function refreshDashboard() {
     && v.VisitDate.slice(0, 4) === String(selYear) && Number(v.VisitDate.slice(5, 7)) === selMonth
     && (!globalChannel.size || globalChannel.has(v.Channel)));
   renderKpiGrid("dashKpiGridMonthly", [
-    { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel.size ? `בערוץ ${[...globalChannel].join(", ")}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים`, tier: "good" },
+    { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel.size ? `בערוץ ${[...globalChannel].join(", ")}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים`, tier: "crit" },
     { id: "neglected", value: fmtNumber(neglected.length), label: "לקוחות שלא ביקרנו מעל 30 יום", sub: "לחצו לרשימה המלאה", tier: neglected.length === 0 ? "good" : (neglected.length > kpiCustomers.length * 0.2 ? "crit" : "warn") },
     { id: "decliningNeglected", value: fmtNumber(decliningNeglected.length), label: "יורדים במכר וללא ביקור מספק", sub: "ירידה במכר + לא ביקרנו מעל 30 יום", tier: decliningNeglected.length === 0 ? "good" : "crit" },
     { id: "unscheduled", value: fmtNumber(unscheduled.length), label: "לקוחות שלא שובצו", sub: "אין קיבולת פנויה ביומן הסוכן - לחצו לרשימה", tier: unscheduled.length === 0 ? "good" : "crit" },
-    { id: "unplannedVisits", value: fmtNumber(unplannedThisMonth.length), label: "ביקורים יזומים עי סוכנים", sub: "לא היו חלק מתוכנית הביקורים המתוכננת" }
+    { id: "unplannedVisits", value: fmtNumber(unplannedThisMonth.length), label: "ביקורים יזומים עי סוכנים", sub: "לא היו חלק מתוכנית הביקורים המתוכננת", tier: "crit" }
   ]);
   renderReasonsChart(reasonAgg);
   renderDonutChart("dashAgentDonut", agentComposition, { centerLabel: "לקוחות", drillAttr: "drill-agent-donut", inlineCount: true, showPct: false });

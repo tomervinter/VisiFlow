@@ -702,9 +702,16 @@
   .vp-build-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; align-items: stretch; margin-top: 14px; }
   @media (max-width: 1180px) { .vp-build-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 640px) { .vp-build-grid { grid-template-columns: 1fr; } }
-  /* Only 3 columns now (weights/capacity/city-optimization) - "יצירת תוכנית" moved out to its own
-     always-visible box above, see #view-visitplan markup. */
-  #vpAdvancedSettings.vp-build-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* #vpAdvancedSettings is back to 4 cards (weights/default-capacity/per-channel-capacity/
+     city-optimization), same count as the base .vp-build-grid rule above (with its own 1180px/640px
+     breakpoints) - no narrower override needed here any more. */
+  .vp-channel-capacity-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  .vp-channel-capacity-table th { text-align: right; font-size: 0.7rem; color: var(--text-muted); font-weight: 600; padding: 4px 4px; }
+  .vp-channel-capacity-table td { padding: 3px 4px; }
+  .vp-channel-capacity-table input {
+    padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--offwhite);
+    color: var(--text); font-family: inherit; font-size: 0.86rem; width: 100%; max-width: 70px; box-sizing: border-box;
+  }
   .vp-build-col {
     border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--offwhite);
     display: flex; flex-direction: column; gap: 10px;
@@ -1701,8 +1708,8 @@
           </div>
 
           <div class="vp-build-col">
-            <h3 class="vp-build-col-title">קיבולת יומית לסוכן</h3>
-            <p class="vp-build-col-desc">כמה פגישות אפשר לשבץ לסוכן ביום. אם לקוחות נשארים "לא שובץ" - הגדילו כאן, <b>לחצו "שמירה"</b> וצרו את התוכנית מחדש (השינוי לא משפיע על תוכנית שכבר נוצרה, וגם לא נשמר אם לא לוחצים שמירה).</p>
+            <h3 class="vp-build-col-title">קיבולת יומית לסוכן - ברירת מחדל</h3>
+            <p class="vp-build-col-desc">כמה פגישות אפשר לשבץ לסוכן ביום, לערוץ שאין לו שורה משלו בטבלה "קיבולת יומית לפי ערוץ מכר" למטה (או ללקוח ללא ערוץ מוגדר). אם לקוחות נשארים "לא שובץ" - הגדילו כאן, <b>לחצו "שמירה"</b> וצרו את התוכנית מחדש (השינוי לא משפיע על תוכנית שכבר נוצרה, וגם לא נשמר אם לא לוחצים שמירה).</p>
             <div class="vp-capacity-grid">
               <div class="vp-weight-field">
                 <label for="vpFullDayCapacity">פגישות ביום מלא</label>
@@ -1717,6 +1724,17 @@
               <button type="button" class="btn primary" id="btnSaveCapacity">שמירה</button>
               <span class="form-msg" id="vpCapacityMsg"></span>
             </div>
+          </div>
+
+          <div class="vp-build-col">
+            <h3 class="vp-build-col-title">קיבולת יומית לפי ערוץ מכר</h3>
+            <p class="vp-build-col-desc">
+              שורה לכל ערוץ מכר - קובעת את הקיבולת היומית של כל סוכן ש<b>רוב</b> הלקוחות שלו בערוץ הזה
+              (סוכן שמשרת כמה ערוצים משובץ לפי הערוץ שיש לו בו הכי הרבה לקוחות). כמו בעמודה השמאלית,
+              יש <b>ללחוץ "שמירה" בשורה</b> וליצור את התוכנית מחדש כדי שהשינוי ישפיע.
+            </p>
+            <div id="vpChannelCapacityTable"></div>
+            <span class="form-msg" id="vpChannelCapacityMsg"></span>
           </div>
 
           <div class="vp-build-col vp-build-col-action">
@@ -4892,6 +4910,57 @@ async function loadVpWeights() {
   } catch { /* offline */ }
 }
 
+// One row per sales channel (see ChannelCapacity.cs) - each row has its own save button so editing one
+// channel's numbers never risks losing an unsaved edit on another row.
+function renderVpChannelCapacityTable(rows) {
+  const el = document.getElementById("vpChannelCapacityTable");
+  if (!rows.length) { el.innerHTML = `<span class="muted">אין ערוצי מכר בבסיס הלקוחות של החודש שנבחר.</span>`; return; }
+  el.innerHTML = `
+    <table class="vp-channel-capacity-table">
+      <thead><tr><th>ערוץ מכר</th><th>פגישות ביום מלא</th><th>פגישות בחצי יום</th><th></th></tr></thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr data-channel-id="${r.Id}" data-channel="${esc(r.Channel)}">
+            <td>${esc(r.Channel)}</td>
+            <td><input type="number" min="1" step="1" class="channel-capacity-full" value="${r.FullDayCapacity}" /></td>
+            <td><input type="number" min="1" step="1" class="channel-capacity-half" value="${r.HalfDayCapacity}" /></td>
+            <td><button type="button" class="btn small" data-action="save-channel-capacity">שמירה</button></td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+async function loadVpChannelCapacity() {
+  const companyId = selectedCompanyId();
+  if (!companyId) return;
+  try {
+    const res = await fetch(`/api/visitplan/channelcapacity?companyId=${companyId}`);
+    if (res.ok) renderVpChannelCapacityTable(await res.json());
+  } catch { /* offline */ }
+}
+
+document.getElementById("vpChannelCapacityTable").addEventListener("click", async (e) => {
+  const btn = e.target.closest('[data-action="save-channel-capacity"]');
+  if (!btn) return;
+  const row = btn.closest("tr");
+  const companyId = selectedCompanyId();
+  const msg = document.getElementById("vpChannelCapacityMsg");
+  const full = Number(row.querySelector(".channel-capacity-full").value) || 0;
+  const half = Number(row.querySelector(".channel-capacity-half").value) || 0;
+  if (full < 1 || half < 1) { msg.className = "form-msg error"; msg.textContent = "הקיבולת חייבת להיות לפחות 1"; return; }
+  msg.className = "form-msg"; msg.textContent = "שומר...";
+  await withLoading(btn, async () => {
+    try {
+      const res = await fetch("/api/visitplan/channelcapacity", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ Id: Number(row.dataset.channelId), CompanyId: companyId, Channel: row.dataset.channel, FullDayCapacity: full, HalfDayCapacity: half })
+      });
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
+      msg.className = "form-msg success"; msg.textContent = `נשמר עבור "${row.dataset.channel}"! ניתן ליצור תוכנית מחדש כדי שהשינוי ישפיע.`;
+    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  }, "שומר...");
+});
+
 // Saves BOTH weights and capacity together (one shared settings record - see VisitPlanWeights) - two
 // buttons call this, one in each of build-columns 1 and 2, since a change made in either column is
 // silently lost if the admin never presses a save button at all (only typing a new capacity number
@@ -5392,6 +5461,7 @@ document.getElementById("btnOptimizeByCity").addEventListener("click", async () 
 
 async function refreshVisitPlanView() {
   await loadVpWeights();
+  await loadVpChannelCapacity();
   await refreshVpTable();
 }
 VIEW_ACTIVATION_HOOKS["visitplan"] = refreshVisitPlanView;

@@ -252,4 +252,47 @@ public class VisitPlanGeneratorTests : IDisposable
         Assert.False(Db.VisitPlanEntries.Any(e => e.CompanyId == company.Id && e.CustomerNumber == "C-ZERO"));
         Assert.Single(Db.VisitPlanEntries.Where(e => e.CompanyId == company.Id && e.CustomerNumber == "C-UNSET"));
     }
+
+    // Regression coverage for ChannelCapacity.cs: an agent whose customers are entirely in one channel
+    // must be scheduled against THAT channel's capacity override, not the company-wide default, and two
+    // agents in different channels must be capped independently of each other.
+    [Fact]
+    public async Task GenerateAsync_ChannelCapacityOverride_AppliesPerAgentsPrimaryChannelIndependently()
+    {
+        var company = await SeedCompanyAsync();
+
+        // Company-wide default deliberately generous (10/day) so it would never be the real bottleneck -
+        // only the channel-specific overrides below should end up limiting either agent.
+        Db.VisitPlanWeights.Add(new VisitPlanWeights { CompanyId = company.Id, FullDayCapacity = 10, HalfDayCapacity = 10 });
+        Db.ChannelCapacities.Add(new ChannelCapacity { CompanyId = company.Id, Channel = "פרטיים", FullDayCapacity = 1, HalfDayCapacity = 1 });
+        Db.ChannelCapacities.Add(new ChannelCapacity { CompanyId = company.Id, Channel = "רשתות", FullDayCapacity = 3, HalfDayCapacity = 3 });
+
+        for (var i = 0; i < 5; i++)
+        {
+            Db.Customers.Add(new Customer
+            {
+                CompanyId = company.Id, CustomerNumber = $"C-PRT-{i:00}", Year = Year, Month = Month,
+                CustomerName = $"Private {i}", AgentIdNumber = "AG-PRIVATE", Channel = "פרטיים", Status = CustomerStatus.Active
+            });
+        }
+        for (var i = 0; i < 5; i++)
+        {
+            Db.Customers.Add(new Customer
+            {
+                CompanyId = company.Id, CustomerNumber = $"C-NET-{i:00}", Year = Year, Month = Month,
+                CustomerName = $"Network {i}", AgentIdNumber = "AG-NETWORK", Channel = "רשתות", Status = CustomerStatus.Active
+            });
+        }
+        await Db.SaveChangesAsync();
+
+        await VisitPlanGenerator.GenerateAsync(Db, company.Id, Year, Month);
+
+        // March 1, 2026 is a Sunday (a full working day) - both agents' very first day of the month.
+        var firstDay = new DateTime(2026, 3, 1);
+        var privateOnFirstDay = Db.VisitPlanEntries.Count(e => e.CompanyId == company.Id && e.CustomerNumber.StartsWith("C-PRT") && e.PlannedDate == firstDay);
+        var networkOnFirstDay = Db.VisitPlanEntries.Count(e => e.CompanyId == company.Id && e.CustomerNumber.StartsWith("C-NET") && e.PlannedDate == firstDay);
+
+        Assert.Equal(1, privateOnFirstDay); // capped by "פרטיים"'s override (1/day), not the generous 10/day default
+        Assert.Equal(3, networkOnFirstDay); // capped by "רשתות"'s override (3/day)
+    }
 }

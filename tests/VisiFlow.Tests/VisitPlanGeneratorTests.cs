@@ -219,4 +219,37 @@ public class VisitPlanGeneratorTests : IDisposable
         Assert.Equal(Year, entry.PlanYear);
         Assert.Equal(Month, entry.PlanMonth);
     }
+
+    // Regression coverage for a real bug found while adding editable visit-frequency presets (see
+    // VisitFrequencyPreset.cs, which lets an admin define a named "0 ביקורים/שבוע" preset meaning "this
+    // customer needs no visits at all"): a standard explicitly set to 0 must produce NO plan entry for
+    // that customer this month, distinct from a customer with no standard row at all (which still gets
+    // the default single monthly visit, unchanged from before this fix).
+    [Fact]
+    public async Task GenerateAsync_ExplicitZeroStandard_ProducesNoEntryUnlikeNoStandardAtAll()
+    {
+        var company = await SeedCompanyAsync();
+
+        Db.Customers.Add(new Customer
+        {
+            CompanyId = company.Id, CustomerNumber = "C-ZERO", Year = Year, Month = Month,
+            CustomerName = "No Visits Needed", AgentIdNumber = "AG1", Status = CustomerStatus.Active
+        });
+        Db.CustomerVisitStandards.Add(new CustomerVisitStandard
+        {
+            CompanyId = company.Id, CustomerNumber = "C-ZERO", RequiredVisitsPerWeek = 0m, UpdatedAt = DateTime.UtcNow
+        });
+        Db.Customers.Add(new Customer
+        {
+            CompanyId = company.Id, CustomerNumber = "C-UNSET", Year = Year, Month = Month,
+            CustomerName = "No Standard Set", AgentIdNumber = "AG1", Status = CustomerStatus.Active
+            // No CustomerVisitStandard row at all - must keep getting the default single monthly visit.
+        });
+        await Db.SaveChangesAsync();
+
+        await VisitPlanGenerator.GenerateAsync(Db, company.Id, Year, Month);
+
+        Assert.False(Db.VisitPlanEntries.Any(e => e.CompanyId == company.Id && e.CustomerNumber == "C-ZERO"));
+        Assert.Single(Db.VisitPlanEntries.Where(e => e.CompanyId == company.Id && e.CustomerNumber == "C-UNSET"));
+    }
 }

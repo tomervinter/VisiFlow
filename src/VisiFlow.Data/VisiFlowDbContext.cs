@@ -22,6 +22,7 @@ public class VisiFlowDbContext : DbContext
     public DbSet<CityGroup> CityGroups => Set<CityGroup>();
     public DbSet<AuditLogEntry> AuditLogEntries => Set<AuditLogEntry>();
     public DbSet<CustomerDebt> CustomerDebts => Set<CustomerDebt>();
+    public DbSet<VisitFrequencyPreset> VisitFrequencyPresets => Set<VisitFrequencyPreset>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -88,6 +89,14 @@ public class VisiFlowDbContext : DbContext
             entity.HasKey(r => r.Id);
             entity.Property(r => r.Text).IsRequired().HasMaxLength(300);
             entity.HasOne(r => r.Company).WithMany().HasForeignKey(r => r.CompanyId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<VisitFrequencyPreset>(entity =>
+        {
+            entity.ToTable("VisitFrequencyPresets");
+            entity.HasKey(p => p.Id);
+            entity.Property(p => p.Label).IsRequired().HasMaxLength(60);
+            entity.HasOne(p => p.Company).WithMany().HasForeignKey(p => p.CompanyId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<CustomerDistributionDay>(entity =>

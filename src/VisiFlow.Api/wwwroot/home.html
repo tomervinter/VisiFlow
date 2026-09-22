@@ -1457,6 +1457,38 @@
       </div>
     </div>
 
+    <div class="modal-overlay" id="vsPresetsModalOverlay">
+      <div class="modal-box" style="max-width:480px;">
+        <h3>ניהול תדירויות</h3>
+        <p class="desc" style="text-align:center;">
+          זו רשימת התדירויות המוצעות לבחירה מהירה בעת קביעת תקן ביקורים ללקוח. תדירות שאין לקוחות
+          המוגדרים איתה כרגע ניתן למחוק; תדירות שכן בשימוש חסומה למחיקה - יופיע כמה לקוחות משתמשים בה.
+        </p>
+        <div id="vsPresetsList" style="margin-bottom:16px;"></div>
+        <h4 style="margin:0 0 8px;font-size:0.9rem;">הוספת תדירות חדשה</h4>
+        <p class="desc" style="text-align:right;font-size:0.8rem;margin-top:0;">
+          הזינו כמות ביקורים <strong>לשבוע</strong>: 1 = פעם בשבוע, 2 = פעמיים בשבוע.
+          לתדירות נמוכה משבועית, חשבו 1 חלקי מספר השבועות בין ביקור לביקור - למשל פעם ב-4 שבועות = 1/4 = 0.25.
+          הזינו <strong>0</strong> אם ללקוחות בתדירות הזו לא נדרשים ביקורים בכלל - התוכנית לא תשבץ להם ביקורים.
+        </p>
+        <div class="form-grid" style="margin-bottom:10px;">
+          <div class="field">
+            <label for="newVsPresetLabel">שם התדירות</label>
+            <input type="text" id="newVsPresetLabel" placeholder="למשל: פעם ב-10 ימים" />
+          </div>
+          <div class="field">
+            <label for="newVsPresetValue">ביקורים לשבוע</label>
+            <input type="number" id="newVsPresetValue" min="0" step="0.000001" placeholder="למשל 0.7" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn primary" id="btnAddVsPreset">+ הוספת תדירות</button>
+          <button type="button" class="btn" id="btnCloseVsPresets">סגירה</button>
+          <span class="form-msg" id="vsPresetsMsg"></span>
+        </div>
+      </div>
+    </div>
+
     <div class="modal-overlay" id="vpGenerateModalOverlay">
       <div class="modal-box" style="max-width:380px;">
         <h3>יצירת תוכנית ביקורים</h3>
@@ -1601,6 +1633,7 @@
             <label for="vsFrequencyPreset" style="margin:0;">תדירות:</label>
             <select id="vsFrequencyPreset" style="width:150px;"></select>
           </div>
+          <a href="#" id="lnkManageVsFrequencyPresets">ניהול תדירויות</a>
           <div class="field" style="flex-direction:row;align-items:center;gap:8px;">
             <label for="vsVisitsInput" style="margin:0;">ביקורים/שבוע:</label>
             <input type="number" id="vsVisitsInput" min="0" step="0.000001" placeholder="למשל 1" style="width:90px;" />
@@ -2526,7 +2559,7 @@ async function refreshAllCompanyScopedViews() {
   // measured, wasted work for whichever of them the admin never visits that session - on a company
   // with a lot of history, each one of those renders is not free, and paying for all of them upfront
   // is exactly what made switching feel sluggish right after opening the app.
-  await Promise.all([refreshDashboard(), refreshVisitLogBadgeOnly()]);
+  await Promise.all([refreshDashboard(), refreshVisitLogBadgeOnly(), refreshVsPresets()]);
   // customers/nonvisitreasons are fresh as of right now - record that so activateView's cache (see
   // VIEW_CACHE_TTL_MS) doesn't immediately redo the same fetch on the very next tab click. Every other
   // key is deliberately left unstamped - it hasn't actually been loaded yet, so activateView must still
@@ -2830,8 +2863,8 @@ function renderReasonsChart(reasonAgg) {
   }).join("");
 }
 
-// Buckets active customers by their visit-standard frequency (reusing the same preset labels/values
-// as the "תקן ביקורים ללקוח" screen's dropdown, defined further down as VS_FREQUENCY_PRESETS), sorted
+// Buckets active customers by their visit-standard frequency (reusing the same admin-editable preset
+// labels/values as the "תקן ביקורים ללקוח" screen's dropdown - see livePresets further down), sorted
 // from most-frequent (5x/week) to least-frequent (1x/year), with "no standard" and any custom
 // (non-preset) values placed by their own equivalent weekly rate.
 const FREQUENCY_SORT_VAL = new Map(); // label -> equivalent weekly rate, refreshed each computeFrequencyBreakdown call
@@ -2844,8 +2877,9 @@ function computeFrequencyBreakdown(activeCustomers) {
     if (val == null) {
       label = "ללא תקן מוגדר"; sortVal = -1;
     } else {
-      const preset = VS_FREQUENCY_PRESETS.find(p => Math.abs(p.value - Number(val)) < 0.0005);
-      if (preset) { label = preset.label; sortVal = preset.value; }
+      const preset = livePresets.find(p => Math.abs(p.VisitsPerWeek - Number(val)) < 0.0005);
+      if (preset) { label = preset.Label; sortVal = preset.VisitsPerWeek; }
+      else if (Number(val) === 0) { label = "אין צורך בביקורים"; sortVal = 0; }
       else { label = `${Number(val).toFixed(2)} ביקורים/שבוע (מותאם אישית)`; sortVal = Number(val); }
     }
     if (!buckets.has(label)) buckets.set(label, []);
@@ -4264,27 +4298,29 @@ btnConfirmDeleteDist.addEventListener("click", async () => {
 let vsSelected = new Set(); // CustomerNumber -> selected for the next bulk apply/clear action
 
 // RequiredVisitsPerWeek stays a single decimal field end-to-end (server, DB, algorithm) - values
-// below 1 just mean "less often than weekly". This preset list is a UI convenience only: picking
-// one fills the raw number input with its exact decimal equivalent (still freely editable/clearable
-// afterward), and fmtVisitsPerWeek() below reverse-matches a stored value back to its friendly label.
-const VS_FREQUENCY_PRESETS = [
-  { label: "5 פעמים בשבוע", value: 5 },
-  { label: "4 פעמים בשבוע", value: 4 },
-  { label: "3 פעמים בשבוע", value: 3 },
-  { label: "פעמיים בשבוע", value: 2 },
-  { label: "פעם בשבוע", value: 1 },
-  { label: "פעם בשבועיים", value: 0.5 },
-  { label: "פעם ב-3 שבועות", value: 0.333333 },
-  { label: "פעם בחודש", value: 0.233333 },
-  { label: "פעם ברבעון", value: 0.076923 },
-  { label: "פעם בחצי שנה", value: 0.038462 },
-  { label: "פעם בשנה", value: 0.019178 }
-];
+// below 1 just mean "less often than weekly", 0 means "no visits needed at all" (see
+// VisitPlanGenerator.cs). This preset list is a per-company, admin-editable UI convenience only (see
+// VisitFrequencyPreset.cs) - picking one fills the raw number input with its exact decimal equivalent
+// (still freely editable/clearable afterward), and fmtVisitsPerWeek() below reverse-matches a stored
+// value back to its friendly label. Fetched into this array (not a hardcoded const anymore) by
+// refreshVsPresets() below - starts empty until that first resolves, which just means
+// fmtVisitsPerWeek() falls back to its generic "X ביקורים/שבוע" phrasing for a moment on first load.
+let livePresets = [];
+
+async function refreshVsPresets() {
+  const companyId = selectedCompanyId();
+  if (!companyId) { livePresets = []; initVsFrequencyPresetSelect(); return; }
+  try {
+    const res = await fetch(`/api/visitfrequencypresets?companyId=${companyId}`);
+    livePresets = res.ok ? await res.json() : [];
+  } catch { /* offline - keep last known list */ }
+  initVsFrequencyPresetSelect();
+}
 
 function initVsFrequencyPresetSelect() {
   const sel = document.getElementById("vsFrequencyPreset");
   sel.innerHTML = `<option value="">בחירת תדירות מוכנה...</option>` +
-    VS_FREQUENCY_PRESETS.map(p => `<option value="${p.value}">${p.label}</option>`).join("");
+    livePresets.map(p => `<option value="${p.VisitsPerWeek}">${esc(p.Label)}</option>`).join("");
 }
 document.getElementById("vsFrequencyPreset").addEventListener("change", (e) => {
   if (!e.target.value) return;
@@ -4292,11 +4328,76 @@ document.getElementById("vsFrequencyPreset").addEventListener("change", (e) => {
   e.target.value = ""; // reset to placeholder - the number input is now the source of truth
 });
 
+function renderVsPresetsList() {
+  const el = document.getElementById("vsPresetsList");
+  el.innerHTML = livePresets.length
+    ? livePresets.map(p => `
+        <div class="city-group-item" data-preset-id="${p.Id}">
+          <div><span class="name">${esc(p.Label)}</span><br><span class="cities">${p.VisitsPerWeek} ביקורים/שבוע</span></div>
+          <button type="button" class="btn-icon" data-action="delete-vs-preset" data-id="${p.Id}" title="מחיקה">&#128465;</button>
+        </div>`).join("")
+    : `<span class="muted">עדיין לא הוגדרו תדירויות.</span>`;
+}
+
+const vsPresetsModal = document.getElementById("vsPresetsModalOverlay");
+function closeVsPresetsModal() { vsPresetsModal.classList.remove("open"); }
+document.getElementById("lnkManageVsFrequencyPresets").addEventListener("click", async (e) => {
+  e.preventDefault();
+  vsPresetsModal.classList.add("open");
+  document.getElementById("vsPresetsMsg").textContent = "";
+  document.getElementById("newVsPresetLabel").value = "";
+  document.getElementById("newVsPresetValue").value = "";
+  await refreshVsPresets();
+  renderVsPresetsList();
+});
+document.getElementById("btnCloseVsPresets").addEventListener("click", closeVsPresetsModal);
+vsPresetsModal.addEventListener("click", (e) => { if (e.target === vsPresetsModal) closeVsPresetsModal(); });
+
+document.getElementById("btnAddVsPreset").addEventListener("click", async () => {
+  const companyId = selectedCompanyId();
+  const msg = document.getElementById("vsPresetsMsg");
+  const btn = document.getElementById("btnAddVsPreset");
+  const label = document.getElementById("newVsPresetLabel").value.trim();
+  const value = document.getElementById("newVsPresetValue").value;
+  if (!label) { msg.className = "form-msg error"; msg.textContent = "יש להזין שם לתדירות"; return; }
+  if (value === "" || Number(value) < 0) { msg.className = "form-msg error"; msg.textContent = "יש להזין כמות ביקורים לשבוע (0 ומעלה)"; return; }
+  msg.className = "form-msg"; msg.textContent = "שומר...";
+  await withLoading(btn, async () => {
+    try {
+      const res = await fetch("/api/visitfrequencypresets", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ CompanyId: companyId, Label: label, VisitsPerWeek: Number(value) })
+      });
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
+      msg.className = "form-msg success"; msg.textContent = "התדירות נוספה בהצלחה.";
+      document.getElementById("newVsPresetLabel").value = "";
+      document.getElementById("newVsPresetValue").value = "";
+      await refreshVsPresets();
+      renderVsPresetsList();
+    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  }, "שומר...");
+});
+
+document.getElementById("vsPresetsList").addEventListener("click", async (e) => {
+  const btn = e.target.closest('[data-action="delete-vs-preset"]');
+  if (!btn) return;
+  const msg = document.getElementById("vsPresetsMsg");
+  if (!confirm("למחוק את התדירות הזו?")) return;
+  await withLoading(btn, async () => {
+    const res = await fetch(`/api/visitfrequencypresets/${btn.dataset.id}`, { method: "DELETE" });
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
+    msg.className = ""; msg.textContent = "";
+    await refreshVsPresets();
+    renderVsPresetsList();
+  }, "מוחק...");
+});
+
 function fmtVisitsPerWeek(n) {
   if (n == null) return `<span class="muted">לא הוגדר</span>`;
   const num = Number(n);
-  const preset = VS_FREQUENCY_PRESETS.find(p => Math.abs(p.value - num) < 0.0005);
-  if (preset) return `<span class="badge accent">${preset.label}</span>`;
+  const preset = livePresets.find(p => Math.abs(p.VisitsPerWeek - num) < 0.0005);
+  if (preset) return `<span class="badge accent">${esc(preset.Label)}</span>`;
+  if (num === 0) return `<span class="badge accent">אין צורך בביקורים</span>`;
   return `<span class="badge accent">${num % 1 === 0 ? num : num.toFixed(2)} ביקורים/שבוע</span>`;
 }
 
@@ -4373,8 +4474,11 @@ function updateVsActionBar() {
   document.getElementById("btnClearVsSelection").disabled = n === 0;
 }
 
-function refreshVsView() {
+async function refreshVsView() {
   updateVsActionBar();
+  // Belt-and-suspenders alongside the eager load in refreshAllCompanyScopedViews() - covers the rare
+  // case this screen is opened before that eager fetch has actually resolved yet.
+  if (!livePresets.length) await refreshVsPresets();
   vsTable.refresh();
   updateVsFilteredButtonVisibility();
 }

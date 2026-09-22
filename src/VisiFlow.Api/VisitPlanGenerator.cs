@@ -91,9 +91,14 @@ public static class VisitPlanGenerator
             distByCustomer.TryGetValue(c.CustomerNumber, out var dd);
             var distDays = dd == null ? new List<DayOfWeek>() : ActiveWeekdays(dd);
             var avgOrders = c.AvgMonthlyOrders ?? 0m;
-            var reqPerWeek = standardByCustomer.TryGetValue(c.CustomerNumber, out var std) ? (std ?? 0m) : 0m;
+            // Kept nullable (ReqPerWeekRaw) alongside the coalesced-to-0 ReqPerWeek used for scoring
+            // below - "no standard row at all" and "a standard explicitly set to 0" must stay
+            // distinguishable for the monthlyTarget branch further down (0 means "this customer needs
+            // no visits at all", not "no standard was ever set" - see that branch's comment).
+            var reqPerWeekRaw = standardByCustomer.TryGetValue(c.CustomerNumber, out var std) ? std : null;
+            var reqPerWeek = reqPerWeekRaw ?? 0m;
             var daysSince = lastVisitByCustomer.TryGetValue(c.CustomerNumber, out var lv) ? (today - lv).Days : 9999;
-            return (Customer: c, SalesDrop: salesDrop, DistDays: distDays, AvgOrders: avgOrders, ReqPerWeek: reqPerWeek, DaysSince: daysSince);
+            return (Customer: c, SalesDrop: salesDrop, DistDays: distDays, AvgOrders: avgOrders, ReqPerWeek: reqPerWeek, ReqPerWeekRaw: reqPerWeekRaw, DaysSince: daysSince);
         }).ToList();
 
         // ---- normalize (min-max PER AGENT, not company-wide) ----
@@ -142,8 +147,13 @@ public static class VisitPlanGenerator
                 weights.VisitStandardWeight * stdScore +
                 weights.DaysSinceVisitWeight * daysScore, 1);
 
-            // Monthly visit count. Three cases:
-            //  - No standard set (ReqPerWeek is 0/null): a single visit, as before.
+            // Monthly visit count. Four cases:
+            //  - No standard set at all (ReqPerWeekRaw is null - no CustomerVisitStandard row, or one
+            //    with a null value): a single visit, as before - this is the "we don't know, assume
+            //    something" default, distinct from the next case.
+            //  - Standard EXPLICITLY set to 0 (a "no visits needed" preset/value - see
+            //    VisitFrequencyPreset.cs): 0 requests. This customer simply doesn't belong in any
+            //    month's plan until the standard is changed to something else.
             //  - Standard is 1/week or more: scaled to a monthly count, same as before - capped to 1
             //    for customers whose real purchase frequency is low even if the standard says otherwise.
             //  - Standard is BELOW 1/week (e.g. once every 2/3 weeks, once a month/quarter/half-year/
@@ -154,19 +164,23 @@ public static class VisitPlanGenerator
             //    Otherwise they're simply not due yet and get skipped this month entirely (0 requests,
             //    not "unscheduled" - they just don't belong in this month's plan).
             int monthlyTarget;
-            if (r.ReqPerWeek >= 1)
+            if (r.ReqPerWeekRaw is null)
+            {
+                monthlyTarget = 1;
+            }
+            else if (r.ReqPerWeekRaw == 0m)
+            {
+                monthlyTarget = 0;
+            }
+            else if (r.ReqPerWeek >= 1)
             {
                 monthlyTarget = Math.Max(1, (int)Math.Round(r.ReqPerWeek * daysInMonth / 7m, MidpointRounding.AwayFromZero));
                 if (r.AvgOrders is > 0 and <= 1.5m) monthlyTarget = Math.Min(monthlyTarget, 1);
             }
-            else if (r.ReqPerWeek > 0)
+            else
             {
                 var intervalDays = (int)Math.Round(7m / r.ReqPerWeek, MidpointRounding.AwayFromZero);
                 monthlyTarget = r.DaysSince >= intervalDays ? 1 : 0; // DaysSince's 9999 "never visited" sentinel always qualifies
-            }
-            else
-            {
-                monthlyTarget = 1;
             }
 
             var preferredDates = PreferredDates(r.DistDays, monthlyTarget, monthStart, daysInMonth, DayTypeOf);

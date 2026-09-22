@@ -54,34 +54,6 @@ namespace VisiFlow.Data.Migrations
                     b.ToTable("AuditLogEntries", (string)null);
                 });
 
-            modelBuilder.Entity("VisiFlow.Data.Entities.ChannelCapacity", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Channel")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("CompanyId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("FullDayCapacity")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("HalfDayCapacity")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId", "Channel")
-                        .IsUnique();
-
-                    b.ToTable("ChannelCapacities", (string)null);
-                });
-
             modelBuilder.Entity("VisiFlow.Data.Entities.CityGroup", b =>
                 {
                     b.Property<int>("Id")
@@ -628,17 +600,6 @@ namespace VisiFlow.Data.Migrations
                 });
 
             modelBuilder.Entity("VisiFlow.Data.Entities.AuditLogEntry", b =>
-                {
-                    b.HasOne("VisiFlow.Data.Entities.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Company");
-                });
-
-            modelBuilder.Entity("VisiFlow.Data.Entities.ChannelCapacity", b =>
                 {
                     b.HasOne("VisiFlow.Data.Entities.Company", "Company")
                         .WithMany()

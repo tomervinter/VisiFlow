@@ -702,26 +702,9 @@
   .vp-build-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; align-items: stretch; margin-top: 14px; }
   @media (max-width: 1180px) { .vp-build-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 640px) { .vp-build-grid { grid-template-columns: 1fr; } }
-  /* Only 3 cards now (weights/per-channel-capacity - the standalone default-capacity card folded into
-     this one as its own row, see renderVpChannelCapacityTable - /city-optimization). */
+  /* Only 3 columns now (weights/capacity/city-optimization) - "יצירת תוכנית" moved out to its own
+     always-visible box above, see #view-visitplan markup. */
   #vpAdvancedSettings.vp-build-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  /* Same field styling as .vp-capacity-grid input elsewhere in this file - one compact row per
-     channel instead of a plain <table>, thin divider between rows (no per-row label repetition - the
-     header row above carries the column labels once, centered over their column's values). One
-     shared "שמירה" button for the whole table (in the markup, not here) instead of a button per row. */
-  .vp-channel-capacity-header, .vp-channel-capacity-row { display: grid; grid-template-columns: 1fr 76px 76px; gap: 8px; align-items: center; }
-  .vp-channel-capacity-header { font-size: 0.7rem; font-weight: 600; color: var(--text-muted); padding: 0 0 4px; text-align: center; }
-  .vp-channel-capacity-header span:first-child { text-align: right; }
-  .vp-channel-capacity-row { padding: 1px 0; }
-  .vp-channel-capacity-row + .vp-channel-capacity-row { border-top: 1px solid var(--border); }
-  .vp-channel-capacity-row .vp-channel-capacity-name {
-    font-size: 0.88rem; color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .vp-channel-capacity-row.vp-channel-capacity-default .vp-channel-capacity-name { font-weight: 700; color: var(--brand); }
-  .vp-channel-capacity-row input {
-    padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--offwhite);
-    color: var(--text); font-family: inherit; font-size: 0.9rem; width: 100%; box-sizing: border-box; text-align: center;
-  }
   .vp-build-col {
     border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--offwhite);
     display: flex; flex-direction: column; gap: 10px;
@@ -1718,17 +1701,21 @@
           </div>
 
           <div class="vp-build-col">
-            <h3 class="vp-build-col-title">קיבולת יומית לפי ערוץ מכר</h3>
-            <p class="vp-build-col-desc">
-              שורה לכל ערוץ מכר - קובעת את הקיבולת היומית של כל סוכן ש<b>רוב</b> הלקוחות שלו בערוץ הזה
-              (סוכן שמשרת כמה ערוצים משובץ לפי הערוץ שיש לו בו הכי הרבה לקוחות). השורה "ברירת מחדל"
-              חלה על לקוח ללא ערוץ מוגדר. <b>לחצו "שמירה"</b> וצרו את התוכנית מחדש כדי שהשינוי ישפיע
-              (השינוי לא משפיע על תוכנית שכבר נוצרה, וגם לא נשמר אם לא לוחצים שמירה).
-            </p>
-            <div id="vpChannelCapacityTable"></div>
+            <h3 class="vp-build-col-title">קיבולת יומית לסוכן</h3>
+            <p class="vp-build-col-desc">כמה פגישות אפשר לשבץ לסוכן ביום. אם לקוחות נשארים "לא שובץ" - הגדילו כאן, <b>לחצו "שמירה"</b> וצרו את התוכנית מחדש (השינוי לא משפיע על תוכנית שכבר נוצרה, וגם לא נשמר אם לא לוחצים שמירה).</p>
+            <div class="vp-capacity-grid">
+              <div class="vp-weight-field">
+                <label for="vpFullDayCapacity">פגישות ביום מלא</label>
+                <input type="number" id="vpFullDayCapacity" min="1" step="1" value="8" />
+              </div>
+              <div class="vp-weight-field">
+                <label for="vpHalfDayCapacity">פגישות בחצי יום</label>
+                <input type="number" id="vpHalfDayCapacity" min="1" step="1" value="4" />
+              </div>
+            </div>
             <div class="vp-build-col-foot">
-              <button type="button" class="btn primary" id="btnSaveChannelCapacity">שמירה</button>
-              <span class="form-msg" id="vpChannelCapacityMsg"></span>
+              <button type="button" class="btn primary" id="btnSaveCapacity">שמירה</button>
+              <span class="form-msg" id="vpCapacityMsg"></span>
             </div>
           </div>
 
@@ -4842,10 +4829,6 @@ const VP_FACTORS = [
 ];
 let liveVpEntries = [];
 let vpWeightsCompanyId = null;
-// Last-loaded weights row (see renderVpWeightsGrid) - the "ברירת מחדל" row inside the channel-capacity
-// table (rendered separately, see renderVpChannelCapacityTable) reads FullDayCapacity/HalfDayCapacity
-// from here instead of loadVpChannelCapacity() needing its own redundant fetch of the same record.
-let vpLastWeights = null;
 // Which weight fields the admin has manually edited since the grid was last loaded/saved - the
 // remaining balance (100% minus these fields' current values) is auto-distributed equally across
 // whichever fields are NOT in this set, so the total always stays exactly 100% without the admin
@@ -4865,7 +4848,8 @@ function renderVpWeightsGrid(weights) {
   `).join("");
   document.getElementById("vpWeightsGrid").innerHTML = fieldsHtml;
   VP_FACTORS.forEach(f => document.getElementById(`vpWeight_${f.key}`).addEventListener("input", () => onVpWeightInput(f.key)));
-  vpLastWeights = weights;
+  document.getElementById("vpFullDayCapacity").value = weights.FullDayCapacity;
+  document.getElementById("vpHalfDayCapacity").value = weights.HalfDayCapacity;
   updateVpWeightsSum();
 }
 
@@ -4908,88 +4892,15 @@ async function loadVpWeights() {
   } catch { /* offline */ }
 }
 
-// One row per sales channel (see ChannelCapacity.cs) - each row has its own save button so editing one
-// channel's numbers never risks losing an unsaved edit on another row.
-// The "ברירת מחדל" row uses the same #vpFullDayCapacity/#vpHalfDayCapacity ids the standalone default-
-// capacity card used to (see saveVpWeights below, unchanged) - it's really the same VisitPlanWeights
-// record, just presented as this table's first row instead of its own separate card.
-function renderVpChannelCapacityTable(defaultCapacity, rows) {
-  const el = document.getElementById("vpChannelCapacityTable");
-  const header = `<div class="vp-channel-capacity-header"><span>ערוץ מכר</span><span>יום מלא</span><span>חצי יום</span></div>`;
-  const defaultRowHtml = `
-    <div class="vp-channel-capacity-row vp-channel-capacity-default" data-channel-id="default">
-      <span class="vp-channel-capacity-name">ברירת מחדל (ללא ערוץ)</span>
-      <input type="number" min="1" step="1" id="vpFullDayCapacity" class="channel-capacity-full" value="${defaultCapacity.FullDayCapacity}" />
-      <input type="number" min="1" step="1" id="vpHalfDayCapacity" class="channel-capacity-half" value="${defaultCapacity.HalfDayCapacity}" />
-    </div>`;
-  const rowsHtml = rows.map(r => `
-    <div class="vp-channel-capacity-row" data-channel-id="${r.Id}" data-channel="${esc(r.Channel)}">
-      <span class="vp-channel-capacity-name" title="${esc(r.Channel)}">${esc(r.Channel)}</span>
-      <input type="number" min="1" step="1" class="channel-capacity-full" value="${r.FullDayCapacity}" />
-      <input type="number" min="1" step="1" class="channel-capacity-half" value="${r.HalfDayCapacity}" />
-    </div>`).join("");
-  el.innerHTML = header + defaultRowHtml + rowsHtml;
-}
-
-async function loadVpChannelCapacity() {
-  const companyId = selectedCompanyId();
-  if (!companyId || !vpLastWeights) return;
-  try {
-    const res = await fetch(`/api/visitplan/channelcapacity?companyId=${companyId}`);
-    renderVpChannelCapacityTable(vpLastWeights, res.ok ? await res.json() : []);
-  } catch { /* offline */ }
-}
-
-// One shared save for the whole table (the default row + every real channel row) instead of a button
-// per row, per the admin's request - loops the channel rows after saving the default row/weights
-// together (same combined record saveVpWeights already handles), so one click covers everything
-// currently sitting in this card's inputs.
-async function saveAllChannelCapacities() {
-  const companyId = selectedCompanyId();
-  const msg = document.getElementById("vpChannelCapacityMsg");
-  const btn = document.getElementById("btnSaveChannelCapacity");
-  if (!companyId) return;
-  const rows = [...document.querySelectorAll("#vpChannelCapacityTable .vp-channel-capacity-row")];
-  for (const row of rows) {
-    const full = Number(row.querySelector(".channel-capacity-full").value) || 0;
-    const half = Number(row.querySelector(".channel-capacity-half").value) || 0;
-    if (full < 1 || half < 1) {
-      msg.className = "form-msg error";
-      msg.textContent = `הקיבולת עבור "${row.dataset.channel || "ברירת המחדל"}" חייבת להיות לפחות 1`;
-      return;
-    }
-  }
-  msg.className = "form-msg"; msg.textContent = "שומר...";
-  await withLoading(btn, async () => {
-    try {
-      const weightsBody = { CompanyId: companyId };
-      VP_FACTORS.forEach(f => { weightsBody[f.key] = Number(document.getElementById(`vpWeight_${f.key}`).value) || 0; });
-      weightsBody.FullDayCapacity = Number(document.getElementById("vpFullDayCapacity").value) || 0;
-      weightsBody.HalfDayCapacity = Number(document.getElementById("vpHalfDayCapacity").value) || 0;
-      const weightsRes = await fetch("/api/visitplan/weights", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(weightsBody) });
-      if (!weightsRes.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה בברירת המחדל: ${await describeError(weightsRes)}`; return; }
-      vpTouchedWeights = new Set();
-
-      for (const row of rows) {
-        if (row.dataset.channelId === "default") continue;
-        const full = Number(row.querySelector(".channel-capacity-full").value);
-        const half = Number(row.querySelector(".channel-capacity-half").value);
-        const res = await fetch("/api/visitplan/channelcapacity", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ Id: Number(row.dataset.channelId), CompanyId: companyId, Channel: row.dataset.channel, FullDayCapacity: full, HalfDayCapacity: half })
-        });
-        if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה בערוץ "${row.dataset.channel}": ${await describeError(res)}`; return; }
-      }
-      msg.className = "form-msg success"; msg.textContent = "כל הקיבולות נשמרו! ניתן ליצור תוכנית מחדש כדי שהשינוי ישפיע.";
-    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
-  }, "שומר...");
-}
-document.getElementById("btnSaveChannelCapacity").addEventListener("click", saveAllChannelCapacities);
-
-// Saves weights + the "ברירת מחדל" capacity row together (one shared VisitPlanWeights record) - the
-// per-channel rows in the neighboring card are saved separately, by saveAllChannelCapacities() above
-// (which also re-saves this same record, since its "ברירת מחדל" row lives in that card now too).
-// msgElId/btnId default to this card's own weights button/message span.
+// Saves BOTH weights and capacity together (one shared settings record - see VisitPlanWeights) - two
+// buttons call this, one in each of build-columns 1 and 2, since a change made in either column is
+// silently lost if the admin never presses a save button at all (only typing a new capacity number
+// does nothing by itself - the next "יצירת תוכנית" reads whatever's saved in the database, not
+// whatever happens to be sitting in these input fields). msgElId lets each button report into its own
+// column's message span instead of only ever the weights column's one, regardless of which button
+// was actually pressed. Not a static top-level listener for the weights button - that button itself
+// is recreated by renderVpWeightsGrid() every time weights (re)load, so that function re-attaches
+// this to the new element each time; the capacity button is static and wired once at the bottom.
 async function saveVpWeights(msgElId = "vpWeightsMsg", btnId = "btnSaveWeights") {
   const companyId = selectedCompanyId();
   const msg = document.getElementById(msgElId);
@@ -5009,6 +4920,7 @@ async function saveVpWeights(msgElId = "vpWeightsMsg", btnId = "btnSaveWeights")
     } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
   }, "שומר...");
 }
+document.getElementById("btnSaveCapacity").addEventListener("click", () => saveVpWeights("vpCapacityMsg", "btnSaveCapacity"));
 document.getElementById("btnSaveWeights").addEventListener("click", () => saveVpWeights());
 
 function vpSelectedYearMonth() {
@@ -5480,7 +5392,6 @@ document.getElementById("btnOptimizeByCity").addEventListener("click", async () 
 
 async function refreshVisitPlanView() {
   await loadVpWeights();
-  await loadVpChannelCapacity();
   await refreshVpTable();
 }
 VIEW_ACTIVATION_HOOKS["visitplan"] = refreshVisitPlanView;

@@ -79,13 +79,6 @@ public static class VisitPlanCityOptimizer
         // plan creation) - just falls back to the same defaults VisitPlanWeights itself defaults to.
         var weights = await db.VisitPlanWeights.FirstOrDefaultAsync(w => w.CompanyId == companyId)
             ?? new VisitPlanWeights { FullDayCapacity = 8, HalfDayCapacity = 4 };
-        // Same per-channel override GenerateAsync itself placed these entries against (see
-        // ChannelCapacity.cs / VisitPlanGenerator.PrimaryChannelByAgent) - computed identically here so
-        // this re-optimize pass never enforces a different capacity ceiling than the plan already has.
-        var channelCapacityByChannel = await db.ChannelCapacities.Where(c => c.CompanyId == companyId).ToDictionaryAsync(c => c.Channel);
-        var primaryChannelByAgent = VisitPlanGenerator.PrimaryChannelByAgent(customers.Values);
-        int CapacityForAgent(string agent, WorkDayType dayType) =>
-            VisitPlanGenerator.CapacityForAgent(agent, primaryChannelByAgent, channelCapacityByChannel, weights, dayType);
 
         var overrides = await db.WorkCalendarDays
             .Where(d => d.CompanyId == companyId && d.Date >= monthStart && d.Date <= monthEnd)
@@ -229,7 +222,7 @@ public static class VisitPlanCityOptimizer
                         var altDay = LegalDatesFor(victim)
                             .Where(d => d != targetDay && VisitPlanGenerator.WeekStartOf(d) == week)
                             .OrderBy(d => d)
-                            .FirstOrDefault(d => occupancy.GetValueOrDefault(d) < CapacityForAgent(agentGroup.Key, DayTypeOf(d)));
+                            .FirstOrDefault(d => occupancy.GetValueOrDefault(d) < VisitPlanGenerator.CapacityFor(DayTypeOf(d), weights));
                         if (altDay == default) continue;
 
                         occupancy[targetDay] = occupancy.GetValueOrDefault(targetDay) - 1;
@@ -253,7 +246,7 @@ public static class VisitPlanCityOptimizer
                     var targetDay = group.GroupBy(e => e.PlannedDate!.Value.Date)
                         .OrderByDescending(dg => dg.Count()).ThenBy(dg => dg.Key)
                         .First().Key;
-                    var targetCapacity = CapacityForAgent(agentGroup.Key, DayTypeOf(targetDay));
+                    var targetCapacity = VisitPlanGenerator.CapacityFor(DayTypeOf(targetDay), weights);
 
                     foreach (var entry in group.Where(e => e.PlannedDate!.Value.Date != targetDay).OrderBy(e => e.PlannedDate))
                     {

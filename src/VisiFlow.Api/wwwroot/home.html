@@ -705,12 +705,19 @@
   /* #vpAdvancedSettings is back to 4 cards (weights/default-capacity/per-channel-capacity/
      city-optimization), same count as the base .vp-build-grid rule above (with its own 1180px/640px
      breakpoints) - no narrower override needed here any more. */
-  .vp-channel-capacity-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-  .vp-channel-capacity-table th { text-align: right; font-size: 0.7rem; color: var(--text-muted); font-weight: 600; padding: 4px 4px; }
-  .vp-channel-capacity-table td { padding: 3px 4px; }
-  .vp-channel-capacity-table input {
-    padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--offwhite);
-    color: var(--text); font-family: inherit; font-size: 0.86rem; width: 100%; max-width: 70px; box-sizing: border-box;
+  /* Same field styling as .vp-capacity-grid input (the "ברירת מחדל" panel right next to this one) -
+     one compact row per channel instead of a plain <table>, thin divider between rows (no per-row
+     label repetition - the header row above carries the column labels once). */
+  .vp-channel-capacity-header, .vp-channel-capacity-row { display: grid; grid-template-columns: 1fr 76px 76px auto; gap: 8px; align-items: center; }
+  .vp-channel-capacity-header { font-size: 0.7rem; font-weight: 600; color: var(--text-muted); padding: 0 0 5px; }
+  .vp-channel-capacity-row { padding: 3px 0; }
+  .vp-channel-capacity-row + .vp-channel-capacity-row { border-top: 1px solid var(--border); }
+  .vp-channel-capacity-row .vp-channel-capacity-name {
+    font-size: 0.88rem; color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .vp-channel-capacity-row input {
+    padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--offwhite);
+    color: var(--text); font-family: inherit; font-size: 0.9rem; width: 100%; box-sizing: border-box;
   }
   .vp-build-col {
     border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--offwhite);
@@ -4915,19 +4922,15 @@ async function loadVpWeights() {
 function renderVpChannelCapacityTable(rows) {
   const el = document.getElementById("vpChannelCapacityTable");
   if (!rows.length) { el.innerHTML = `<span class="muted">אין ערוצי מכר בבסיס הלקוחות של החודש שנבחר.</span>`; return; }
-  el.innerHTML = `
-    <table class="vp-channel-capacity-table">
-      <thead><tr><th>ערוץ מכר</th><th>פגישות ביום מלא</th><th>פגישות בחצי יום</th><th></th></tr></thead>
-      <tbody>
-        ${rows.map(r => `
-          <tr data-channel-id="${r.Id}" data-channel="${esc(r.Channel)}">
-            <td>${esc(r.Channel)}</td>
-            <td><input type="number" min="1" step="1" class="channel-capacity-full" value="${r.FullDayCapacity}" /></td>
-            <td><input type="number" min="1" step="1" class="channel-capacity-half" value="${r.HalfDayCapacity}" /></td>
-            <td><button type="button" class="btn small" data-action="save-channel-capacity">שמירה</button></td>
-          </tr>`).join("")}
-      </tbody>
-    </table>`;
+  const header = `<div class="vp-channel-capacity-header"><span>ערוץ מכר</span><span>יום מלא</span><span>חצי יום</span><span></span></div>`;
+  const rowsHtml = rows.map(r => `
+    <div class="vp-channel-capacity-row" data-channel-id="${r.Id}" data-channel="${esc(r.Channel)}">
+      <span class="vp-channel-capacity-name" title="${esc(r.Channel)}">${esc(r.Channel)}</span>
+      <input type="number" min="1" step="1" class="channel-capacity-full" value="${r.FullDayCapacity}" />
+      <input type="number" min="1" step="1" class="channel-capacity-half" value="${r.HalfDayCapacity}" />
+      <button type="button" class="btn small" data-action="save-channel-capacity">שמירה</button>
+    </div>`).join("");
+  el.innerHTML = header + rowsHtml;
 }
 
 async function loadVpChannelCapacity() {
@@ -4942,7 +4945,7 @@ async function loadVpChannelCapacity() {
 document.getElementById("vpChannelCapacityTable").addEventListener("click", async (e) => {
   const btn = e.target.closest('[data-action="save-channel-capacity"]');
   if (!btn) return;
-  const row = btn.closest("tr");
+  const row = btn.closest(".vp-channel-capacity-row");
   const companyId = selectedCompanyId();
   const msg = document.getElementById("vpChannelCapacityMsg");
   const full = Number(row.querySelector(".channel-capacity-full").value) || 0;

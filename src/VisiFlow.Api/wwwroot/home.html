@@ -1128,6 +1128,11 @@
           <button type="button" class="dash-multiselect-btn" id="dashChannelMultiselectBtn">כל הערוצים</button>
           <div class="dash-multiselect-panel" id="dashChannelMultiselectPanel" style="display:none;"></div>
         </div>
+        <div class="dash-mini-filter dash-multiselect" id="dashAgentMultiselect">
+          <label for="dashAgentMultiselectBtn">סוכן:</label>
+          <button type="button" class="dash-multiselect-btn" id="dashAgentMultiselectBtn">כל הסוכנים</button>
+          <div class="dash-multiselect-panel" id="dashAgentMultiselectPanel" style="display:none;"></div>
+        </div>
         <div class="dash-mini-filter">
           <label for="dashYearSelect">שנה:</label>
           <select id="dashYearSelect"></select>
@@ -3289,6 +3294,50 @@ document.getElementById("dashChannelMultiselectPanel").addEventListener("click",
   dashSelectedChannels.clear();
   refreshDashboard(); // re-renders the panel too (see renderDashChannelMultiselect), unchecking every box
 });
+
+// Same multi-select pattern as dashSelectedChannels above, keyed by AgentName - visits (see
+// CustomerVisitDto) don't carry AgentIdNumber the way customers/plan-entries do, so name is the only
+// identity every entity this filter touches actually has in common. A same-named-different-agent
+// collision is a pre-existing data-model limitation (see computeAgentComposition's own comment about
+// it), not something this filter introduces.
+let dashSelectedAgents = new Set();
+
+function dashAgentButtonLabel() {
+  if (dashSelectedAgents.size === 0) return "כל הסוכנים";
+  if (dashSelectedAgents.size === 1) return [...dashSelectedAgents][0];
+  return `${dashSelectedAgents.size} סוכנים נבחרו`;
+}
+
+function renderDashAgentMultiselect(allAgents) {
+  document.getElementById("dashAgentMultiselectBtn").textContent = dashAgentButtonLabel();
+  const panel = document.getElementById("dashAgentMultiselectPanel");
+  if (!allAgents.length) { panel.innerHTML = `<div class="dash-multiselect-empty">אין סוכנים זמינים</div>`; return; }
+  const clearBtn = `<button type="button" class="dash-multiselect-clear-btn" data-clear-agents>נקה בחירה</button>`;
+  const checkboxes = allAgents.map(a => `
+        <label><input type="checkbox" value="${esc(a)}" ${dashSelectedAgents.has(a) ? "checked" : ""}/> ${esc(a)}</label>`).join("");
+  panel.innerHTML = clearBtn + `<div class="dash-multiselect-divider"></div>` + checkboxes;
+}
+
+document.getElementById("dashAgentMultiselectBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const panel = document.getElementById("dashAgentMultiselectPanel");
+  panel.style.display = panel.style.display === "none" ? "block" : "none";
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#dashAgentMultiselect")) document.getElementById("dashAgentMultiselectPanel").style.display = "none";
+});
+document.getElementById("dashAgentMultiselectPanel").addEventListener("change", (e) => {
+  if (e.target.type !== "checkbox") return;
+  if (e.target.checked) dashSelectedAgents.add(e.target.value); else dashSelectedAgents.delete(e.target.value);
+  document.getElementById("dashAgentMultiselectBtn").textContent = dashAgentButtonLabel();
+  refreshDashboard();
+});
+document.getElementById("dashAgentMultiselectPanel").addEventListener("click", (e) => {
+  if (!e.target.closest("[data-clear-agents]") || dashSelectedAgents.size === 0) return;
+  dashSelectedAgents.clear();
+  refreshDashboard();
+});
+
 document.getElementById("dashDateFilter").addEventListener("change", (e) => {
   document.getElementById("btnClearDashDateFilter").style.display = e.target.value ? "" : "none";
   refreshDashboard();
@@ -3358,10 +3407,12 @@ async function refreshDashboard() {
   const activeCustomers = customers.filter(c => c.Status === "Active");
   const customerByNumber = new Map(customers.map(c => [c.CustomerNumber, c]));
 
-  // One global channel filter (top of the page) scopes every table/chart on the dashboard at once -
-  // dashSelectedChannels is a Set (multi-select), empty meaning "all channels".
+  // One global channel/agent filter (top of the page) scopes every table/chart on the dashboard at
+  // once - both are Sets (multi-select), empty meaning "everyone"/"every channel".
   const globalChannel = dashSelectedChannels;
-  const kpiCustomers = globalChannel.size ? activeCustomers.filter(c => globalChannel.has(c.Channel)) : activeCustomers;
+  const globalAgent = dashSelectedAgents;
+  const kpiCustomers = activeCustomers.filter(c =>
+    (!globalChannel.size || globalChannel.has(c.Channel)) && (!globalAgent.size || globalAgent.has(c.AgentName)));
 
   // Latest logged "Visited" date per customer - visits[] is already server-sorted VisitDate desc,
   // so the first match per customer is automatically their most recent one.
@@ -3390,31 +3441,37 @@ async function refreshDashboard() {
     if (v.Outcome !== "NotVisited") continue;
     if (!(v.VisitDate || "").startsWith(reasonMonthPrefix)) continue;
     if (globalChannel.size && !globalChannel.has(customerByNumber.get(v.CustomerNumber)?.Channel)) continue;
+    if (globalAgent.size && !globalAgent.has(customerByNumber.get(v.CustomerNumber)?.AgentName)) continue;
     const r = v.NonVisitReasonText || "ללא סיבה מוגדרת";
     if (!reasonAgg.has(r)) reasonAgg.set(r, []);
     reasonAgg.get(r).push(v);
   }
 
   const visitsToday = visits.filter(v => v.Outcome === "Visited" && (v.VisitDate || "").slice(0, 10) === todayIso
-    && (!globalChannel.size || globalChannel.has(customerByNumber.get(v.CustomerNumber)?.Channel)));
+    && (!globalChannel.size || globalChannel.has(customerByNumber.get(v.CustomerNumber)?.Channel))
+    && (!globalAgent.size || globalAgent.has(customerByNumber.get(v.CustomerNumber)?.AgentName)));
 
   const postponedToday = visits.filter(v => v.Outcome === "NotVisited" && (v.VisitDate || "").slice(0, 10) === todayIso
-    && (!globalChannel.size || globalChannel.has(customerByNumber.get(v.CustomerNumber)?.Channel)));
+    && (!globalChannel.size || globalChannel.has(customerByNumber.get(v.CustomerNumber)?.Channel))
+    && (!globalAgent.size || globalAgent.has(customerByNumber.get(v.CustomerNumber)?.AgentName)));
 
   // Same idea as unplannedThisMonth below, scoped to just the day these "daily" cards are about.
   const unplannedToday = visits.filter(v => v.Outcome === "Visited" && v.IsUnplanned && (v.VisitDate || "").slice(0, 10) === todayIso
-    && (!globalChannel.size || globalChannel.has(customerByNumber.get(v.CustomerNumber)?.Channel)));
+    && (!globalChannel.size || globalChannel.has(customerByNumber.get(v.CustomerNumber)?.Channel))
+    && (!globalAgent.size || globalAgent.has(customerByNumber.get(v.CustomerNumber)?.AgentName)));
 
   const plannedTodayCount = todayPlanEntries
     .filter(e => (e.PlannedDate || "").slice(0, 10) === todayIso)
-    .filter(e => !globalChannel.size || globalChannel.has(e.Channel)).length;
+    .filter(e => !globalChannel.size || globalChannel.has(e.Channel))
+    .filter(e => !globalAgent.size || globalAgent.has(e.AgentName)).length;
 
   // Agents who have at least one customer planned for today but haven't logged a single visit today
   // yet (visited OR postponed) - "hasn't started today at all", not "still has some left". Visits don't
   // carry AgentIdNumber directly, so each is attributed via today's plan entry for the same customer.
   const todayEntriesForChannel = todayPlanEntries
     .filter(e => (e.PlannedDate || "").slice(0, 10) === todayIso)
-    .filter(e => !globalChannel.size || globalChannel.has(e.Channel));
+    .filter(e => !globalChannel.size || globalChannel.has(e.Channel))
+    .filter(e => !globalAgent.size || globalAgent.has(e.AgentName));
   const customerToAgentToday = new Map(todayEntriesForChannel.map(e => [e.CustomerNumber, { id: e.AgentIdNumber || `__noid__:${e.AgentName || "ללא סוכן"}`, name: e.AgentName || "ללא סוכן" }]));
   const agentsPlannedToday = new Map();
   for (const e of todayEntriesForChannel) agentsPlannedToday.set(e.AgentIdNumber || `__noid__:${e.AgentName || "ללא סוכן"}`, e.AgentName || "ללא סוכן");
@@ -3432,7 +3489,8 @@ async function refreshDashboard() {
   // the visit-plan screen for that month.
   const unscheduled = selectedMonthPlanEntries
     .filter(e => !e.PlannedDate)
-    .filter(e => !globalChannel.size || globalChannel.has(e.Channel));
+    .filter(e => !globalChannel.size || globalChannel.has(e.Channel))
+    .filter(e => !globalAgent.size || globalAgent.has(e.AgentName));
 
   const frequencyBuckets = computeFrequencyBreakdown(kpiCustomers);
   const agentComposition = computeAgentComposition(kpiCustomers);
@@ -3444,7 +3502,8 @@ async function refreshDashboard() {
   // date has actually arrived. ----
   const dueSelectedMonthEntries = selectedMonthPlanEntries
     .filter(e => e.PlannedDate && new Date(e.PlannedDate) <= today)
-    .filter(e => !globalChannel.size || globalChannel.has(e.Channel));
+    .filter(e => !globalChannel.size || globalChannel.has(e.Channel))
+    .filter(e => !globalAgent.size || globalAgent.has(e.AgentName));
   // Keyed by channel name - matches what navigateToVisitPlanFiltered()'s own `channel` param expects
   // on drill-down.
   const channelPerf = new Map();
@@ -3470,6 +3529,12 @@ async function refreshDashboard() {
   const allChannels = [...new Set(activeCustomers.map(c => c.Channel).filter(Boolean))].sort();
   for (const ch of [...dashSelectedChannels]) { if (!allChannels.includes(ch)) dashSelectedChannels.delete(ch); }
   renderDashChannelMultiselect(allChannels);
+  // Same pruning idea for the agent multiselect - independent of the channel filter (derived from
+  // activeCustomers, not kpiCustomers), so picking a channel never makes agents disappear from this
+  // list and vice versa.
+  const allAgents = [...new Set(activeCustomers.map(c => c.AgentName).filter(Boolean))].sort();
+  for (const a of [...dashSelectedAgents]) { if (!allAgents.includes(a)) dashSelectedAgents.delete(a); }
+  renderDashAgentMultiselect(allAgents);
 
   // "היום" only when this really is today - a picked dashDateFilter gets its own date spelled out in
   // the label instead, so these cards never claim to be "today" when they're not.
@@ -3485,9 +3550,15 @@ async function refreshDashboard() {
   // plan entry the algorithm generated for the selected month/channel (see CustomerVisit.IsUnplanned).
   const unplannedThisMonth = visits.filter(v => v.Outcome === "Visited" && v.IsUnplanned
     && v.VisitDate.slice(0, 4) === String(selYear) && Number(v.VisitDate.slice(5, 7)) === selMonth
-    && (!globalChannel.size || globalChannel.has(v.Channel)));
+    && (!globalChannel.size || globalChannel.has(v.Channel))
+    && (!globalAgent.size || globalAgent.has(v.AgentName)));
+  const activeFilterSub = globalChannel.size && globalAgent.size
+    ? `בערוץ ${[...globalChannel].join(", ")} · סוכן ${[...globalAgent].join(", ")}`
+    : globalChannel.size ? `בערוץ ${[...globalChannel].join(", ")}`
+    : globalAgent.size ? `סוכן ${[...globalAgent].join(", ")}`
+    : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים`;
   renderKpiGrid("dashKpiGridMonthly", [
-    { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: globalChannel.size ? `בערוץ ${[...globalChannel].join(", ")}` : `מתוך ${fmtNumber(customers.length)} לקוחות בבסיס הנתונים`, tier: "crit" },
+    { id: "active", value: fmtNumber(kpiCustomers.length), label: "לקוחות פעילים", sub: activeFilterSub, tier: "crit" },
     { id: "neglected", value: fmtNumber(neglected.length), label: "לקוחות שלא ביקרנו מעל 30 יום", sub: "לחצו לרשימה המלאה", tier: neglected.length === 0 ? "good" : (neglected.length > kpiCustomers.length * 0.2 ? "crit" : "warn") },
     { id: "decliningNeglected", value: fmtNumber(decliningNeglected.length), label: "יורדים במכר וללא ביקור מספק", sub: "ירידה במכר + לא ביקרנו מעל 30 יום", tier: decliningNeglected.length === 0 ? "good" : "crit" },
     { id: "unscheduled", value: fmtNumber(unscheduled.length), label: "לקוחות שלא שובצו", sub: "אין קיבולת פנויה ביומן הסוכן - לחצו לרשימה", tier: unscheduled.length === 0 ? "good" : "crit" },
@@ -3511,7 +3582,8 @@ async function refreshDashboard() {
   const HOURLY_RANGE = Array.from({ length: 14 }, (_, i) => i + 7); // 07:00-20:00 - covers a full working day
   const monthVisited = visits.filter(v => v.Outcome === "Visited"
     && v.VisitDate.slice(0, 4) === String(selYear) && Number(v.VisitDate.slice(5, 7)) === selMonth
-    && (!globalChannel.size || globalChannel.has(v.Channel)));
+    && (!globalChannel.size || globalChannel.has(v.Channel))
+    && (!globalAgent.size || globalAgent.has(v.AgentName)));
   const hourCounts = new Map();
   for (const v of monthVisited) {
     const h = parseUtc(v.CreatedAt).getHours();
@@ -3525,6 +3597,7 @@ async function refreshDashboard() {
   const customerToAgentMeetingsId = new Map();
   for (const e of todayPlanEntries) {
     if (globalChannel.size && !globalChannel.has(e.Channel)) continue;
+    if (globalAgent.size && !globalAgent.has(e.AgentName)) continue;
     const id = e.AgentIdNumber || `__noid__:${e.AgentName || "ללא סוכן"}`;
     if (!agentMeetingCounts.has(id)) agentMeetingCounts.set(id, { name: e.AgentName || "ללא סוכן", channels: new Set(), today: 0, performedToday: 0, performedMonthToDate: 0, month: 0, unscheduled: 0 });
     const g = agentMeetingCounts.get(id);

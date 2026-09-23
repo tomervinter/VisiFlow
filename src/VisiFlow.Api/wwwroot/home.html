@@ -3287,12 +3287,12 @@ document.getElementById("dashChannelMultiselectPanel").addEventListener("change"
   if (e.target.type !== "checkbox") return;
   if (e.target.checked) dashSelectedChannels.add(e.target.value); else dashSelectedChannels.delete(e.target.value);
   document.getElementById("dashChannelMultiselectBtn").textContent = dashChannelButtonLabel();
-  refreshDashboard();
+  rerenderDashboardFilters(); // re-render only, no re-fetch - see rerenderDashboardFilters
 });
 document.getElementById("dashChannelMultiselectPanel").addEventListener("click", (e) => {
   if (!e.target.closest("[data-clear-channels]") || dashSelectedChannels.size === 0) return;
   dashSelectedChannels.clear();
-  refreshDashboard(); // re-renders the panel too (see renderDashChannelMultiselect), unchecking every box
+  rerenderDashboardFilters(); // re-renders the panel too (see renderDashChannelMultiselect), unchecking every box
 });
 
 // Same multi-select pattern as dashSelectedChannels above, keyed by AgentName - visits (see
@@ -3330,12 +3330,12 @@ document.getElementById("dashAgentMultiselectPanel").addEventListener("change", 
   if (e.target.type !== "checkbox") return;
   if (e.target.checked) dashSelectedAgents.add(e.target.value); else dashSelectedAgents.delete(e.target.value);
   document.getElementById("dashAgentMultiselectBtn").textContent = dashAgentButtonLabel();
-  refreshDashboard();
+  rerenderDashboardFilters(); // re-render only, no re-fetch - see rerenderDashboardFilters
 });
 document.getElementById("dashAgentMultiselectPanel").addEventListener("click", (e) => {
   if (!e.target.closest("[data-clear-agents]") || dashSelectedAgents.size === 0) return;
   dashSelectedAgents.clear();
-  refreshDashboard();
+  rerenderDashboardFilters();
 });
 
 document.getElementById("dashDateFilter").addEventListener("change", (e) => {
@@ -3357,35 +3357,20 @@ document.getElementById("dashChannelPerfChart").addEventListener("click", (e) =>
 
 let DASH_STATE = null;
 
-async function refreshDashboard() {
-  const companyId = selectedCompanyId();
-  if (!companyId) {
-    document.getElementById("dashKpiGridDaily").innerHTML = "";
-    document.getElementById("dashKpiGridMonthly").innerHTML = "";
-    document.getElementById("dashReasonsChart").innerHTML = "";
-    document.getElementById("dashAgentDonut").innerHTML = "";
-    document.getElementById("dashFrequencyDonut").innerHTML = "";
-    document.getElementById("dashCalGrid").innerHTML = "";
-    document.getElementById("dashCalTitle").textContent = "";
-    document.getElementById("dashChannelPerfChart").innerHTML = "";
-    document.getElementById("dashHourlyChart").innerHTML = "";
-    document.getElementById("dashNeglectedChannelDonut").innerHTML = "";
-    document.getElementById("dashAgentMeetingCountsTable").innerHTML = "";
-    document.getElementById("dashUpdatedLine").textContent = "";
-    DASH_STATE = null;
-    return;
-  }
-  const { year: selYear, month: selMonth } = dashSelectedYearMonth();
-  // "today" throughout this function is actually "the day the -today- KPIs/table are about" - real
-  // today by default, or whatever dashDateFilter is set to, so an admin can inspect any single day's
-  // planned/performed/postponed snapshot instead of only ever seeing the live current day.
-  const dateFilterValue = document.getElementById("dashDateFilter").value;
-  const today = dateFilterValue ? new Date(dateFilterValue + "T00:00:00") : new Date();
-  today.setHours(0, 0, 0, 0);
-  const isRealToday = !dateFilterValue;
-  const isSameMonth = selYear === today.getFullYear() && selMonth === today.getMonth() + 1;
+// Raw data fetched from the server for the dashboard's current (company, selected year/month, "today")
+// combination - NOT re-fetched on a channel/agent filter change (see rerenderDashboardFilters below),
+// since neither filter changes which rows should have been loaded from the server, only which of the
+// already-loaded rows get shown. This was the actual cause of "every filter is slow": before this
+// cache, toggling a channel/agent checkbox re-ran the full 4-5-request fetch (customers/visits/
+// calendar/plan entries, the visits fetch alone pulling the company's ENTIRE history) on every click.
+let dashRawData = null;
+let dashRawDataKey = null;
+
+async function ensureDashboardRawData(companyId, selYear, selMonth, today, isSameMonth) {
+  const key = `${companyId}|${selYear}|${selMonth}|${today.getFullYear()}|${today.getMonth() + 1}`;
+  if (dashRawData && dashRawDataKey === key) return dashRawData;
+
   let customers = [], visits = [], calendarDays = [], todayPlanEntries = [], selectedMonthPlanEntries = [];
-  document.getElementById("dashLoadingBanner").style.display = "flex";
   try {
     // allChannels=true - the dashboard always shows every channel to every user regardless of their
     // own view restriction, so cross-channel comparison stays possible even for a restricted user.
@@ -3403,6 +3388,65 @@ async function refreshDashboard() {
     selectedMonthPlanEntries = isSameMonth ? todayPlanEntries : (selMonthPlanRes && selMonthPlanRes.ok ? await selMonthPlanRes.json() : []);
   } catch { /* offline */ }
 
+  dashRawData = { customers, visits, calendarDays, todayPlanEntries, selectedMonthPlanEntries };
+  dashRawDataKey = key;
+  return dashRawData;
+}
+
+async function refreshDashboard() {
+  const companyId = selectedCompanyId();
+  if (!companyId) {
+    document.getElementById("dashKpiGridDaily").innerHTML = "";
+    document.getElementById("dashKpiGridMonthly").innerHTML = "";
+    document.getElementById("dashReasonsChart").innerHTML = "";
+    document.getElementById("dashAgentDonut").innerHTML = "";
+    document.getElementById("dashFrequencyDonut").innerHTML = "";
+    document.getElementById("dashCalGrid").innerHTML = "";
+    document.getElementById("dashCalTitle").textContent = "";
+    document.getElementById("dashChannelPerfChart").innerHTML = "";
+    document.getElementById("dashHourlyChart").innerHTML = "";
+    document.getElementById("dashNeglectedChannelDonut").innerHTML = "";
+    document.getElementById("dashAgentMeetingCountsTable").innerHTML = "";
+    document.getElementById("dashUpdatedLine").textContent = "";
+    DASH_STATE = null;
+    dashRawData = null; dashRawDataKey = null;
+    return;
+  }
+  const { year: selYear, month: selMonth } = dashSelectedYearMonth();
+  // "today" throughout this function is actually "the day the -today- KPIs/table are about" - real
+  // today by default, or whatever dashDateFilter is set to, so an admin can inspect any single day's
+  // planned/performed/postponed snapshot instead of only ever seeing the live current day.
+  const dateFilterValue = document.getElementById("dashDateFilter").value;
+  const today = dateFilterValue ? new Date(dateFilterValue + "T00:00:00") : new Date();
+  today.setHours(0, 0, 0, 0);
+  const isRealToday = !dateFilterValue;
+  const isSameMonth = selYear === today.getFullYear() && selMonth === today.getMonth() + 1;
+
+  document.getElementById("dashLoadingBanner").style.display = "flex";
+  const { customers, visits, calendarDays, todayPlanEntries, selectedMonthPlanEntries } =
+    await ensureDashboardRawData(companyId, selYear, selMonth, today, isSameMonth);
+  renderDashboardBody(customers, visits, calendarDays, todayPlanEntries, selectedMonthPlanEntries, selYear, selMonth, today, isRealToday);
+}
+
+// Re-renders from whatever's already cached in dashRawData - no network calls. Used by the channel/
+// agent multiselect handlers, since picking/clearing a channel or agent never changes which rows
+// SHOULD have been fetched from the server, only which of the already-fetched rows get shown/counted.
+// Falls back to the full refreshDashboard() if nothing has been fetched yet (shouldn't normally happen -
+// the multiselect panels themselves only get their options/become clickable after a real fetch).
+function rerenderDashboardFilters() {
+  if (!dashRawData) { refreshDashboard(); return; }
+  const companyId = selectedCompanyId();
+  if (!companyId) return;
+  const { year: selYear, month: selMonth } = dashSelectedYearMonth();
+  const dateFilterValue = document.getElementById("dashDateFilter").value;
+  const today = dateFilterValue ? new Date(dateFilterValue + "T00:00:00") : new Date();
+  today.setHours(0, 0, 0, 0);
+  const isRealToday = !dateFilterValue;
+  const { customers, visits, calendarDays, todayPlanEntries, selectedMonthPlanEntries } = dashRawData;
+  renderDashboardBody(customers, visits, calendarDays, todayPlanEntries, selectedMonthPlanEntries, selYear, selMonth, today, isRealToday);
+}
+
+function renderDashboardBody(customers, visits, calendarDays, todayPlanEntries, selectedMonthPlanEntries, selYear, selMonth, today, isRealToday) {
   const todayIso = isoDateLocal(today);
   const activeCustomers = customers.filter(c => c.Status === "Active");
   const customerByNumber = new Map(customers.map(c => [c.CustomerNumber, c]));

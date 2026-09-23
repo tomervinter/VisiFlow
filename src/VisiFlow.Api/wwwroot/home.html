@@ -5007,11 +5007,14 @@ function fmtVpScorePct(v) { return `${Math.round((v || 0) * 100)}%`; }
 
 let vpSelected = new Set(); // VisitPlanEntry.Id -> selected for bulk delete
 
-// City -> cluster key, rebuilt on every refreshVpTable() from /api/citygroups - mirrors
-// VisitPlanCityOptimizer.ClusterOf() server-side, so the table's default sort groups a city together
-// with its admin-defined "nearby cities" the same way the optimizer itself treats them as one
-// location. A city in no group maps to itself (its own singleton cluster).
+// City -> cluster key, mirrors VisitPlanCityOptimizer.ClusterOf() server-side, so the table's default
+// sort groups a city together with its admin-defined "nearby cities" the same way the optimizer itself
+// treats them as one location. A city in no group maps to itself (its own singleton cluster).
 let vpCityToCluster = new Map();
+// City groups are company-wide config, not month-scoped - fetched once per company (not on every
+// refreshVpTable() month switch, which is what it used to do) and reused across months. Only a real
+// company change (or an edit through "ניהול אשכולות ערים", see refreshCityGroupsModal) invalidates it.
+let vpCityToClusterCompanyId = null;
 function vpClusterKeyOf(city) { return city ? (vpCityToCluster.get(city) || city) : ""; }
 
 const vpTable = createDataTable({
@@ -5226,12 +5229,15 @@ async function refreshVpTable() {
     const res = await fetch(`/api/visitplan?companyId=${companyId}&year=${ym.year}&month=${ym.month}`);
     if (res.ok) liveVpEntries = await res.json();
   } catch { /* offline */ }
-  try {
-    const groupsRes = await fetch(`/api/citygroups?companyId=${companyId}`);
-    const groups = groupsRes.ok ? await groupsRes.json() : [];
-    vpCityToCluster = new Map();
-    for (const g of groups) for (const city of g.Cities) vpCityToCluster.set(city, `__group_${g.Id}`);
-  } catch { /* offline - keep last known clustering */ }
+  if (vpCityToClusterCompanyId !== companyId) {
+    try {
+      const groupsRes = await fetch(`/api/citygroups?companyId=${companyId}`);
+      const groups = groupsRes.ok ? await groupsRes.json() : [];
+      vpCityToCluster = new Map();
+      for (const g of groups) for (const city of g.Cities) vpCityToCluster.set(city, `__group_${g.Id}`);
+      vpCityToClusterCompanyId = companyId;
+    } catch { /* offline - keep last known clustering */ }
+  }
   document.getElementById("vpCount").textContent = `${liveVpEntries.length} ביקורים מתוכננים`;
   updateVpSelectionBar();
   vpTable.setPredicate("unscheduled", null);
@@ -5469,6 +5475,10 @@ async function refreshCityGroupsModal() {
     const res = await fetch(`/api/citygroups?companyId=${companyId}`);
     liveCityGroups = res.ok ? await res.json() : [];
   } catch { liveCityGroups = []; }
+  // Invalidate vpTable's own city-groups cache (see vpCityToClusterCompanyId) - this modal is the only
+  // place groups actually change, so the next refreshVpTable() call must refetch instead of reusing
+  // what it cached before this edit.
+  vpCityToClusterCompanyId = null;
   renderCityGroupsList();
   const cities = await fetchCitiesForCompany(companyId);
   renderChannelCheckboxes("newCityGroupCities", cities, new Set(), "אין ערים זמינות לחברה זו.");

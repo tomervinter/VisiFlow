@@ -1772,9 +1772,10 @@
                 <input type="number" id="vpHalfDayCapacity" min="1" step="1" value="4" />
               </div>
             </div>
-            <a href="#" id="lnkOpenCapacityMode">הגדרת קיבולת לפי ערוץ מכר</a>
             <div class="vp-build-col-foot">
               <button type="button" class="btn primary" id="btnSaveCapacity">שמירה</button>
+              <span class="badge accent" id="capacityModeStatus"></span>
+              <a href="#" id="lnkOpenCapacityMode">הגדרת קיבולת לפי ערוץ מכר</a>
               <span class="form-msg" id="vpCapacityMsg"></span>
             </div>
           </div>
@@ -4960,6 +4961,17 @@ function renderVpWeightsGrid(weights) {
   document.getElementById("vpFullDayCapacity").value = weights.FullDayCapacity;
   document.getElementById("vpHalfDayCapacity").value = weights.HalfDayCapacity;
   updateVpWeightsSum();
+  updateCapacityModeStatus();
+}
+
+// Reflects vpLastWeights.UseChannelCapacity right on the "קיבולת יומית לסוכן" card itself, so the admin
+// can see which mode is actually active without opening the "הגדרת קיבולת" modal - called after every
+// weights (re)load and right after the modal's own save/reset actions.
+function updateCapacityModeStatus() {
+  const el = document.getElementById("capacityModeStatus");
+  const useChannel = !!(vpLastWeights && vpLastWeights.UseChannelCapacity);
+  el.textContent = useChannel ? "מצב נוכחי: קיבולת לפי ערוץ מכר" : "מצב נוכחי: ברירת מחדל";
+  el.className = useChannel ? "badge warn" : "badge accent";
 }
 
 function onVpWeightInput(changedKey) {
@@ -5065,6 +5077,7 @@ async function saveCapacityMode(useChannelCapacity) {
       if (vpLastWeights) vpLastWeights.UseChannelCapacity = useChannelCapacity;
       document.getElementById("capacityModeDefault").checked = !useChannelCapacity;
       document.getElementById("capacityModeChannel").checked = useChannelCapacity;
+      updateCapacityModeStatus();
       msg.className = "form-msg success"; msg.textContent = "נשמר! ניתן ליצור תוכנית מחדש כדי שהשינוי ישפיע.";
     } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
   }, "שומר...");

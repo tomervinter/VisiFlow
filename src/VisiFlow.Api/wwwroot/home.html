@@ -1772,11 +1772,18 @@
                 <input type="number" id="vpHalfDayCapacity" min="1" step="1" value="4" />
               </div>
             </div>
+            <!-- Button placed LAST (not first) - .vp-build-col-foot wraps to a second line in this
+                 narrow column once the status badge + link are added, and a wrapped flex row stacks its
+                 lines top-to-bottom while the whole block stays pinned to the card's bottom edge
+                 (margin-top:auto) - so whichever content ends up on the LAST line sits at the same Y
+                 position as a sibling card's single-line footer. Putting the button last guarantees
+                 it's always that last line, keeping "שמירה" vertically aligned with the other cards'
+                 buttons regardless of whether this row wraps. -->
             <div class="vp-build-col-foot">
-              <button type="button" class="btn primary" id="btnSaveCapacity">שמירה</button>
               <span class="badge accent" id="capacityModeStatus"></span>
               <a href="#" id="lnkOpenCapacityMode">הגדרת קיבולת לפי ערוץ מכר</a>
               <span class="form-msg" id="vpCapacityMsg"></span>
+              <button type="button" class="btn primary" id="btnSaveCapacity">שמירה</button>
             </div>
           </div>
 

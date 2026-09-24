@@ -56,6 +56,21 @@ public static class VisitPlanGenerator
             await db.SaveChangesAsync();
         }
 
+        // Per-channel daily capacity override (see ChannelCapacity.cs) - only consulted at all when the
+        // admin has explicitly opted in (weights.UseChannelCapacity, set via the "הגדרת קיבולת" window -
+        // POST /api/visitplan/capacitymode). Off by default: every agent just uses the flat company-wide
+        // FullDayCapacity/HalfDayCapacity below, exactly as before this feature existed, even if
+        // ChannelCapacity rows happen to be configured. When on, an agent who serves more than one
+        // channel uses whichever channel has the PLURALITY of their customers ("primary channel") - a
+        // deliberate product decision (one daily quota per agent, not a separate pool per channel - an
+        // agent only has one calendar). Falls back to the company-wide default when the agent's primary
+        // channel has no override row, or the agent has no customers with any channel set at all.
+        var channelCapacityByChannel = weights.UseChannelCapacity
+            ? await db.ChannelCapacities.Where(c => c.CompanyId == companyId).ToDictionaryAsync(c => c.Channel)
+            : new Dictionary<string, ChannelCapacity>();
+        var primaryChannelByAgent = weights.UseChannelCapacity ? PrimaryChannelByAgent(customers) : new Dictionary<string, string>();
+        int RemainingDailyCapacity(string agent, WorkDayType dayType) => CapacityForAgent(agent, primaryChannelByAgent, channelCapacityByChannel, weights, dayType);
+
         var daysInMonth = DateTime.DaysInMonth(year, month);
         var monthStart = new DateTime(year, month, 1);
         var monthEnd = monthStart.AddDays(daysInMonth - 1);
@@ -194,7 +209,7 @@ public static class VisitPlanGenerator
         int RemainingCapacity(string agent, DateTime date)
         {
             var key = (agent, date.Date);
-            if (!capacity.TryGetValue(key, out var cap)) { cap = CapacityFor(DayTypeOf(date), weights); capacity[key] = cap; }
+            if (!capacity.TryGetValue(key, out var cap)) { cap = RemainingDailyCapacity(agent, DayTypeOf(date)); capacity[key] = cap; }
             return cap;
         }
 
@@ -297,6 +312,28 @@ public static class VisitPlanGenerator
     /// entries around.</summary>
     internal static int CapacityFor(WorkDayType t, VisitPlanWeights weights) =>
         t switch { WorkDayType.Full => weights.FullDayCapacity, WorkDayType.Half => weights.HalfDayCapacity, _ => 0 };
+
+    /// <summary>An agent's "primary channel" - whichever sales channel has the plurality of their
+    /// customers (ties broken alphabetically, for determinism) - used to pick which ChannelCapacity
+    /// row (if any) governs that agent's whole day (see CapacityForAgent below). Customers with no
+    /// channel set don't count toward any agent's total. Internal so VisitPlanCityOptimizer computes
+    /// this identically to GenerateAsync - a re-optimize pass must never disagree about an agent's
+    /// capacity with the plan it's re-arranging.</summary>
+    internal static Dictionary<string, string> PrimaryChannelByAgent(IEnumerable<Customer> customers) =>
+        customers.Where(c => c.Channel != null).GroupBy(AgentKey)
+            .ToDictionary(g => g.Key, g => g.GroupBy(c => c.Channel!).OrderByDescending(cg => cg.Count()).ThenBy(cg => cg.Key).First().Key);
+
+    /// <summary>Resolves an agent's actual daily capacity for a given day type: their primary channel's
+    /// ChannelCapacity override if one exists (and weights.UseChannelCapacity is on - see the empty
+    /// dictionaries GenerateAsync passes in when it's off), else the company-wide VisitPlanWeights
+    /// default.</summary>
+    internal static int CapacityForAgent(string agent, Dictionary<string, string> primaryChannelByAgent,
+        Dictionary<string, ChannelCapacity> channelCapacityByChannel, VisitPlanWeights weights, WorkDayType dayType)
+    {
+        if (primaryChannelByAgent.TryGetValue(agent, out var channel) && channelCapacityByChannel.TryGetValue(channel, out var cc))
+            return dayType switch { WorkDayType.Full => cc.FullDayCapacity, WorkDayType.Half => cc.HalfDayCapacity, _ => 0 };
+        return CapacityFor(dayType, weights);
+    }
 
     internal static List<DayOfWeek> ActiveWeekdays(CustomerDistributionDay d)
     {

@@ -694,6 +694,19 @@
   .vp-capacity-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .vp-capacity-grid input { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--offwhite); color: var(--text); font-family: inherit; font-size: 0.9rem; width: 100%; box-sizing: border-box; }
 
+  /* Per-channel capacity modal (see #channelCapacityModalOverlay) - one compact row per channel, same
+     field styling as .vp-capacity-grid input above, tight row spacing, centered value-column headers. */
+  .channel-capacity-header, .channel-capacity-row { display: grid; grid-template-columns: 1fr 76px 76px; gap: 8px; align-items: center; }
+  .channel-capacity-header { font-size: 0.7rem; font-weight: 600; color: var(--text-muted); padding: 0 0 4px; text-align: center; }
+  .channel-capacity-header span:first-child { text-align: right; }
+  .channel-capacity-row { padding: 1px 0; }
+  .channel-capacity-row + .channel-capacity-row { border-top: 1px solid var(--border); }
+  .channel-capacity-row .channel-capacity-name { font-size: 0.88rem; color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .channel-capacity-row input {
+    padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--offwhite);
+    color: var(--text); font-family: inherit; font-size: 0.9rem; width: 100%; box-sizing: border-box; text-align: center;
+  }
+
   /* Unified 4-step "build a visit plan" layout: weights / capacity / generate / optimize side by
      side on a wide screen, each a clearly separated, EQUAL-HEIGHT column (align-items:stretch, each
      column a flex-column with its action pinned to the bottom via margin-top:auto on .vp-build-col-
@@ -1494,6 +1507,52 @@
       </div>
     </div>
 
+    <div class="modal-overlay" id="capacityModeModalOverlay">
+      <div class="modal-box" style="max-width:420px;">
+        <h3>הגדרת קיבולת</h3>
+        <p class="desc" style="text-align:center;">
+          בררו איזו קיבולת יומית תשמש את הגנרטור בבניית תוכנית הביקורים - הקיבולת הכללית (העמודה הימנית),
+          או קיבולת נפרדת לכל ערוץ מכר.
+        </p>
+        <div class="checkbox-group" style="flex-direction:column;align-items:flex-start;gap:10px;margin-bottom:14px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="radio" name="capacityMode" id="capacityModeDefault" value="default" />
+            ברירת מחדל - הקיבולת הכללית
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="radio" name="capacityMode" id="capacityModeChannel" value="channel" />
+            קיבולת נפרדת לפי ערוץ מכר
+          </label>
+        </div>
+        <p class="desc" style="text-align:center;font-size:0.8rem;">
+          <a href="#" id="lnkOpenChannelCapacityTable">עריכת הקיבולת לפי ערוץ מכר</a>
+        </p>
+        <div class="form-actions">
+          <button type="button" class="btn primary" id="btnSaveCapacityMode">שמירה</button>
+          <button type="button" class="btn" id="btnResetCapacityMode">איפוס לברירת מחדל</button>
+          <button type="button" class="btn" id="btnCloseCapacityMode">סגירה</button>
+          <span class="form-msg" id="capacityModeMsg"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="channelCapacityModalOverlay">
+      <div class="modal-box" style="max-width:480px;">
+        <h3>קיבולת יומית לפי ערוץ מכר</h3>
+        <p class="desc" style="text-align:center;">
+          שורה לכל ערוץ מכר - קובעת את הקיבולת היומית של כל סוכן ש<b>רוב</b> הלקוחות שלו בערוץ הזה (סוכן
+          שמשרת כמה ערוצים משובץ לפי הערוץ שיש לו בו הכי הרבה לקוחות). ההגדרות האלה משפיעות רק כשבחרתם
+          "קיבולת נפרדת לפי ערוץ מכר" בחלונית "הגדרת קיבולת".
+        </p>
+        <div id="channelCapacityTable"></div>
+        <div class="form-actions">
+          <button type="button" class="btn primary" id="btnSaveChannelCapacity">שמירה</button>
+          <button type="button" class="btn" id="btnCloseChannelCapacity">סגירה</button>
+          <span class="form-msg" id="channelCapacityMsg"></span>
+        </div>
+      </div>
+    </div>
+
     <div class="modal-overlay" id="vpGenerateModalOverlay">
       <div class="modal-box" style="max-width:380px;">
         <h3>יצירת תוכנית ביקורים</h3>
@@ -1713,6 +1772,7 @@
                 <input type="number" id="vpHalfDayCapacity" min="1" step="1" value="4" />
               </div>
             </div>
+            <a href="#" id="lnkOpenCapacityMode">הגדרת קיבולת לפי ערוץ מכר</a>
             <div class="vp-build-col-foot">
               <button type="button" class="btn primary" id="btnSaveCapacity">שמירה</button>
               <span class="form-msg" id="vpCapacityMsg"></span>
@@ -4879,7 +4939,12 @@ let vpWeightsCompanyId = null;
 // having to do the arithmetic themselves.
 let vpTouchedWeights = new Set();
 
+// Last-loaded weights row, including UseChannelCapacity - read by the "הגדרת קיבולת" modal (see
+// openCapacityModeModal below) instead of it needing its own redundant fetch of the same record.
+let vpLastWeights = null;
+
 function renderVpWeightsGrid(weights) {
+  vpLastWeights = weights;
   vpTouchedWeights = new Set();
   const fieldsHtml = VP_FACTORS.map(f => `
     <div class="vp-weight-field">
@@ -4966,6 +5031,118 @@ async function saveVpWeights(msgElId = "vpWeightsMsg", btnId = "btnSaveWeights")
 }
 document.getElementById("btnSaveCapacity").addEventListener("click", () => saveVpWeights("vpCapacityMsg", "btnSaveCapacity"));
 document.getElementById("btnSaveWeights").addEventListener("click", () => saveVpWeights());
+
+/* ==================== CAPACITY MODE (ברירת מחדל vs לפי ערוץ מכר) ====================
+   Small modal, opened from the "קיבולת יומית לסוכן" card - lets the admin flip
+   VisitPlanWeights.UseChannelCapacity, independent of that card's own weights/default-capacity save.
+   See POST /api/visitplan/capacitymode. */
+const capacityModeModal = document.getElementById("capacityModeModalOverlay");
+function closeCapacityModeModal() { capacityModeModal.classList.remove("open"); }
+document.getElementById("lnkOpenCapacityMode").addEventListener("click", (e) => {
+  e.preventDefault();
+  const useChannel = !!(vpLastWeights && vpLastWeights.UseChannelCapacity);
+  document.getElementById("capacityModeDefault").checked = !useChannel;
+  document.getElementById("capacityModeChannel").checked = useChannel;
+  document.getElementById("capacityModeMsg").textContent = "";
+  capacityModeModal.classList.add("open");
+});
+document.getElementById("btnCloseCapacityMode").addEventListener("click", closeCapacityModeModal);
+capacityModeModal.addEventListener("click", (e) => { if (e.target === capacityModeModal) closeCapacityModeModal(); });
+
+async function saveCapacityMode(useChannelCapacity) {
+  const companyId = selectedCompanyId();
+  const msg = document.getElementById("capacityModeMsg");
+  const btn = document.getElementById("btnSaveCapacityMode");
+  if (!companyId) return;
+  msg.className = "form-msg"; msg.textContent = "שומר...";
+  await withLoading(btn, async () => {
+    try {
+      const res = await fetch("/api/visitplan/capacitymode", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ CompanyId: companyId, UseChannelCapacity: useChannelCapacity })
+      });
+      if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
+      if (vpLastWeights) vpLastWeights.UseChannelCapacity = useChannelCapacity;
+      document.getElementById("capacityModeDefault").checked = !useChannelCapacity;
+      document.getElementById("capacityModeChannel").checked = useChannelCapacity;
+      msg.className = "form-msg success"; msg.textContent = "נשמר! ניתן ליצור תוכנית מחדש כדי שהשינוי ישפיע.";
+    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  }, "שומר...");
+}
+document.getElementById("btnSaveCapacityMode").addEventListener("click", () => {
+  saveCapacityMode(document.getElementById("capacityModeChannel").checked);
+});
+document.getElementById("btnResetCapacityMode").addEventListener("click", () => saveCapacityMode(false));
+
+/* ==================== PER-CHANNEL CAPACITY TABLE (ערוץ מכר) ====================
+   Own modal, opened from within the capacity-mode modal above - one row per sales channel, one shared
+   "שמירה" button for the whole table. Dormant unless UseChannelCapacity is on (see the modal above). */
+function renderChannelCapacityTable(rows) {
+  const el = document.getElementById("channelCapacityTable");
+  if (!rows.length) { el.innerHTML = `<span class="muted">אין ערוצי מכר בבסיס הלקוחות של החברה.</span>`; return; }
+  const header = `<div class="channel-capacity-header"><span>ערוץ מכר</span><span>יום מלא</span><span>חצי יום</span></div>`;
+  const rowsHtml = rows.map(r => `
+    <div class="channel-capacity-row" data-channel-id="${r.Id}" data-channel="${esc(r.Channel)}">
+      <span class="channel-capacity-name" title="${esc(r.Channel)}">${esc(r.Channel)}</span>
+      <input type="number" min="1" step="1" class="channel-capacity-full" value="${r.FullDayCapacity}" />
+      <input type="number" min="1" step="1" class="channel-capacity-half" value="${r.HalfDayCapacity}" />
+    </div>`).join("");
+  el.innerHTML = header + rowsHtml;
+}
+
+async function loadChannelCapacityTable() {
+  const companyId = selectedCompanyId();
+  const msg = document.getElementById("channelCapacityMsg");
+  msg.textContent = "";
+  if (!companyId) return;
+  try {
+    const res = await fetch(`/api/visitplan/channelcapacity?companyId=${companyId}`);
+    renderChannelCapacityTable(res.ok ? await res.json() : []);
+  } catch { renderChannelCapacityTable([]); }
+}
+
+const channelCapacityModal = document.getElementById("channelCapacityModalOverlay");
+function closeChannelCapacityModal() { channelCapacityModal.classList.remove("open"); }
+document.getElementById("lnkOpenChannelCapacityTable").addEventListener("click", async (e) => {
+  e.preventDefault();
+  closeCapacityModeModal(); // only one fixed full-screen overlay can sensibly be open at once
+  channelCapacityModal.classList.add("open");
+  await loadChannelCapacityTable();
+});
+document.getElementById("btnCloseChannelCapacity").addEventListener("click", closeChannelCapacityModal);
+channelCapacityModal.addEventListener("click", (e) => { if (e.target === channelCapacityModal) closeChannelCapacityModal(); });
+
+document.getElementById("btnSaveChannelCapacity").addEventListener("click", async () => {
+  const companyId = selectedCompanyId();
+  const msg = document.getElementById("channelCapacityMsg");
+  const btn = document.getElementById("btnSaveChannelCapacity");
+  if (!companyId) return;
+  const rows = [...document.querySelectorAll("#channelCapacityTable .channel-capacity-row")];
+  for (const row of rows) {
+    const full = Number(row.querySelector(".channel-capacity-full").value) || 0;
+    const half = Number(row.querySelector(".channel-capacity-half").value) || 0;
+    if (full < 1 || half < 1) {
+      msg.className = "form-msg error";
+      msg.textContent = `הקיבולת עבור "${row.dataset.channel}" חייבת להיות לפחות 1`;
+      return;
+    }
+  }
+  msg.className = "form-msg"; msg.textContent = "שומר...";
+  await withLoading(btn, async () => {
+    try {
+      for (const row of rows) {
+        const full = Number(row.querySelector(".channel-capacity-full").value);
+        const half = Number(row.querySelector(".channel-capacity-half").value);
+        const res = await fetch("/api/visitplan/channelcapacity", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ Id: Number(row.dataset.channelId), CompanyId: companyId, Channel: row.dataset.channel, FullDayCapacity: full, HalfDayCapacity: half })
+        });
+        if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה בערוץ "${row.dataset.channel}": ${await describeError(res)}`; return; }
+      }
+      msg.className = "form-msg success"; msg.textContent = "כל הערוצים נשמרו! ניתן ליצור תוכנית מחדש כדי שהשינוי ישפיע.";
+    } catch { msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת"; }
+  }, "שומר...");
+});
 
 function vpSelectedYearMonth() {
   const yearSel = document.getElementById("vpYearSelect");

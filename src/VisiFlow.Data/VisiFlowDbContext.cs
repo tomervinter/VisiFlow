@@ -23,6 +23,7 @@ public class VisiFlowDbContext : DbContext
     public DbSet<AuditLogEntry> AuditLogEntries => Set<AuditLogEntry>();
     public DbSet<CustomerDebt> CustomerDebts => Set<CustomerDebt>();
     public DbSet<VisitFrequencyPreset> VisitFrequencyPresets => Set<VisitFrequencyPreset>();
+    public DbSet<ChannelCapacity> ChannelCapacities => Set<ChannelCapacity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -97,6 +98,15 @@ public class VisiFlowDbContext : DbContext
             entity.HasKey(p => p.Id);
             entity.Property(p => p.Label).IsRequired().HasMaxLength(60);
             entity.HasOne(p => p.Company).WithMany().HasForeignKey(p => p.CompanyId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ChannelCapacity>(entity =>
+        {
+            entity.ToTable("ChannelCapacities");
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.Channel).IsRequired().HasMaxLength(200);
+            entity.HasIndex(c => new { c.CompanyId, c.Channel }).IsUnique();
+            entity.HasOne(c => c.Company).WithMany().HasForeignKey(c => c.CompanyId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<CustomerDistributionDay>(entity =>

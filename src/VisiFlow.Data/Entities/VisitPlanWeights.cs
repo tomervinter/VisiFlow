@@ -21,4 +21,9 @@ public class VisitPlanWeights
     public int FullDayCapacity { get; set; } = 8;
     /// <summary>קיבולת יומית מקסימלית של סוכן בחצי יום עבודה (כמות פגישות).</summary>
     public int HalfDayCapacity { get; set; } = 4;
+    /// <summary>true = הגנרטור משתמש בקיבולת לפי ערוץ מכר (ראו ChannelCapacity.cs), לפי הערוץ המשוייך של
+    /// כל סוכן. false (ברירת מחדל) = הגנרטור תמיד משתמש ב-FullDayCapacity/HalfDayCapacity הכלליים כאן,
+    /// גם אם יש שורות ChannelCapacity מוגדרות - הן פשוט לא בשימוש עד שהמנהל בוחר במפורש להפעיל את
+    /// המצב הזה (ראו "הגדרת קיבולת" ב"יצירת תוכנית ביקורים").</summary>
+    public bool UseChannelCapacity { get; set; } = false;
 }

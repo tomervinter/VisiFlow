@@ -252,4 +252,60 @@ public class VisitPlanGeneratorTests : IDisposable
         Assert.False(Db.VisitPlanEntries.Any(e => e.CompanyId == company.Id && e.CustomerNumber == "C-ZERO"));
         Assert.Single(Db.VisitPlanEntries.Where(e => e.CompanyId == company.Id && e.CustomerNumber == "C-UNSET"));
     }
+
+    // Regression coverage for ChannelCapacity.cs's opt-in gate (VisitPlanWeights.UseChannelCapacity):
+    // configuring per-channel override rows must NOT change scheduling at all while the admin hasn't
+    // explicitly turned the mode on - the flat company-wide default keeps governing every agent exactly
+    // as if those rows didn't exist.
+    [Fact]
+    public async Task GenerateAsync_ChannelCapacityConfiguredButModeOff_FlatDefaultStillApplies()
+    {
+        var company = await SeedCompanyAsync();
+
+        Db.VisitPlanWeights.Add(new VisitPlanWeights { CompanyId = company.Id, FullDayCapacity = 10, HalfDayCapacity = 10, UseChannelCapacity = false });
+        // A very restrictive override that WOULD cap this agent to 1/day if it were actually consulted.
+        Db.ChannelCapacities.Add(new ChannelCapacity { CompanyId = company.Id, Channel = "פרטיים", FullDayCapacity = 1, HalfDayCapacity = 1 });
+
+        for (var i = 0; i < 5; i++)
+        {
+            Db.Customers.Add(new Customer
+            {
+                CompanyId = company.Id, CustomerNumber = $"C-{i:00}", Year = Year, Month = Month,
+                CustomerName = $"Customer {i}", AgentIdNumber = "AG-PRIVATE", Channel = "פרטיים", Status = CustomerStatus.Active
+            });
+        }
+        await Db.SaveChangesAsync();
+
+        await VisitPlanGenerator.GenerateAsync(Db, company.Id, Year, Month);
+
+        // March 1, 2026 is a Sunday (a full working day) - the agent's very first day of the month.
+        var firstDayCount = Db.VisitPlanEntries.Count(e => e.CompanyId == company.Id && e.PlannedDate == new DateTime(2026, 3, 1));
+        Assert.Equal(5, firstDayCount); // capped by the 10/day flat default, NOT the dormant 1/day channel override
+    }
+
+    // Companion to the test above: turning the same mode ON makes the exact same configured row
+    // actually govern the agent's capacity.
+    [Fact]
+    public async Task GenerateAsync_ChannelCapacityModeOn_OverrideActuallyApplies()
+    {
+        var company = await SeedCompanyAsync();
+
+        Db.VisitPlanWeights.Add(new VisitPlanWeights { CompanyId = company.Id, FullDayCapacity = 10, HalfDayCapacity = 10, UseChannelCapacity = true });
+        Db.ChannelCapacities.Add(new ChannelCapacity { CompanyId = company.Id, Channel = "פרטיים", FullDayCapacity = 1, HalfDayCapacity = 1 });
+
+        for (var i = 0; i < 5; i++)
+        {
+            Db.Customers.Add(new Customer
+            {
+                CompanyId = company.Id, CustomerNumber = $"C-{i:00}", Year = Year, Month = Month,
+                CustomerName = $"Customer {i}", AgentIdNumber = "AG-PRIVATE", Channel = "פרטיים", Status = CustomerStatus.Active
+            });
+        }
+        await Db.SaveChangesAsync();
+
+        await VisitPlanGenerator.GenerateAsync(Db, company.Id, Year, Month);
+
+        var firstDayCount = Db.VisitPlanEntries.Count(e => e.CompanyId == company.Id && e.PlannedDate == new DateTime(2026, 3, 1));
+        Assert.Equal(1, firstDayCount); // now capped by the channel override, not the 10/day flat default
+    }
 }

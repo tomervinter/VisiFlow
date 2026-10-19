@@ -210,6 +210,17 @@
     font-size: 0.9rem; line-height: 1.4; margin-bottom: 12px; word-break: break-word;
   }
   .customer-card .cc-admin-note b { font-weight: 700; }
+  /* A check is waiting for pickup at this customer (PendingCheck) - visible on the collapsed row AND,
+     louder, inside the expanded card, since "go collect it while you're there" is the whole point. */
+  .cl-check-badge {
+    display: inline-block; margin-inline-start: 6px; vertical-align: 1px; background: var(--warn-bg); color: var(--warn-fg);
+    font-size: 0.7rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; white-space: nowrap;
+  }
+  .customer-card .cc-check-banner {
+    background: var(--warn-bg); color: var(--warn-fg); border-radius: 8px; padding: 9px 11px;
+    font-size: 0.95rem; font-weight: 700; line-height: 1.4; margin-bottom: 12px;
+  }
+  .customer-card .cc-check-banner small { font-weight: 400; font-size: 0.78rem; }
   .cc-trend { font-size: 0.8rem; font-weight: 700; margin-inline-start: 4px; white-space: nowrap; }
   .cc-trend.up { color: var(--good-fg); }
   .cc-trend.down { color: var(--crit-fg); }
@@ -650,6 +661,7 @@ function renderCustomerCard(c) {
         </div>
         ${c.VisitOrder != null ? `<span class="cc-stop-badge">עצירה #${c.VisitOrder}</span>` : ""}
       </div>
+      ${c.PendingCheckUpdatedAt ? `<div class="cc-check-banner">צ'ק ממתין לאיסוף אצל הלקוח <small>(מידע מתאריך ${fmtCheckDate(c.PendingCheckUpdatedAt)})</small></div>` : ""}
       ${c.AdminNote ? `<div class="cc-admin-note">📌 <b>הערה מהמנהל:</b> ${esc(c.AdminNote)}</div>` : ""}
       <div class="cc-stats-grid">
         <div class="cc-stat-item">
@@ -720,7 +732,7 @@ function renderCustomerRow(c) {
     <div class="customer-row-wrap${isExpanded ? " expanded" : ""}" data-wrap-key="${key}">
       <div class="customer-row" data-row-key="${key}">
         <div class="cl-row-main">
-          <div class="cl-row-name">${esc(c.CustomerName)}</div>
+          <div class="cl-row-name">${esc(c.CustomerName)}${c.PendingCheckUpdatedAt ? `<span class="cl-check-badge" title="צ'ק ממתין לאיסוף">צ'ק לאיסוף</span>` : ""}</div>
           <div class="cl-row-sub">${subParts.join(" · ")}</div>
           ${c.AdminNote ? `<div class="cl-row-note">📌 ${esc(c.AdminNote)}</div>` : ""}
         </div>
@@ -771,6 +783,14 @@ async function toggleRowExpanded(key) {
   key = String(key);
   if (expandedKeys.has(key)) expandedKeys.delete(key); else expandedKeys.add(key);
   await renderCustomerList();
+}
+
+// PendingCheck.UpdatedAt is a UTC timestamp the server serializes without a "Z" suffix - without
+// appending it the browser would read it as local time and could show the previous/next calendar day
+// for an upload made late in the evening.
+function fmtCheckDate(iso) {
+  const d = new Date(/[zZ]|[+-]\d\d:\d\d$/.test(iso) ? iso : iso + "Z");
+  return d.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" });
 }
 
 function formatBannerDate(dateIso) {

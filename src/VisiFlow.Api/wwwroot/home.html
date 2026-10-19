@@ -1313,13 +1313,20 @@
                RTL layout) instead of just flowing after the customer-import controls, so it stays
                visually separated from them even as the row wraps at different widths. -->
           <input type="file" id="importDebtFileInput" accept=".xlsx,.xls" style="display:none" />
-          <div style="display:flex; align-items:center; gap:10px; margin-inline-start:auto;">
+          <!-- Pending checks (צ'קים ממתינים לאיסוף, see PendingCheck.cs) - same idea as the debt upload
+               next to it, but each upload REPLACES the whole list (a customer missing from the file is
+               removed), so it previews and asks for confirmation before writing anything. -->
+          <input type="file" id="importChecksFileInput" accept=".xlsx,.xls" style="display:none" />
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-inline-start:auto;">
+            <button type="button" class="btn small" id="btnBrowseImportChecks">&#128193; טעינת צ'קים ממתינים</button>
+            <a class="btn small" id="btnDownloadChecksTemplate" href="/api/customers/pendingchecks/import/template">&#8681; תבנית צ'קים ממתינים</a>
             <button type="button" class="btn small" id="btnBrowseImportDebt">&#128193; טעינת נתוני גביה</button>
             <a class="btn small" id="btnDownloadDebtTemplate" href="/api/customers/debt/import/template">&#8681; תבנית נתוני גביה</a>
           </div>
         </div>
         <p class="form-msg" id="importMsg" style="margin-top:0;"></p>
         <p class="form-msg" id="importDebtMsg" style="margin-top:0;"></p>
+        <p class="form-msg" id="importChecksMsg" style="margin-top:0;"></p>
       </section>
 
       <section class="panel">
@@ -1927,6 +1934,7 @@
           <li>רוצים לראות מה נטען לחודש מסוים? בטבלת "בסיס הלקוחות" למטה, בחרו שנה/חודש. <b>מה קורה:</b> הטבלה מתחלפת לרשימת הלקוחות שנטענה לאותו חודש בדיוק.</li>
           <li>מחפשים לקוח ספציפי? הקלידו בתיבת החיפוש. <b>מה קורה:</b> הטבלה מסתננת תוך כדי ההקלדה, בלי צורך ללחוץ Enter.</li>
           <li>רוצים לעדכן את חוב הגביה של הלקוחות? לחצו "טעינת נתוני גביה" ובחרו קובץ אקסל (תבנית נפרדת - "תבנית נתוני גביה"). <b>מה קורה:</b> בניגוד לקובץ הלקוחות, נתוני הגביה אינם משויכים לחודש מסוים - כל טעינה חדשה דורסת את הערכים הקודמים לאותו מספר לקוח. הערכים מופיעים כעמודות "חוב לגביה"/"חוב בפיגור" בטבלת "בסיס הלקוחות" למטה, וגם בממשק הסוכן מתחת לנתוני המכר של הלקוח.</li>
+          <li>רוצים שהסוכן יראה שממתין לו צ'ק לאיסוף אצל לקוח? לחצו "טעינת צ'קים ממתינים" ובחרו קובץ אקסל עם עמודה אחת: "מספר לקוח" (תבנית נפרדת - "תבנית צ'קים ממתינים"). <b>מה קורה:</b> הקובץ <b>מחליף את כל הרשימה</b> - לקוח שלא מופיע בקובץ החדש נחשב כמי שהצ'ק שלו נאסף, והסימון נעלם אצל הסוכן. לפני ההחלפה תוצג הודעת אישור עם כמה לקוחות יתווספו, יוסרו וישארו. אפשר להעלות מדי יום או שבוע; הסוכן רואה תווית "צ'ק לאיסוף" ליד שם הלקוח. לסינון - בעמודה "צ'ק ממתין" בטבלת הלקוחות הקלידו "כן".</li>
         </ol>
       </section>
 
@@ -2632,7 +2640,11 @@ async function refreshAllCompanyScopedViews() {
   // measured, wasted work for whichever of them the admin never visits that session - on a company
   // with a lot of history, each one of those renders is not free, and paying for all of them upfront
   // is exactly what made switching feel sluggish right after opening the app.
-  await Promise.all([refreshDashboard(), refreshVisitLogBadgeOnly(), refreshVsPresets()]);
+  // The collection-data (debt) and pending-check lists are also fetched here, not only by the customers
+  // screen's own activation hook: that hook is skipped while viewLastLoadedAt still counts "customers"
+  // as fresh (stamped just below), so opening the customers screen within ~15s of a company load would
+  // otherwise show the debt/check columns blank until the cache window expired.
+  await Promise.all([refreshDashboard(), refreshVisitLogBadgeOnly(), refreshVsPresets(), refreshCustomerDebtView(), refreshPendingChecks()]);
   // customers/nonvisitreasons are fresh as of right now - record that so activateView's cache (see
   // VIEW_CACHE_TTL_MS) doesn't immediately redo the same fetch on the very next tab click. Every other
   // key is deliberately left unstamped - it hasn't actually been loaded yet, so activateView must still
@@ -3762,6 +3774,9 @@ const customersTable = createDataTable({
     // Joined in from the separately-uploaded, non-month-scoped debt file (see "נתוני גביה" above) by
     // customer number - not part of the monthly customer snapshot itself.
     { key: "debtToCollect", label: "חוב לגביה", text: c => customerDebtLookup().get(c.CustomerNumber)?.DebtToCollect ?? "", sortValue: c => customerDebtLookup().get(c.CustomerNumber)?.DebtToCollect, render: c => `<span class="mono">${fmtCurrency(customerDebtLookup().get(c.CustomerNumber)?.DebtToCollect)}</span>` },
+    // "כן" as the filter text so typing it in this column's filter box narrows the table to just the
+    // customers with a check waiting for pickup (the admin's "which customers have one" question).
+    { key: "pendingCheck", label: "צ'ק ממתין", text: c => pendingCheckLookup().has(c.CustomerNumber) ? "כן" : "", sortValue: c => pendingCheckLookup().has(c.CustomerNumber) ? 1 : 0, render: c => pendingCheckLookup().has(c.CustomerNumber) ? `<span class="badge warn" title="עודכן ${fmtDate(pendingCheckLookup().get(c.CustomerNumber))}">צ'ק ממתין</span>` : `<span class="muted">—</span>` },
     { key: "overdueDebt", label: "חוב בפיגור", text: c => customerDebtLookup().get(c.CustomerNumber)?.OverdueDebt ?? "", sortValue: c => customerDebtLookup().get(c.CustomerNumber)?.OverdueDebt, render: c => { const v = customerDebtLookup().get(c.CustomerNumber)?.OverdueDebt; return `<span class="mono"${v > 0 ? ' style="color:var(--crit-fg);font-weight:700;"' : ""}>${fmtCurrency(v)}</span>`; } },
     { key: "size", label: "גודל לקוח", text: c => c.CustomerSize || "", render: c => c.CustomerSize ? `<span class="badge">${esc(c.CustomerSize)}</span>` : `<span class="muted">—</span>` },
     { key: "phone", label: "טלפון", text: c => c.Phone || "", render: c => c.Phone ? `<span class="mono">${esc(c.Phone)}</span>` : `<span class="muted">—</span>` },
@@ -3907,8 +3922,78 @@ async function refreshCustomerDebtView() {
 // wouldn't see a later reassignment of the variable it was copied from.
 VIEW_ACTIVATION_HOOKS["customers"] = async function () {
   await refreshCustomersView();
-  await refreshCustomerDebtView();
+  await Promise.all([refreshCustomerDebtView(), refreshPendingChecks()]);
 };
+
+/* ---- pending checks (צ'קים ממתינים לאיסוף) - not month-scoped, see PendingCheck.cs ---- */
+let livePendingChecks = [];
+let _pendingCheckLookupCache = null;
+let _pendingCheckLookupSource = null;
+// CustomerNumber -> UpdatedAt, memoized the same way customerDebtLookup() is.
+function pendingCheckLookup() {
+  if (_pendingCheckLookupSource !== livePendingChecks) {
+    _pendingCheckLookupCache = new Map(livePendingChecks.map(p => [p.CustomerNumber, p.UpdatedAt]));
+    _pendingCheckLookupSource = livePendingChecks;
+  }
+  return _pendingCheckLookupCache;
+}
+
+async function refreshPendingChecks() {
+  const companyId = selectedCompanyId();
+  if (!companyId) { livePendingChecks = []; customersTable.refresh(); return; }
+  try {
+    const res = await fetch(`/api/customers/pendingchecks?companyId=${companyId}`);
+    if (res.ok) livePendingChecks = await res.json();
+  } catch { /* offline - keep last known data */ }
+  customersTable.refresh();
+}
+
+async function postPendingChecksFile(companyId, file, preview) {
+  const fd = new FormData();
+  fd.append("CompanyId", String(companyId));
+  fd.append("Preview", preview ? "true" : "false");
+  fd.append("file", file);
+  return fetch("/api/customers/pendingchecks/import", { method: "POST", body: fd });
+}
+
+// Two steps because the upload REPLACES the whole list: first a dry run (nothing written) to show how
+// many customers would be added/removed, then - only if the admin confirms - the real upload.
+async function handlePendingChecksFile(file) {
+  if (!file) return;
+  const companyId = selectedCompanyId();
+  const msg = document.getElementById("importChecksMsg");
+  if (!companyId) { msg.className = "form-msg error"; msg.textContent = "יש לבחור חברה לפני הטעינה"; return; }
+  msg.className = "form-msg"; msg.textContent = "בודק את הקובץ...";
+  try {
+    const previewRes = await postPendingChecksFile(companyId, file, true);
+    if (!previewRes.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(previewRes)}`; return; }
+    const p = await previewRes.json();
+    const lines = [
+      "טעינת צ'קים ממתינים מחליפה את כל הרשימה הקיימת:",
+      `• יתווספו: ${p.Added} לקוחות`,
+      `• יוסרו (לא מופיעים בקובץ - נחשבים כנאספו): ${p.Removed} לקוחות`,
+      `• יישארו: ${p.Kept} לקוחות`
+    ];
+    if (p.Unknown > 0) lines.push(`⚠ ${p.Unknown} מספרי לקוח בקובץ לא נמצאו בבסיס הלקוחות`);
+    if (p.Errors.length > 0) lines.push(`⚠ ${p.Errors.length} שורות נפסלו (חסר מספר לקוח)`);
+    lines.push("", "להמשיך ולהחליף את הרשימה?");
+    if (!confirm(lines.join("\n"))) { msg.className = "form-msg"; msg.textContent = "הטעינה בוטלה - לא בוצע שינוי."; return; }
+
+    msg.textContent = "טוען...";
+    const res = await postPendingChecksFile(companyId, file, false);
+    if (!res.ok) { msg.className = "form-msg error"; msg.textContent = `שגיאה: ${await describeError(res)}`; return; }
+    const r = await res.json();
+    msg.className = "form-msg success";
+    msg.textContent = `הרשימה הוחלפה: נוספו ${r.Added}, הוסרו ${r.Removed}, נשארו ${r.Kept}.`;
+    await refreshPendingChecks();
+  } catch {
+    msg.className = "form-msg error"; msg.textContent = "שגיאת תקשורת עם השרת";
+  } finally {
+    document.getElementById("importChecksFileInput").value = "";
+  }
+}
+document.getElementById("btnBrowseImportChecks").addEventListener("click", () => document.getElementById("importChecksFileInput").click());
+document.getElementById("importChecksFileInput").addEventListener("change", (e) => handlePendingChecksFile(e.target.files[0]));
 
 function handleImportDebtFile(file) {
   if (!file) return;

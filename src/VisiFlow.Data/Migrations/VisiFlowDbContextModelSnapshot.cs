@@ -413,6 +413,31 @@ namespace VisiFlow.Data.Migrations
                     b.ToTable("NonVisitReasons", (string)null);
                 });
 
+            modelBuilder.Entity("VisiFlow.Data.Entities.PendingCheck", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CustomerNumber")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "CustomerNumber")
+                        .IsUnique();
+
+                    b.ToTable("PendingChecks", (string)null);
+                });
+
             modelBuilder.Entity("VisiFlow.Data.Entities.User", b =>
                 {
                     b.Property<int>("Id")
@@ -726,6 +751,17 @@ namespace VisiFlow.Data.Migrations
                 });
 
             modelBuilder.Entity("VisiFlow.Data.Entities.NonVisitReason", b =>
+                {
+                    b.HasOne("VisiFlow.Data.Entities.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+                });
+
+            modelBuilder.Entity("VisiFlow.Data.Entities.PendingCheck", b =>
                 {
                     b.HasOne("VisiFlow.Data.Entities.Company", "Company")
                         .WithMany()

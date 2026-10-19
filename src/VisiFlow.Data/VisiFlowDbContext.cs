@@ -24,6 +24,7 @@ public class VisiFlowDbContext : DbContext
     public DbSet<CustomerDebt> CustomerDebts => Set<CustomerDebt>();
     public DbSet<VisitFrequencyPreset> VisitFrequencyPresets => Set<VisitFrequencyPreset>();
     public DbSet<ChannelCapacity> ChannelCapacities => Set<ChannelCapacity>();
+    public DbSet<PendingCheck> PendingChecks => Set<PendingCheck>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -97,6 +98,15 @@ public class VisiFlowDbContext : DbContext
             entity.ToTable("VisitFrequencyPresets");
             entity.HasKey(p => p.Id);
             entity.Property(p => p.Label).IsRequired().HasMaxLength(60);
+            entity.HasOne(p => p.Company).WithMany().HasForeignKey(p => p.CompanyId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PendingCheck>(entity =>
+        {
+            entity.ToTable("PendingChecks");
+            entity.HasKey(p => p.Id);
+            entity.Property(p => p.CustomerNumber).IsRequired().HasMaxLength(30);
+            entity.HasIndex(p => new { p.CompanyId, p.CustomerNumber }).IsUnique();
             entity.HasOne(p => p.Company).WithMany().HasForeignKey(p => p.CompanyId).OnDelete(DeleteBehavior.Restrict);
         });
 

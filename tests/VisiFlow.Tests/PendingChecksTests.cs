@@ -206,4 +206,33 @@ public class PendingChecksTests
             Assert.Equal(1, await db.AuditLogEntries.CountAsync(x => x.CompanyId == a && x.Action == "צ'ק סומן כנאסף"));
         });
     }
+
+    private record SearchRow(string CustomerNumber, string CustomerName, DateTime? PlannedDate, bool IsUpcoming);
+
+    [Fact]
+    public async Task AgentSearch_FindsByNumber_OneRowPerCustomer_EvenWithoutPlanEntries()
+    {
+        using var factory = new TestAppFactory();
+        var (a, _) = await SeedAsync(factory);
+        var agentClient = factory.CreateClient();
+
+        // No plan generated yet: the customer is still found by a 1-digit number, with no date.
+        var before = await agentClient.GetFromJsonAsync<List<SearchRow>>("/api/agent/visitplan/search?agentIdNumber=AG1&query=2");
+        var only = Assert.Single(before!);
+        Assert.Equal("2", only.CustomerNumber);
+        Assert.Null(only.PlannedDate);
+
+        // A 1-char NAME query is still too short.
+        Assert.Empty((await agentClient.GetFromJsonAsync<List<SearchRow>>("/api/agent/visitplan/search?agentIdNumber=AG1&query=C"))!);
+
+        var client = await LoginAsync(factory);
+        var gen = await client.PostAsJsonAsync("/api/visitplan/generate", new { CompanyId = a, Year = 2026, Month = 3, ConfirmClearExisting = false });
+        Assert.Equal(HttpStatusCode.OK, gen.StatusCode);
+
+        // However many visits the plan holds for a customer, the search returns exactly one row.
+        var after = await agentClient.GetFromJsonAsync<List<SearchRow>>("/api/agent/visitplan/search?agentIdNumber=AG1&query=C");
+        Assert.Empty(after!); // still 1 char
+        var byName = await agentClient.GetFromJsonAsync<List<SearchRow>>("/api/agent/visitplan/search?agentIdNumber=AG1&query=C1");
+        Assert.Single(byName!);
+    }
 }

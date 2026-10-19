@@ -444,7 +444,7 @@
     <div class="settings-drawer" id="settingsDrawer" style="display:none;">
       <div class="drawer-section">
         <label for="agentSearchInput">חיפוש לקוח (שם או מספר)</label>
-        <input type="text" id="agentSearchInput" placeholder="הקלידו לפחות 2 תווים..." autocomplete="off" />
+        <input type="text" id="agentSearchInput" placeholder="שם לקוח (2 תווים לפחות) או מספר לקוח" autocomplete="off" />
         <div class="search-results" id="agentSearchResults"></div>
       </div>
       <div class="drawer-section">
@@ -943,7 +943,8 @@ document.getElementById("agentSearchInput").addEventListener("input", (e) => {
   clearTimeout(agentSearchDebounce);
   const q = e.target.value.trim();
   const resultsEl = document.getElementById("agentSearchResults");
-  if (q.length < 2) { resultsEl.innerHTML = ""; return; }
+  // A customer number may be a single digit; a name needs at least 2 characters.
+  if (q.length < 2 && !/^d+$/.test(q)) { resultsEl.innerHTML = ""; return; }
   agentSearchDebounce = setTimeout(async () => {
     const agentIdNumber = localStorage.getItem(AGENT_ID_KEY);
     if (!agentIdNumber) return;
@@ -959,17 +960,19 @@ document.getElementById("agentSearchInput").addEventListener("input", (e) => {
 function renderSearchResults(results) {
   const el = document.getElementById("agentSearchResults");
   if (results.length === 0) { el.innerHTML = `<div class="search-empty">אין תוצאות</div>`; return; }
-  // Group by customer - one search hit per customer, listing every date they're scheduled on.
-  const byCustomer = new Map();
-  results.forEach(r => {
-    if (!byCustomer.has(r.CustomerNumber)) byCustomer.set(r.CustomerNumber, { name: r.CustomerName, dates: [] });
-    byCustomer.get(r.CustomerNumber).dates.push(r.PlannedDate.slice(0, 10));
-  });
-  el.innerHTML = [...byCustomer.entries()].map(([num, info]) => `
-    <div class="search-result-item" data-jump-date="${info.dates[0]}">
-      <div class="search-result-name">${esc(info.name)} <span class="search-result-num">(${num})</span></div>
-      <div class="search-result-dates">${info.dates.map(formatBannerDate).join(" · ")}</div>
-    </div>`).join("");
+  // One hit per customer, showing only the single date a tap would jump to (the server picks the
+  // nearest upcoming visit, else the most recent past one) - never the customer's whole calendar.
+  el.innerHTML = results.map(r => {
+    const date = r.PlannedDate ? r.PlannedDate.slice(0, 10) : null;
+    const sub = !date ? "אין ביקורים מתוכננים"
+      : r.IsUpcoming ? `ביקור הבא: ${formatBannerDate(date)}`
+      : `ביקור אחרון: ${formatBannerDate(date)}`;
+    return `
+    <div class="search-result-item"${date ? ` data-jump-date="${date}"` : ""}>
+      <div class="search-result-name">${esc(r.CustomerName)} <span class="search-result-num">(${esc(r.CustomerNumber)})</span></div>
+      <div class="search-result-dates"${date ? "" : ` style="color:var(--text-muted)"`}>${sub}</div>
+    </div>`;
+  }).join("");
 }
 
 document.getElementById("agentSearchResults").addEventListener("click", (e) => {

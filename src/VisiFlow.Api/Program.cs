@@ -2083,31 +2083,55 @@ app.MapGet("/api/agent/visitplan/range", async (string agentIdNumber, DateTime s
 // dates rather than list entries within one.
 app.MapGet("/api/agent/visitplan/search", async (string agentIdNumber, string query, VisiFlowDbContext db) =>
 {
-    if (string.IsNullOrWhiteSpace(agentIdNumber) || string.IsNullOrWhiteSpace(query) || query.Trim().Length < 2)
+    // A customer number can legitimately be a single digit, so a purely numeric query is allowed from 1 char;
+    // a name query still needs 2 to avoid matching half the customer base.
+    var q = (query ?? "").Trim();
+    var numeric = q.Length > 0 && q.All(char.IsDigit);
+    if (string.IsNullOrWhiteSpace(agentIdNumber) || q.Length == 0 || (q.Length < 2 && !numeric))
         return Results.Ok(new List<AgentSearchResultDto>());
-    var q = query.Trim();
 
     // Every (company, customer number) this agent has ever been assigned whose name/number matches -
     // deduplicated across months, since the same real customer can appear in several monthly snapshots.
-    var matches = await db.Customers
+    // Exact number match first, then by name; capped so a 1-digit number search stays a short list.
+    var matches = (await db.Customers
         .Where(c => c.AgentIdNumber == agentIdNumber && (c.CustomerName.Contains(q) || c.CustomerNumber.Contains(q)))
         .Select(c => new { c.CompanyId, c.CustomerNumber, c.CustomerName })
         .Distinct()
-        .ToListAsync();
+        .ToListAsync())
+        .OrderBy(m => m.CustomerNumber == q ? 0 : 1)
+        .ThenBy(m => m.CustomerName)
+        .Take(30)
+        .ToList();
     if (matches.Count == 0) return Results.Ok(new List<AgentSearchResultDto>());
 
     var companyIds = matches.Select(m => m.CompanyId).Distinct().ToList();
     var customerNumbers = matches.Select(m => m.CustomerNumber).Distinct().ToList();
-    var nameByKey = matches.ToDictionary(m => (m.CompanyId, m.CustomerNumber), m => m.CustomerName);
 
-    var entries = await db.VisitPlanEntries
+    // One row per customer, not per scheduled visit: the agent searching wants to JUMP to the customer,
+    // so we return just the nearest upcoming visit (or, failing that, the most recent past one) instead
+    // of the customer's whole calendar. Customers with no plan entry at all still come back (null date)
+    // so searching by number doesn't silently "find nothing" for a customer who simply isn't scheduled.
+    var today = DateTime.Today;
+    var entriesByKey = (await db.VisitPlanEntries
         .Where(e => companyIds.Contains(e.CompanyId) && customerNumbers.Contains(e.CustomerNumber) && e.PlannedDate != null)
-        .ToListAsync();
-    var results = entries
-        .Where(e => nameByKey.ContainsKey((e.CompanyId, e.CustomerNumber)))
-        .OrderBy(e => e.PlannedDate)
-        .Select(e => new AgentSearchResultDto(e.CustomerNumber, nameByKey[(e.CompanyId, e.CustomerNumber)], e.PlannedDate!.Value))
-        .ToList();
+        .Select(e => new { e.CompanyId, e.CustomerNumber, PlannedDate = e.PlannedDate!.Value })
+        .ToListAsync())
+        .GroupBy(e => (e.CompanyId, e.CustomerNumber))
+        .ToDictionary(g => g.Key, g => g.Select(e => e.PlannedDate).ToList());
+
+    var results = matches.Select(m =>
+    {
+        entriesByKey.TryGetValue((m.CompanyId, m.CustomerNumber), out var dates);
+        DateTime? chosen = null;
+        bool upcoming = false;
+        if (dates != null && dates.Count > 0)
+        {
+            var next = dates.Where(d => d.Date >= today).OrderBy(d => d).Cast<DateTime?>().FirstOrDefault();
+            if (next != null) { chosen = next; upcoming = true; }
+            else chosen = dates.OrderByDescending(d => d).First();
+        }
+        return new AgentSearchResultDto(m.CustomerNumber, m.CustomerName, chosen, upcoming);
+    }).ToList();
     return Results.Ok(results);
 });
 
@@ -2633,7 +2657,7 @@ record AgentVisitPlanEntryDto(
         null, v.CreatedAt, debt?.DebtToCollect, debt?.OverdueDebt, true, false, pendingCheckUpdatedAt);
 }
 
-record AgentSearchResultDto(string CustomerNumber, string CustomerName, DateTime PlannedDate);
+record AgentSearchResultDto(string CustomerNumber, string CustomerName, DateTime? PlannedDate, bool IsUpcoming);
 
 record AgentCustomerSearchResultDto(
     int CompanyId, string CustomerNumber, string CustomerName, string? Phone, string? Address,

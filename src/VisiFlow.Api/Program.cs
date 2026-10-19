@@ -2160,6 +2160,38 @@ app.MapGet("/api/agent/customers/search", async (string agentIdNumber, string qu
 // /api/visitplan/entries/{id} above (that one requires a login the agent app deliberately doesn't
 // have). Used right after logging an unplanned visit, when the agent chooses to cancel (rather than
 // move) the customer's already-scheduled next meeting instead of leaving it stranded on the calendar.
+// The agent marks a pending check as collected ("נאסף"). Unauthenticated like the rest of /api/agent/*,
+// so the only guard is that the agent ID must actually be assigned to that customer in that company
+// (any month) - knowing a random customer number alone is not enough. Idempotent: a check that is
+// already gone (e.g. the admin's next upload removed it first) is a success, not an error. Audit-logged
+// with ActorUserId 0 since there is no logged-in user; the next admin upload is still the source of
+// truth, so a customer still listed in that file will reappear.
+app.MapPost("/api/agent/pendingchecks/collected", async (AgentCheckCollectedRequest req, VisiFlowDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(req.AgentIdNumber) || string.IsNullOrWhiteSpace(req.CustomerNumber))
+        return Results.BadRequest("חסרים פרטים");
+    var assigned = await db.Customers.AnyAsync(c => c.CompanyId == req.CompanyId
+        && c.CustomerNumber == req.CustomerNumber && c.AgentIdNumber == req.AgentIdNumber);
+    if (!assigned) return Results.Json("הלקוח אינו משויך לסוכן זה", statusCode: StatusCodes.Status403Forbidden);
+
+    var check = await db.PendingChecks.FirstOrDefaultAsync(p => p.CompanyId == req.CompanyId && p.CustomerNumber == req.CustomerNumber);
+    if (check != null)
+    {
+        db.PendingChecks.Remove(check);
+        db.AuditLogEntries.Add(new AuditLogEntry
+        {
+            CompanyId = req.CompanyId,
+            ActorUserId = 0,
+            ActorUsername = $"סוכן {req.AgentIdNumber}",
+            Action = "צ'ק סומן כנאסף",
+            TargetDescription = $"לקוח {req.CustomerNumber}",
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+    }
+    return Results.NoContent();
+});
+
 app.MapDelete("/api/agent/visitplan/entries/{id:int}", async (int id, VisiFlowDbContext db) =>
 {
     var entry = await db.VisitPlanEntries.FindAsync(id);
@@ -2507,6 +2539,7 @@ record PendingCheckDto(string CustomerNumber, DateTime UpdatedAt)
 // Added/Removed/Kept describe what the upload does (or, when Preview is true, WOULD do - nothing was
 // written). Unknown = numbers in the file matching no customer in any loaded month.
 record PendingCheckImportResultDto(bool Preview, int Added, int Removed, int Kept, int Unknown, List<string> Errors);
+record AgentCheckCollectedRequest(string AgentIdNumber, int CompanyId, string CustomerNumber);
 
 record DeleteCustomersResultDto(int Deleted);
 

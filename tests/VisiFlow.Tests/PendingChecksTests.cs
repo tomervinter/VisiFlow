@@ -181,4 +181,29 @@ public class PendingChecksTests
         Assert.NotNull(rows.First(r => r.CustomerNumber == "2").PendingCheckUpdatedAt);
         Assert.Null(rows.First(r => r.CustomerNumber == "3").PendingCheckUpdatedAt);
     }
+
+    [Fact]
+    public async Task AgentCollected_RemovesTheCheck_OnlyForTheAssignedAgent()
+    {
+        using var factory = new TestAppFactory();
+        var (a, _) = await SeedAsync(factory);
+        var agentClient = factory.CreateClient(); // no login, like the real agent app
+
+        var wrongAgent = await agentClient.PostAsJsonAsync("/api/agent/pendingchecks/collected", new { AgentIdNumber = "OTHER", CompanyId = a, CustomerNumber = "1" });
+        Assert.Equal(HttpStatusCode.Forbidden, wrongAgent.StatusCode);
+        await factory.SeedAsync(async db => Assert.Equal(2, await db.PendingChecks.CountAsync(p => p.CompanyId == a)));
+
+        var ok = await agentClient.PostAsJsonAsync("/api/agent/pendingchecks/collected", new { AgentIdNumber = "AG1", CompanyId = a, CustomerNumber = "1" });
+        Assert.Equal(HttpStatusCode.NoContent, ok.StatusCode);
+        // Second tap (or admin upload already removed it) is still a success.
+        var again = await agentClient.PostAsJsonAsync("/api/agent/pendingchecks/collected", new { AgentIdNumber = "AG1", CompanyId = a, CustomerNumber = "1" });
+        Assert.Equal(HttpStatusCode.NoContent, again.StatusCode);
+
+        await factory.SeedAsync(async db =>
+        {
+            var left = await db.PendingChecks.Where(p => p.CompanyId == a).Select(p => p.CustomerNumber).ToListAsync();
+            Assert.Equal(new[] { "2" }, left);
+            Assert.Equal(1, await db.AuditLogEntries.CountAsync(x => x.CompanyId == a && x.Action == "צ'ק סומן כנאסף"));
+        });
+    }
 }

@@ -219,8 +219,14 @@
   .customer-card .cc-check-banner {
     background: var(--warn-bg); color: var(--warn-fg); border-radius: 8px; padding: 9px 11px;
     font-size: 0.95rem; font-weight: 700; line-height: 1.4; margin-bottom: 12px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
   }
-  .customer-card .cc-check-banner small { font-weight: 400; font-size: 0.78rem; }
+  .customer-card .cc-check-banner small { display: block; font-weight: 400; font-size: 0.78rem; }
+  .customer-card .cc-check-btn {
+    flex-shrink: 0; border: 0; border-radius: 8px; background: var(--good-fg); color: white;
+    font: inherit; font-size: 0.9rem; font-weight: 700; padding: 8px 14px; cursor: pointer;
+  }
+  .customer-card .cc-check-btn:disabled { opacity: 0.6; cursor: default; }
   .cc-trend { font-size: 0.8rem; font-weight: 700; margin-inline-start: 4px; white-space: nowrap; }
   .cc-trend.up { color: var(--good-fg); }
   .cc-trend.down { color: var(--crit-fg); }
@@ -661,7 +667,11 @@ function renderCustomerCard(c) {
         </div>
         ${c.VisitOrder != null ? `<span class="cc-stop-badge">עצירה #${c.VisitOrder}</span>` : ""}
       </div>
-      ${c.PendingCheckUpdatedAt ? `<div class="cc-check-banner">צ'ק ממתין לאיסוף אצל הלקוח <small>(מידע מתאריך ${fmtCheckDate(c.PendingCheckUpdatedAt)})</small></div>` : ""}
+      ${c.PendingCheckUpdatedAt ? `<div class="cc-check-banner">
+        <div class="cc-check-text">צ'ק ממתין לאיסוף אצל הלקוח<small>מידע מתאריך ${fmtCheckDate(c.PendingCheckUpdatedAt)}</small></div>
+        <button type="button" class="cc-check-btn" data-action="check-collected" data-key="${key}">✓ נאסף</button>
+      </div>
+      <div class="cc-msg" data-check-msg="${key}"></div>` : ""}
       ${c.AdminNote ? `<div class="cc-admin-note">📌 <b>הערה מהמנהל:</b> ${esc(c.AdminNote)}</div>` : ""}
       <div class="cc-stats-grid">
         <div class="cc-stat-item">
@@ -1043,6 +1053,24 @@ document.getElementById("customerCards").addEventListener("click", async (e) => 
     const customer = agentVisits.find(c => String(c.PlanEntryId) === String(key));
     if (customer) { customer.Outcome = null; customer.ReasonText = null; }
     await renderCustomerList();
+    return;
+  }
+  if (action === "check-collected") {
+    const customer = agentVisits.find(c => String(c.PlanEntryId) === String(key));
+    if (!customer || !confirm(`לסמן שהצ'ק של ${customer.CustomerName} נאסף?`)) return;
+    btn.disabled = true;
+    const msgEl = document.querySelector(`[data-check-msg="${key}"]`);
+    try {
+      const res = await fetch("/api/agent/pendingchecks/collected", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ AgentIdNumber: localStorage.getItem(AGENT_ID_KEY), CompanyId: customer.CompanyId, CustomerNumber: customer.CustomerNumber })
+      });
+      if (!res.ok) throw new Error(await describeError(res));
+      await refreshList();
+    } catch (err) {
+      btn.disabled = false;
+      if (msgEl) { msgEl.className = "cc-msg error"; msgEl.textContent = `שגיאה: ${(err && err.message) || "נסו שוב"}`; }
+    }
     return;
   }
   if (action === "mark-visited") {

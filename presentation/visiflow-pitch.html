@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VisiFlow - מצגת ללקוחות</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&family=Rubik:wght@500;700;800;900&display=swap">
 <style>
   :root {
     --navy: #0b1226;
@@ -19,7 +22,8 @@
     --muted: #9db3d6;
     --card: rgba(255,255,255,0.07);
     --card-border: rgba(147,197,253,0.22);
-    --font: "Segoe UI", Arial, "Noto Sans Hebrew", sans-serif;
+    --font: "Assistant", "Segoe UI", Arial, sans-serif;
+    --head: "Rubik", "Segoe UI", Arial, sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; background: #060b19; overflow: hidden; font-family: var(--font); color: var(--text); }
@@ -189,10 +193,10 @@
 
   /* ---------- real screenshots ---------- */
   .browser { background: #0c1630; border: 1px solid rgba(147,197,253,.35); border-radius: 14px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 70px rgba(37,99,235,.35); position: relative; }
-  .browser .bar { height: 26px; background: linear-gradient(#1b2b52, #14213f); display: flex; align-items: center; gap: 6px; padding: 0 12px; direction: ltr; }
-  .browser .bar i { width: 9px; height: 9px; border-radius: 50%; background: #3b4d78; }
-  .browser .bar i:nth-child(1) { background: #f0968a; } .browser .bar i:nth-child(2) { background: #e3b563; } .browser .bar i:nth-child(3) { background: #6fd39c; }
-  .browser .bar span { white-space: nowrap; margin-inline-start: 10px; font-size: 11px; color: #8da4cf; background: rgba(255,255,255,.07); padding: 2px 14px; border-radius: 99px; }
+  .browser .chrome { height: 26px; background: linear-gradient(#1b2b52, #14213f); display: flex; align-items: center; gap: 6px; padding: 0 12px; direction: ltr; }
+  .browser .chrome i { width: 9px; height: 9px; border-radius: 50%; background: #3b4d78; }
+  .browser .chrome i:nth-child(1) { background: #f0968a; } .browser .chrome i:nth-child(2) { background: #e3b563; } .browser .chrome i:nth-child(3) { background: #6fd39c; }
+  .browser .chrome span { white-space: nowrap; margin-inline-start: 10px; font-size: 11px; color: #8da4cf; background: rgba(255,255,255,.07); padding: 2px 14px; border-radius: 99px; }
   .browser .view { position: relative; overflow: hidden; background: #f8fafc; }
   .browser .view img { position: absolute; display: block; max-width: none; }
   .browser .view img.full { position: static; width: 100%; }
@@ -242,6 +246,62 @@
   #topbar { position: absolute; top: 0; inset-inline: 0; height: 4px; background: rgba(147,197,253,.12); z-index: 6; }
   #topbar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #60a5fa, #3b82f6); transition: width .5s ease; margin-inline-start: auto; }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01s !important; animation-delay: 0s !important; } }
+
+  /* ---------- brand theme: Rubik headings, Assistant body, blue palette ---------- */
+  body, .btn { font-family: var(--font); }
+  h1, h2, h3, h4, .logo, .big, .v, .tile .v, .compare .big, .cta h3, .btn, .tag b, .chart-title { font-family: var(--head); }
+  h1, h2 { font-weight: 800; }
+  .slide.dark {
+    --text: #ffffff; --ice: #CFE3FF; --muted: #A9C9F7; --sky: #6EB0FF; --mist: #EAF2FF;
+    --card: rgba(255,255,255,.09); --card-border: rgba(110,176,255,.32);
+    background: radial-gradient(760px 520px at 88% 8%, rgba(110,176,255,.30), rgba(110,176,255,0) 62%), linear-gradient(135deg, #08234F 0%, #0F3D82 100%);
+    color: #fff;
+  }
+  .slide.light {
+    --text: #0A2142; --ice: #425D7C; --muted: #425D7C; --sky: #1B5FC9; --mist: #0F3F94;
+    --card: #ffffff; --card-border: #D3E2F6;
+    background: #EAF1FA; color: #0A2142;
+  }
+  .slide { transition-duration: .35s; }
+  .slide.light .card { box-shadow: 0 10px 30px rgba(15,63,148,.10); backdrop-filter: none; }
+  .slide.light .eyebrow { background: #fff; border-color: #BBD6F8; color: #1B5FC9; }
+  .slide.dark .eyebrow { background: rgba(110,176,255,.14); border-color: rgba(110,176,255,.4); color: #6EB0FF; }
+  .slide.light .grad { background-image: linear-gradient(90deg, #1B5FC9, #2B70D8); }
+  .slide.dark .grad { background-image: linear-gradient(90deg, #BBD6F8, #6EB0FF); }
+  .slide.light .chip { background: #fff; border-color: #BBD6F8; color: #0F3F94; }
+  .slide.light .stepv .n, .slide.light .step .n { color: rgba(27,95,201,.13); }
+  .slide.light .stepv .ic, .slide.light .feat .ic { background: #DCE9FB; }
+  .slide.light .compare .old .big { color: #8AA0BD; }
+  .slide.light .compare .new .big { color: #1B5FC9; }
+  .slide.light .bars { border-bottom-color: rgba(15,63,148,.22); }
+  .slide.light .bars .cap { border-top-color: #2B70D8; }
+  .slide.light .bar.before { background: linear-gradient(#BBD6F8, #9DC2F1); }
+  .slide.light .bar.after { background: linear-gradient(#2B70D8, #0F3F94); box-shadow: 0 8px 18px rgba(15,63,148,.28); }
+  .slide.light .bar::after { color: #0A2142; }
+  .slide.light .tag { background: #fff; color: #0A2142; border-color: #BBD6F8; box-shadow: 0 10px 26px rgba(15,63,148,.18); backdrop-filter: none; }
+  .slide.light .tag b { color: #1B5FC9; }
+  .slide.dark .tag { background: rgba(8,35,79,.88); }
+  .slide.light .browser { border-color: #BBD6F8; box-shadow: 0 26px 60px rgba(15,63,148,.24); }
+  .slide.light .browser .chrome { background: linear-gradient(#F3F8FF, #DCE9FB); }
+  .slide.light .browser .chrome span { color: #425D7C; background: rgba(15,63,148,.07); }
+  .slide.light .caps span { background: #fff; border-color: #BBD6F8; color: #0F3F94; }
+  .slide.light .phone-shot { box-shadow: 0 26px 54px rgba(15,63,148,.38); }
+  .slide.light .sec-caption, .slide.light .note { color: #425D7C; }
+  .tile .v { background-image: linear-gradient(180deg, #ffffff, #6EB0FF); }
+  .btn { color: #0F3F94; }
+  .cta { background: linear-gradient(100deg, rgba(27,95,201,.65), rgba(15,63,148,.45)); border-color: rgba(110,176,255,.45); }
+
+  /* navigation chrome follows the slide's theme */
+  .arrows button { background: #0F3F94; border-color: rgba(255,255,255,.22); color: #fff; opacity: 1; }
+  .arrows button:hover { background: #1B5FC9; }
+  .arrows { opacity: .95; }
+  #topbar i { background: #6EB0FF; }
+  #stage.on-light #topbar { background: rgba(15,63,148,.12); }
+  #stage.on-light #topbar i { background: #1B5FC9; }
+  #stage.on-light #nav button.dot-b { background: rgba(15,63,148,.25); }
+  #stage.on-light #nav button.dot-b.on { background: #1B5FC9; }
+  #stage.on-light .hint { color: rgba(66,93,124,.75); }
+  #nav button.dot-b.on { background: #6EB0FF; }
 </style>
 </head>
 <body>
@@ -250,7 +310,7 @@
   <div id="topbar"><i></i></div>
 
   <!-- ============ 1. HERO ============ -->
-  <section class="slide s1 active" data-i="0">
+  <section class="slide dark s1 active" data-i="0">
     <div class="copy">
       <div class="logo a" style="--d:.05"><div class="mark"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 18H14a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h5.5"/></svg></div>VisiFlow</div>
       <div class="eyebrow a" style="--d:.15"><i></i>ניהול ביקורי מכירות חכם</div>
@@ -264,7 +324,7 @@
       </div>
     </div>
     <div class="visual a pop" style="--d:.35;position:relative;height:auto">
-      <div class="tilt float"><div class="browser"><div class="bar"><i></i><i></i><i></i><span>app.visiflow.io / dashboard</span></div><div class="view"><img class="full" src="img/dash-top.png" alt="דשבורד VisiFlow"></div></div></div>
+      <div class="tilt float"><div class="browser"><div class="chrome"><i></i><i></i><i></i><span>app.visiflow.io / dashboard</span></div><div class="view"><img class="full" src="img/dash-top.png" alt="דשבורד VisiFlow"></div></div></div>
       <div class="tag a pop" style="--d:1.6;top:-20px;inset-inline-start:-6px"><span class="dot"></span> ביצוע בזמן אמת</div>
       <div class="tag a pop" style="--d:2.1;top:150px;inset-inline-start:-40px"><b>124</b> לקוחות · <b>5</b> סוכנים</div>
       <div class="phone-shot a pop float" style="--d:1.2;position:absolute;width:150px;bottom:-84px;inset-inline-end:-18px;border-radius:24px;padding:6px;transform:rotate(4deg)"><div class="scr" style="border-radius:18px;height:230px"><img src="img/agent-list.png" alt="אפליקציית הסוכן"></div></div>
@@ -272,7 +332,7 @@
   </section>
 
   <!-- ============ 2. HOW IT WORKS ============ -->
-  <section class="slide s2" data-i="1">
+  <section class="slide light s2" data-i="1">
     <div class="col1">
       <div class="eyebrow a" style="--d:.05;align-self:flex-start"><i></i>איך זה עובד</div>
       <h2 class="a" style="--d:.15;font-size:38px">מקובץ אקסל לתוכנית עבודה מלאה <span class="grad">תוך שניות.</span></h2>
@@ -289,7 +349,7 @@
     </div>
     <div class="col2">
       <div class="a pop" style="--d:.5;position:relative">
-        <div class="browser"><div class="bar"><i></i><i></i><i></i><span>תוכנית ביקורים · נובמבר 2026</span></div>
+        <div class="browser"><div class="chrome"><i></i><i></i><i></i><span>תוכנית ביקורים · נובמבר 2026</span></div>
           <div class="view" data-crop="3200,2000,880,805,1810,940"><img src="img/plan.png" alt="תוכנית ביקורים"></div></div>
         <div class="tag a pop" style="--d:1.5;top:-20px;inset-inline-end:20px"><span class="dot"></span> 250 ביקורים נוצרו אוטומטית</div>
       </div>
@@ -298,7 +358,7 @@
   </section>
 
   <!-- ============ 3. OPTIMIZATION ============ -->
-  <section class="slide s3" data-i="2">
+  <section class="slide light s3" data-i="2">
     <div class="left">
       <div class="eyebrow a" style="--d:.05;align-self:flex-start"><i></i>אופטימיזציה</div>
       <h2 class="a" style="--d:.15">יותר ביקורים,<br><span class="grad">פחות קילומטרים.</span></h2>
@@ -307,7 +367,7 @@
       <div class="feat card a" style="--d:.85"><div class="ic">⚖️</div><div><h4>איזון עומסים וקיבולת</h4><p>מגבלת ביקורים יומית לכל סוכן ולכל ערוץ - אף סוכן לא קורס ואף יום לא נשאר ריק.</p></div></div>
     </div>
     <div class="right card a" style="--d:.5">
-      <div class="chart-title"><span>ביקורים לפי יום - סוכן לדוגמה</span><span class="legend"><span><i style="background:#64748b"></i>לפני</span><span><i style="background:#3b82f6"></i>עם VisiFlow</span><span><i style="background:transparent;border-top:2px dashed #e3b563;height:0;border-radius:0;vertical-align:3px"></i>קיבולת יומית</span></span></div>
+      <div class="chart-title"><span>ביקורים לפי יום - סוכן לדוגמה</span><span class="legend"><span><i style="background:#BBD6F8"></i>לפני</span><span><i style="background:#1B5FC9"></i>עם VisiFlow</span><span><i style="background:transparent;border-top:2px dashed #2B70D8;height:0;border-radius:0;vertical-align:3px"></i>קיבולת יומית</span></span></div>
       <div class="bars">
         <div class="cap"></div>
         <div class="day"><div class="bar before" style="--d:1;height:68%" data-v="17"></div><div class="bar after" style="--d:1.15;height:46%" data-v="12"></div><span class="lbl">א׳</span></div>
@@ -321,13 +381,13 @@
   </section>
 
   <!-- ============ 4. AGENTS + MANAGEMENT ============ -->
-  <section class="slide s4" data-i="3">
+  <section class="slide light s4" data-i="3">
     <div class="right" style="flex:1;min-width:0">
       <div class="eyebrow a" style="--d:.05"><i></i>ניהול הסוכנים</div>
       <h2 class="a" style="--d:.15;font-size:40px">שליטה בשטח, <span class="grad">שקיפות בהנהלה.</span></h2>
       <div class="a pop" style="--d:.55;margin-top:20px;position:relative">
-        <div class="browser"><div class="bar"><i></i><i></i><i></i><span>דשבורד מנהל</span></div>
-          <div class="view" data-crop="3200,3800,0,560,2640,1420"><img src="img/dash-tall.png" alt="דשבורד"></div></div>
+        <div class="browser"><div class="chrome"><i></i><i></i><i></i><span>דשבורד מנהל</span></div>
+          <div class="view" data-crop="3600,2250,1600,398,1620,872"><img src="img/dash-top.png" alt="דשבורד"></div></div>
         <div class="tag a pop" style="--d:1.6;top:-16px;inset-inline-start:-14px"><b>26</b> ביקורים בוצעו היום</div>
       </div>
       <div class="caps a" style="--d:1.2"><span>✓ ביקרתי / לא ביקרתי + סיבה</span><span>🧭 ניווט ב-Waze</span><span>↔ הזזת ביקור</span><span>💰 חוב וצ'קים</span></div>
@@ -341,7 +401,7 @@
   </section>
 
   <!-- ============ 5. VALUE + CTA ============ -->
-  <section class="slide s5" data-i="4">
+  <section class="slide dark s5" data-i="4">
     <div class="eyebrow a" style="--d:.05;align-self:flex-start"><i></i>הערך לארגון</div>
     <h2 class="a" style="--d:.15">מערכת אחת. <span class="grad">תוצאות שרואים בדוח.</span></h2>
     <div class="tiles">
@@ -419,6 +479,7 @@
     slides.forEach(function (s, k) { s.classList.toggle("active", k === i); });
     nav.querySelectorAll(".dot-b").forEach(function (b, k) { b.classList.toggle("on", k === i); });
     bar.style.width = ((i + 1) / slides.length * 100) + "%";
+    stage.classList.toggle("on-light", slides[i].classList.contains("light"));
     if (i !== cur || !go.init) countUp(slides[i]);
     go.init = true; cur = i;
     try { history.replaceState(null, "", "#" + (i + 1)); } catch (e) {}

@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VisiFlow - מצגת ללקוחות</title>
+<style>
+  :root {
+    --navy: #0b1226;
+    --navy-2: #0F172A;
+    --brand: #1E40AF;
+    --electric: #3B82F6;
+    --sky: #60a5fa;
+    --ice: #bfdbfe;
+    --mist: #eaf2ff;
+    --good: #6fd39c;
+    --warn: #e3b563;
+    --text: #f1f6ff;
+    --muted: #9db3d6;
+    --card: rgba(255,255,255,0.07);
+    --card-border: rgba(147,197,253,0.22);
+    --font: "Segoe UI", Arial, "Noto Sans Hebrew", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #060b19; overflow: hidden; font-family: var(--font); color: var(--text); }
+  body { display: flex; align-items: center; justify-content: center; }
+
+  /* 16:9 stage, scaled to whatever the screen is */
+  #stage { position: relative; width: 1280px; height: 720px; flex: none; transform-origin: center center; overflow: hidden; border-radius: 6px;
+    background: radial-gradient(1100px 700px at 85% 10%, #1d4ed8 0%, rgba(29,78,216,0) 60%), radial-gradient(900px 600px at 5% 100%, #1e3a8a 0%, rgba(30,58,138,0) 60%), linear-gradient(160deg, #0b1226 0%, #0F172A 55%, #11204a 100%); }
+
+  /* floating background orbs - alive but never distracting */
+  .orb { position: absolute; border-radius: 50%; filter: blur(60px); opacity: .35; animation: drift 14s ease-in-out infinite alternate; pointer-events: none; }
+  .orb.o1 { width: 380px; height: 380px; background: #2563eb; top: -120px; inset-inline-start: -80px; }
+  .orb.o2 { width: 300px; height: 300px; background: #38bdf8; bottom: -120px; inset-inline-end: 120px; animation-duration: 18s; opacity: .22; }
+  @keyframes drift { to { transform: translate(60px, 40px) scale(1.15); } }
+  .grid-bg { position: absolute; inset: 0; background-image: linear-gradient(rgba(147,197,253,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(147,197,253,.05) 1px, transparent 1px); background-size: 48px 48px; mask-image: radial-gradient(ellipse at center, #000 30%, transparent 80%); pointer-events: none; }
+
+  .slide { position: absolute; inset: 0; padding: 54px 70px 64px; opacity: 0; visibility: hidden; transition: opacity .5s ease, visibility .5s; }
+  .slide.active { opacity: 1; visibility: visible; }
+
+  /* staggered entrance - restarts every time a slide becomes active */
+  .a { opacity: 0; }
+  .slide.active .a { animation: rise .7s cubic-bezier(.2,.8,.2,1) forwards; animation-delay: calc(var(--d, 0) * 1s); }
+  .slide.active .pop { animation-name: pop; }
+  @keyframes rise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+  @keyframes pop { from { opacity: 0; transform: scale(.82); } to { opacity: 1; transform: none; } }
+
+  .eyebrow { display: inline-flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; letter-spacing: .04em; color: var(--sky); background: rgba(59,130,246,.14); border: 1px solid rgba(96,165,250,.35); padding: 6px 16px; border-radius: 999px; }
+  .eyebrow i { width: 8px; height: 8px; border-radius: 50%; background: var(--sky); box-shadow: 0 0 0 0 rgba(96,165,250,.7); animation: ping 2s infinite; }
+  @keyframes ping { 70% { box-shadow: 0 0 0 10px rgba(96,165,250,0); } 100% { box-shadow: 0 0 0 0 rgba(96,165,250,0); } }
+  h1 { font-size: 66px; line-height: 1.12; font-weight: 800; letter-spacing: -.01em; }
+  h2 { font-size: 44px; line-height: 1.15; font-weight: 800; margin-top: 16px; }
+  .grad { background: linear-gradient(90deg, #93c5fd, #3b82f6 60%, #60a5fa); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { font-size: 22px; line-height: 1.55; color: var(--ice); margin-top: 18px; }
+  .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 18px; backdrop-filter: blur(6px); }
+  .foot { position: absolute; inset-inline: 70px; bottom: 22px; display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+
+  /* ---------- slide 1 ---------- */
+  .s1 { display: flex; align-items: center; gap: 30px; }
+  .s1 .copy { flex: 1; }
+  .logo { display: flex; align-items: center; gap: 12px; margin-bottom: 30px; font-size: 26px; font-weight: 800; }
+  .logo .mark { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, #3b82f6, #1e40af); display: grid; place-items: center; box-shadow: 0 8px 24px rgba(37,99,235,.5); }
+  .chips { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 30px; }
+  .chip { padding: 9px 16px; border-radius: 999px; font-size: 16px; font-weight: 600; background: rgba(255,255,255,.08); border: 1px solid var(--card-border); color: var(--mist); }
+  .chip b { color: var(--sky); }
+  .s1 .visual { flex: 1.12; height: 520px; position: relative; }
+  .map { width: 100%; height: 100%; }
+  .route { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; }
+  .slide.active .route { animation: draw 2.6s ease forwards; animation-delay: calc(var(--d) * 1s); }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .node { fill: #dbeafe; opacity: 0; transform-box: fill-box; transform-origin: center; }
+  .slide.active .node { animation: nodeIn .5s ease forwards, pulse 2.6s ease-in-out infinite; animation-delay: calc(var(--d) * 1s), calc(var(--d) * 1s + .5s); }
+  @keyframes nodeIn { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+  @keyframes pulse { 50% { transform: scale(1.35); } }
+  .zone { opacity: 0; }
+  .slide.active .zone { animation: fadeZone 1s ease forwards; animation-delay: calc(var(--d) * 1s); }
+  @keyframes fadeZone { to { opacity: 1; } }
+  .map-tag { position: absolute; padding: 8px 14px; font-size: 14px; font-weight: 700; border-radius: 12px; display: flex; gap: 8px; align-items: center; }
+  .map-tag.t1 { top: 20px; inset-inline-start: 6px; }
+  .map-tag.t2 { bottom: 40px; inset-inline-end: 0; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--good); }
+
+  /* ---------- slide 2 ---------- */
+  .head { max-width: 900px; }
+  .flow { display: flex; align-items: stretch; gap: 0; margin-top: 44px; }
+  .step { flex: 1; padding: 24px 22px; position: relative; }
+  .step .ic { width: 58px; height: 58px; border-radius: 16px; display: grid; place-items: center; background: linear-gradient(135deg, rgba(59,130,246,.45), rgba(30,64,175,.55)); margin-bottom: 16px; font-size: 28px; }
+  .step h3 { font-size: 23px; font-weight: 800; margin-bottom: 8px; }
+  .step p { font-size: 16.5px; line-height: 1.5; color: var(--ice); }
+  .step .n { position: absolute; top: 14px; inset-inline-end: 18px; font-size: 40px; font-weight: 800; color: rgba(147,197,253,.16); }
+  .arrow { width: 54px; flex: none; display: grid; place-items: center; }
+  .arrow svg { width: 40px; overflow: visible; }
+  .arrow path { stroke: var(--sky); stroke-width: 3; fill: none; stroke-linecap: round; stroke-dasharray: 8 8; animation: flowDash 1s linear infinite; }
+  @keyframes flowDash { to { stroke-dashoffset: -16; } }
+  .compare { display: flex; gap: 22px; margin-top: 34px; }
+  .compare .box { flex: 1; padding: 22px 26px; display: flex; align-items: center; gap: 18px; }
+  .compare .big { font-size: 46px; font-weight: 800; white-space: nowrap; }
+  .compare .old .big { color: #f0968a; text-decoration: line-through; text-decoration-thickness: 3px; }
+  .compare .new .big { color: var(--good); }
+  .compare small { display: block; font-size: 15px; color: var(--muted); margin-bottom: 2px; }
+  .compare span.t { font-size: 17px; color: var(--ice); line-height: 1.4; }
+
+  /* ---------- slide 3 ---------- */
+  .s3 { display: flex; gap: 34px; align-items: stretch; }
+  .s3 .left { flex: 1; display: flex; flex-direction: column; }
+  .s3 .right { flex: 1.05; padding: 24px 28px 18px; display: flex; flex-direction: column; }
+  .feat { display: flex; gap: 16px; align-items: flex-start; padding: 16px 18px; margin-top: 14px; }
+  .feat .ic { flex: none; width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; font-size: 22px; background: linear-gradient(135deg, rgba(59,130,246,.5), rgba(30,64,175,.6)); }
+  .feat h4 { font-size: 19px; font-weight: 800; }
+  .feat p { font-size: 15.5px; color: var(--ice); line-height: 1.45; margin-top: 3px; }
+  .chart-title { display: flex; justify-content: space-between; align-items: center; font-size: 18px; font-weight: 800; }
+  .legend { display: flex; gap: 16px; font-size: 14px; color: var(--muted); font-weight: 600; }
+  .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-inline-end: 6px; vertical-align: -1px; }
+  .bars { position: relative; flex: 1; display: flex; align-items: flex-end; justify-content: space-around; margin-top: 16px; padding: 0 6px 30px; border-bottom: 1px solid rgba(147,197,253,.3); min-height: 270px; }
+  .bars .cap { position: absolute; inset-inline: 0; bottom: calc(30px + 150px); border-top: 2px dashed rgba(227,181,99,.85); }
+  .bars .cap span { position: absolute; top: -24px; inset-inline-start: 0; font-size: 13px; font-weight: 700; color: var(--warn); }
+  .day { position: relative; display: flex; gap: 7px; align-items: flex-end; height: 100%; width: 17%; justify-content: center; }
+  .day .lbl { position: absolute; bottom: -28px; font-size: 15px; color: var(--muted); font-weight: 600; }
+  .bar { width: 34%; border-radius: 7px 7px 0 0; transform: scaleY(0); transform-origin: bottom; position: relative; }
+  .bar::after { content: attr(data-v); position: absolute; top: -22px; inset-inline: 0; text-align: center; font-size: 13px; font-weight: 700; color: var(--ice); }
+  .bar.before { background: linear-gradient(#64748b, #475569); }
+  .bar.after { background: linear-gradient(#60a5fa, #2563eb); box-shadow: 0 0 18px rgba(59,130,246,.55); }
+  .slide.active .bar { animation: grow .9s cubic-bezier(.2,.9,.25,1) forwards; animation-delay: calc(var(--d) * 1s); }
+  @keyframes grow { to { transform: scaleY(1); } }
+  .note { font-size: 13px; color: var(--muted); margin-top: 12px; }
+
+  /* ---------- slide 4 ---------- */
+  .s4 { display: flex; gap: 36px; align-items: center; }
+  .phone-wrap { flex: none; width: 330px; display: flex; justify-content: center; }
+  .phone { width: 290px; height: 560px; border-radius: 40px; background: #0a1020; border: 3px solid #25365e; padding: 14px; box-shadow: 0 30px 70px rgba(0,0,0,.5), 0 0 60px rgba(37,99,235,.35); position: relative; animation: floaty 6s ease-in-out infinite; }
+  @keyframes floaty { 50% { transform: translateY(-10px); } }
+  .phone::before { content: ""; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 90px; height: 20px; border-radius: 12px; background: #050913; z-index: 2; }
+  .screen { background: #f4f8ff; border-radius: 28px; height: 100%; padding: 36px 12px 12px; color: #0F172A; overflow: hidden; direction: rtl; }
+  .app-h { display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 800; margin-bottom: 4px; }
+  .app-h small { font-size: 11px; color: #5b6b85; font-weight: 600; }
+  .prog { height: 7px; border-radius: 99px; background: #dbe6f7; overflow: hidden; margin: 8px 0 12px; }
+  .prog i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #3b82f6, #1e40af); border-radius: 99px; }
+  .slide.active .prog i { animation: fillp 1.6s ease forwards .9s; }
+  @keyframes fillp { to { width: 62%; } }
+  .cust { background: white; border: 1px solid #dfe7f3; border-radius: 12px; padding: 9px 11px; margin-bottom: 8px; font-size: 13px; }
+  .cust .r { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .cust b { font-size: 13.5px; }
+  .cust small { color: #5b6b85; font-size: 11px; }
+  .badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: #fdf1dc; color: #9a6417; white-space: nowrap; }
+  .badge.ok { background: #e3f4ea; color: #1a7f4f; }
+  .btns { display: flex; gap: 6px; margin-top: 7px; }
+  .btns span { flex: 1; text-align: center; padding: 6px 0; border-radius: 8px; font-size: 11.5px; font-weight: 700; }
+  .btns .v { background: #1a7f4f; color: white; }
+  .btns .nv { background: #fce8e6; color: #b3372c; }
+  .btns .nav { background: #eff6ff; color: #1e40af; }
+  .s4 .right { flex: 1; }
+  .kpis { display: flex; gap: 14px; margin-top: 22px; }
+  .kpi { flex: 1; padding: 16px 18px; position: relative; overflow: hidden; }
+  .kpi::after { content: ""; position: absolute; top: -26px; inset-inline-end: -26px; width: 90px; height: 90px; border-radius: 50%; background: var(--electric); opacity: .16; }
+  .kpi .v { font-size: 38px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .kpi .l { font-size: 14.5px; color: var(--ice); margin-top: 2px; }
+  .dash { display: flex; gap: 14px; margin-top: 14px; }
+  .dash .c1 { flex: 1.7; padding: 16px 18px 10px; }
+  .dash .c2 { flex: 1; padding: 16px 18px; display: flex; flex-direction: column; align-items: center; }
+  .dash h5 { font-size: 15px; font-weight: 800; align-self: stretch; margin-bottom: 4px; }
+  .line { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; }
+  .slide.active .line { animation: draw 2.2s ease forwards; animation-delay: calc(var(--d) * 1s); }
+  .areafill { opacity: 0; }
+  .slide.active .areafill { animation: fadeZone 1.2s ease forwards; animation-delay: calc(var(--d) * 1s + 1s); }
+  .donut { transform: rotate(-90deg); }
+  .donut .ring { fill: none; stroke-width: 13; }
+  .donut .val { fill: none; stroke-width: 13; stroke-linecap: round; stroke-dasharray: 0 100; }
+  .slide.active .donut .val { animation: donut 1.8s cubic-bezier(.2,.8,.2,1) forwards; animation-delay: calc(var(--d) * 1s); }
+  @keyframes donut { to { stroke-dasharray: 87 100; } }
+  .donut-num { position: absolute; font-size: 28px; font-weight: 800; }
+
+  /* ---------- slide 5 ---------- */
+  .s5 { display: flex; flex-direction: column; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 30px; }
+  .tile { padding: 34px 22px 30px; position: relative; overflow: hidden; }
+  .tile::after { content: ""; position: absolute; top: -34px; inset-inline-end: -34px; width: 120px; height: 120px; border-radius: 50%; background: var(--electric); opacity: .16; }
+  .tile .v { direction: ltr; text-align: right; font-size: 68px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; background: linear-gradient(180deg, #fff, #93c5fd); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .tile h4 { font-size: 22px; font-weight: 800; margin-top: 18px; }
+  .tile p { font-size: 16px; color: var(--ice); line-height: 1.45; margin-top: 5px; }
+  .cta { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 30px; padding: 24px 34px; background: linear-gradient(100deg, rgba(37,99,235,.55), rgba(30,64,175,.35)); border-color: rgba(147,197,253,.4); }
+  .cta h3 { font-size: 30px; font-weight: 800; }
+  .cta p { font-size: 17px; color: var(--ice); margin-top: 6px; }
+  .btn { flex: none; padding: 15px 34px; border-radius: 14px; background: white; color: #1e40af; font-size: 20px; font-weight: 800; box-shadow: 0 10px 30px rgba(0,0,0,.3); animation: glow 2.4s ease-in-out infinite; }
+  @keyframes glow { 50% { box-shadow: 0 10px 40px rgba(147,197,253,.65); transform: scale(1.04); } }
+  .steps3 { display: flex; gap: 10px; margin-top: 14px; font-size: 15px; color: var(--mist); }
+  .steps3 span { background: rgba(255,255,255,.1); padding: 5px 13px; border-radius: 99px; }
+
+
+  /* ---------- real screenshots ---------- */
+  .browser { background: #0c1630; border: 1px solid rgba(147,197,253,.35); border-radius: 14px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 70px rgba(37,99,235,.35); position: relative; }
+  .browser .bar { height: 26px; background: linear-gradient(#1b2b52, #14213f); display: flex; align-items: center; gap: 6px; padding: 0 12px; direction: ltr; }
+  .browser .bar i { width: 9px; height: 9px; border-radius: 50%; background: #3b4d78; }
+  .browser .bar i:nth-child(1) { background: #f0968a; } .browser .bar i:nth-child(2) { background: #e3b563; } .browser .bar i:nth-child(3) { background: #6fd39c; }
+  .browser .bar span { white-space: nowrap; margin-inline-start: 10px; font-size: 11px; color: #8da4cf; background: rgba(255,255,255,.07); padding: 2px 14px; border-radius: 99px; }
+  .browser .view { position: relative; overflow: hidden; background: #f8fafc; }
+  .browser .view img { position: absolute; display: block; max-width: none; }
+  .browser .view img.full { position: static; width: 100%; }
+  /* light sweep that scans across a screenshot, like the system "reading" the data */
+  .browser .view::after { content: ""; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 40%, rgba(96,165,250,.35) 50%, transparent 60%); transform: translateX(-120%); pointer-events: none; }
+  .slide.active .browser .view::after { animation: sweep 2.8s ease-in-out 1.6s 1 forwards; }
+  @keyframes sweep { to { transform: translateX(120%); } }
+  .tilt { transform: perspective(1600px) rotateY(-9deg) rotateX(3deg); transform-origin: right center; }
+  .float { animation: floaty2 7s ease-in-out infinite; }
+  @keyframes floaty2 { 50% { transform: translateY(-10px); } }
+  .tag { position: absolute; z-index: 4; display: flex; gap: 9px; align-items: center; padding: 9px 15px; border-radius: 13px; font-size: 15px; font-weight: 700; background: rgba(15,23,42,.88); border: 1px solid rgba(147,197,253,.4); box-shadow: 0 10px 30px rgba(0,0,0,.4); backdrop-filter: blur(6px); white-space: nowrap; }
+  .tag b { color: var(--sky); font-size: 20px; }
+  .tag .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 0 rgba(111,211,156,.7); animation: ping2 2s infinite; }
+  @keyframes ping2 { 70% { box-shadow: 0 0 0 9px rgba(111,211,156,0); } 100% { box-shadow: 0 0 0 0 rgba(111,211,156,0); } }
+  .phone-shot { width: 238px; border-radius: 34px; background: #0a1020; border: 3px solid #2a3d6b; padding: 9px; box-shadow: 0 30px 70px rgba(0,0,0,.55), 0 0 60px rgba(37,99,235,.35); position: relative; }
+  .phone-shot::before { content: ""; position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 70px; height: 15px; border-radius: 10px; background: #050913; z-index: 2; }
+  .phone-shot .scr { border-radius: 26px; overflow: hidden; background: #f8fafc; position: relative; }
+  .phone-shot img { display: block; width: 100%; }
+  .glow-ring { position: absolute; border: 3px solid #f5b83d; border-radius: 12px; opacity: 0; z-index: 3; }
+  .slide.active .glow-ring { animation: ring 2s ease-out 2.4s infinite; opacity: 1; }
+  @keyframes ring { 0% { box-shadow: 0 0 0 0 rgba(245,184,61,.7); } 100% { box-shadow: 0 0 0 16px rgba(245,184,61,0); } }
+  .stepsv { display: flex; flex-direction: column; gap: 12px; }
+  .stepv { display: flex; gap: 15px; align-items: center; padding: 15px 18px; position: relative; }
+  .stepv .ic { flex: none; width: 52px; height: 52px; border-radius: 15px; display: grid; place-items: center; font-size: 25px; background: linear-gradient(135deg, rgba(59,130,246,.5), rgba(30,64,175,.6)); }
+  .stepv h3 { font-size: 20px; font-weight: 800; }
+  .stepv p { font-size: 14.5px; color: var(--ice); line-height: 1.4; margin-top: 2px; }
+  .stepv .n { position: absolute; top: 8px; inset-inline-end: 14px; font-size: 30px; font-weight: 800; color: rgba(147,197,253,.16); }
+  .s2 { display: flex; gap: 40px; align-items: stretch; }
+  .s2 .col1 { flex: 0 0 505px; display: flex; flex-direction: column; }
+  .s2 .col2 { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; position: relative; }
+  .sec-caption { font-size: 15px; color: var(--ice); margin-top: 18px; text-align: center; line-height: 1.5; }
+  .s4 { display: flex; gap: 26px; align-items: center; }
+  .phones { flex: none; width: 460px; height: 580px; position: relative; margin-top: 14px; }
+  .phones .p1 { position: absolute; top: 40px; inset-inline-start: 0; transform: rotate(-4deg); }
+  .phones .p2 { position: absolute; top: 0; inset-inline-end: 0; transform: rotate(3deg); }
+  .caps { display: flex; gap: 8px; margin-top: 16px; flex-wrap: nowrap; }
+  .caps span { padding: 7px 13px; border-radius: 99px; background: rgba(255,255,255,.08); border: 1px solid var(--card-border); font-size: 14px; white-space: nowrap; font-weight: 600; color: var(--mist); }
+
+  /* ---------- chrome ---------- */
+  #nav { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 5; }
+  #nav button.dot-b { width: 11px; height: 11px; border-radius: 50%; border: 0; background: rgba(147,197,253,.3); cursor: pointer; padding: 0; transition: all .3s; }
+  #nav button.dot-b.on { width: 34px; border-radius: 99px; background: var(--sky); }
+  .arrows { position: absolute; bottom: 8px; inset-inline-end: 24px; display: flex; gap: 8px; z-index: 5; opacity: .75; }
+  .arrows button { width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--card-border); background: rgba(255,255,255,.08); color: white; font-size: 17px; cursor: pointer; }
+  .arrows button:hover { background: rgba(59,130,246,.45); }
+  .hint { position: absolute; bottom: 14px; inset-inline-start: 24px; font-size: 12px; color: rgba(157,179,214,.55); z-index: 5; }
+  #topbar { position: absolute; top: 0; inset-inline: 0; height: 4px; background: rgba(147,197,253,.12); z-index: 6; }
+  #topbar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #60a5fa, #3b82f6); transition: width .5s ease; margin-inline-start: auto; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01s !important; animation-delay: 0s !important; } }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="orb o1"></div><div class="orb o2"></div><div class="grid-bg"></div>
+  <div id="topbar"><i></i></div>
+
+  <!-- ============ 1. HERO ============ -->
+  <section class="slide s1 active" data-i="0">
+    <div class="copy">
+      <div class="logo a" style="--d:.05"><div class="mark"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 18H14a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h5.5"/></svg></div>VisiFlow</div>
+      <div class="eyebrow a" style="--d:.15"><i></i>ניהול ביקורי מכירות חכם</div>
+      <h1 class="a" style="--d:.3">הביקור הנכון,<br><span class="grad">אצל הלקוח הנכון,</span><br>בזמן הנכון.</h1>
+      <p class="lead a" style="--d:.5">מערכת שמתכננת אוטומטית את כל ביקורי הסוכנים, מאזנת עומסים וחוסכת קילומטרים - ונותנת להנהלה תמונת מצב חיה מהשטח.</p>
+      <div class="chips a" style="--d:.7">
+        <span class="chip"><b>●</b> תכנון אוטומטי</span>
+        <span class="chip"><b>●</b> אופטימיזציית מסלולים</span>
+        <span class="chip"><b>●</b> אפליקציה לסוכן</span>
+        <span class="chip"><b>●</b> דשבורד למנהלים</span>
+      </div>
+    </div>
+    <div class="visual a pop" style="--d:.35;position:relative;height:auto">
+      <div class="tilt float"><div class="browser"><div class="bar"><i></i><i></i><i></i><span>app.visiflow.io / dashboard</span></div><div class="view"><img class="full" src="img/dash-top.png" alt="דשבורד VisiFlow"></div></div></div>
+      <div class="tag a pop" style="--d:1.6;top:-20px;inset-inline-start:-6px"><span class="dot"></span> ביצוע בזמן אמת</div>
+      <div class="tag a pop" style="--d:2.1;top:150px;inset-inline-start:-40px"><b>124</b> לקוחות · <b>5</b> סוכנים</div>
+      <div class="phone-shot a pop float" style="--d:1.2;position:absolute;width:150px;bottom:-84px;inset-inline-end:-18px;border-radius:24px;padding:6px;transform:rotate(4deg)"><div class="scr" style="border-radius:18px;height:230px"><img src="img/agent-list.png" alt="אפליקציית הסוכן"></div></div>
+    </div>
+  </section>
+
+  <!-- ============ 2. HOW IT WORKS ============ -->
+  <section class="slide s2" data-i="1">
+    <div class="col1">
+      <div class="eyebrow a" style="--d:.05;align-self:flex-start"><i></i>איך זה עובד</div>
+      <h2 class="a" style="--d:.15;font-size:38px">מקובץ אקסל לתוכנית עבודה מלאה <span class="grad">תוך שניות.</span></h2>
+      <div class="stepsv" style="margin-top:22px">
+        <div class="stepv card a" style="--d:.4"><span class="n">1</span><div class="ic">📄</div><div><h3>טוענים לקוחות</h3><p>קובץ אקסל אחד: לקוחות, סוכנים ומכירות.</p></div></div>
+        <div class="stepv card a" style="--d:.6"><span class="n">2</span><div class="ic">⚙️</div><div><h3>האלגוריתם מתכנן</h3><p>תדירות לפי חשיבות, קיבולת יומית וקיבוץ לפי ערים.</p></div></div>
+        <div class="stepv card a" style="--d:.8"><span class="n">3</span><div class="ic">📱</div><div><h3>הסוכן יוצא לשטח</h3><p>התוכנית בנייד: ניווט, חוב וצ'קים לאיסוף.</p></div></div>
+        <div class="stepv card a" style="--d:1"><span class="n">4</span><div class="ic">📊</div><div><h3>המנהל רואה הכול</h3><p>ביצוע מול תכנון בזמן אמת, בלי דוחות ידניים.</p></div></div>
+      </div>
+      <div class="compare" style="margin-top:16px;gap:12px">
+        <div class="box card old a" style="--d:1.3;padding:12px 16px"><div><small>תכנון ידני</small><span class="big" style="font-size:34px">ימים</span></div></div>
+        <div class="box card new a" style="--d:1.45;padding:12px 16px"><div><small>עם VisiFlow</small><span class="big" style="font-size:34px">דקות</span></div></div>
+      </div>
+    </div>
+    <div class="col2">
+      <div class="a pop" style="--d:.5;position:relative">
+        <div class="browser"><div class="bar"><i></i><i></i><i></i><span>תוכנית ביקורים · נובמבר 2026</span></div>
+          <div class="view" data-crop="3200,2000,880,805,1810,940"><img src="img/plan.png" alt="תוכנית ביקורים"></div></div>
+        <div class="tag a pop" style="--d:1.5;top:-20px;inset-inline-end:20px"><span class="dot"></span> 250 ביקורים נוצרו אוטומטית</div>
+      </div>
+      <p class="sec-caption a" style="--d:1.8">תוכנית חודשית לכל סוכן - עם תדירות, שיוך אזורי וציון עדיפות לכל לקוח. ניתנת לעריכה ידנית בכל רגע.</p>
+    </div>
+  </section>
+
+  <!-- ============ 3. OPTIMIZATION ============ -->
+  <section class="slide s3" data-i="2">
+    <div class="left">
+      <div class="eyebrow a" style="--d:.05;align-self:flex-start"><i></i>אופטימיזציה</div>
+      <h2 class="a" style="--d:.15">יותר ביקורים,<br><span class="grad">פחות קילומטרים.</span></h2>
+      <div class="feat card a" style="--d:.45"><div class="ic">🎯</div><div><h4>תדירות לפי ערך הלקוח</h4><p>לקוחות מובילים נפגשים לעיתים קרובות יותר, הזנב בתדירות נמוכה - לפי כללים שאתם מגדירים לכל חברה.</p></div></div>
+      <div class="feat card a" style="--d:.65"><div class="ic">🗺️</div><div><h4>קיבוץ גיאוגרפי חכם</h4><p>לקוחות מאותה עיר או אזור משובצים באותו יום - פחות נסיעות, יותר זמן מול לקוחות.</p></div></div>
+      <div class="feat card a" style="--d:.85"><div class="ic">⚖️</div><div><h4>איזון עומסים וקיבולת</h4><p>מגבלת ביקורים יומית לכל סוכן ולכל ערוץ - אף סוכן לא קורס ואף יום לא נשאר ריק.</p></div></div>
+    </div>
+    <div class="right card a" style="--d:.5">
+      <div class="chart-title"><span>ביקורים לפי יום - סוכן לדוגמה</span><span class="legend"><span><i style="background:#64748b"></i>לפני</span><span><i style="background:#3b82f6"></i>עם VisiFlow</span><span><i style="background:transparent;border-top:2px dashed #e3b563;height:0;border-radius:0;vertical-align:3px"></i>קיבולת יומית</span></span></div>
+      <div class="bars">
+        <div class="cap"></div>
+        <div class="day"><div class="bar before" style="--d:1;height:68%" data-v="17"></div><div class="bar after" style="--d:1.15;height:46%" data-v="12"></div><span class="lbl">א׳</span></div>
+        <div class="day"><div class="bar before" style="--d:1.1;height:24%" data-v="6"></div><div class="bar after" style="--d:1.25;height:48%" data-v="12"></div><span class="lbl">ב׳</span></div>
+        <div class="day"><div class="bar before" style="--d:1.2;height:80%" data-v="20"></div><div class="bar after" style="--d:1.35;height:46%" data-v="12"></div><span class="lbl">ג׳</span></div>
+        <div class="day"><div class="bar before" style="--d:1.3;height:12%" data-v="3"></div><div class="bar after" style="--d:1.45;height:44%" data-v="11"></div><span class="lbl">ד׳</span></div>
+        <div class="day"><div class="bar before" style="--d:1.4;height:40%" data-v="10"></div><div class="bar after" style="--d:1.55;height:48%" data-v="12"></div><span class="lbl">ה׳</span></div>
+      </div>
+      <p class="note">נתוני המחשה. ללא איזון: ימים עמוסים מעל הקיבולת לצד ימים כמעט ריקים. עם VisiFlow: עומס אחיד בגבולות הקיבולת.</p>
+    </div>
+  </section>
+
+  <!-- ============ 4. AGENTS + MANAGEMENT ============ -->
+  <section class="slide s4" data-i="3">
+    <div class="right" style="flex:1;min-width:0">
+      <div class="eyebrow a" style="--d:.05"><i></i>ניהול הסוכנים</div>
+      <h2 class="a" style="--d:.15;font-size:40px">שליטה בשטח, <span class="grad">שקיפות בהנהלה.</span></h2>
+      <div class="a pop" style="--d:.55;margin-top:20px;position:relative">
+        <div class="browser"><div class="bar"><i></i><i></i><i></i><span>דשבורד מנהל</span></div>
+          <div class="view" data-crop="3200,3800,0,560,2640,1420"><img src="img/dash-tall.png" alt="דשבורד"></div></div>
+        <div class="tag a pop" style="--d:1.6;top:-16px;inset-inline-start:-14px"><b>26</b> ביקורים בוצעו היום</div>
+      </div>
+      <div class="caps a" style="--d:1.2"><span>✓ ביקרתי / לא ביקרתי + סיבה</span><span>🧭 ניווט ב-Waze</span><span>↔ הזזת ביקור</span><span>💰 חוב וצ'קים</span></div>
+    </div>
+    <div class="phones">
+      <div class="phone-shot p1 a pop float" style="--d:.4"><div class="scr"><img src="img/agent-list.png" alt="רשימת ביקורים"></div></div>
+      <div class="phone-shot p2 a pop" style="--d:.7"><div class="scr"><img src="img/agent-card.png" alt="כרטיס לקוח"></div>
+        <div class="glow-ring" style="top:80px;inset-inline:16px;height:60px"></div></div>
+      <div class="tag a pop" style="--d:1.9;bottom:-8px;inset-inline-start:70px;font-size:14px"><span class="dot"></span> צ'ק לאיסוף - מסומן ב"נאסף" בלחיצה</div>
+    </div>
+  </section>
+
+  <!-- ============ 5. VALUE + CTA ============ -->
+  <section class="slide s5" data-i="4">
+    <div class="eyebrow a" style="--d:.05;align-self:flex-start"><i></i>הערך לארגון</div>
+    <h2 class="a" style="--d:.15">מערכת אחת. <span class="grad">תוצאות שרואים בדוח.</span></h2>
+    <div class="tiles">
+      <div class="tile card a pop" style="--d:.45"><div class="v"><span data-count="90" data-prefix="-" data-suffix="%">0</span></div><h4>זמן תכנון ידני</h4><p>התוכנית נוצרת אוטומטית ומתעדכנת בלחיצה.</p></div>
+      <div class="tile card a pop" style="--d:.6"><div class="v"><span data-count="100" data-suffix="%">0</span></div><h4>כיסוי לפי תדירות</h4><p>אף לקוח לא נשכח - המערכת מתריעה על מי שלא קיבל ביקור.</p></div>
+      <div class="tile card a pop" style="--d:.75"><div class="v"><span data-count="25" data-prefix="+" data-suffix="%">0</span></div><h4>ביקורים לאותו סוכן</h4><p>פחות זמן בכבישים, יותר זמן מול לקוחות.</p></div>
+      <div class="tile card a pop" style="--d:.9"><div class="v"><span data-count="24" data-suffix="/7">0</span></div><h4>שקיפות בזמן אמת</h4><p>ביצוע, גביה וצ'קים לאיסוף - בלי להתקשר לסוכנים.</p></div>
+    </div>
+    <p class="note a" style="--d:1.2;margin-top:14px">* המספרים להמחשה, ובכפוף להתאמה לארגון - נמדדים בפיילוט.</p>
+    <div class="cta card a" style="--d:1.3">
+      <div>
+        <h3>מוכנים לראות את זה על הנתונים שלכם?</h3>
+        <p>פיילוט קצר עם קובץ הלקוחות שלכם - ותוכנית ביקורים אמיתית מוכנה תוך ימים.</p>
+        <div class="steps3"><span>1 · שולחים קובץ לקוחות</span><span>2 · מקבלים תוכנית</span><span>3 · מודדים תוצאות</span></div>
+      </div>
+      <div class="btn">בואו נתחיל פיילוט ←</div>
+    </div>
+    
+  </section>
+
+  <div id="nav"></div>
+  <div class="arrows"><button id="prev" aria-label="הקודם">→</button><button id="next" aria-label="הבא">←</button><button id="fs" aria-label="מסך מלא">⛶</button></div>
+  <div class="hint">חצים / רווח לניווט · F למסך מלא</div>
+</div>
+
+<script>
+(function () {
+  // size each screenshot "window": show only one region of the full-resolution image
+  document.querySelectorAll("[data-crop]").forEach(function (el) {
+    var p = el.dataset.crop.split(",").map(Number), W = p[0], x = p[2], y = p[3], w = p[4], hh = p[5];
+    el.style.aspectRatio = w + " / " + hh;
+    var img = el.querySelector("img");
+    img.style.width = (W / w * 100) + "%";
+    img.style.left = (-x / w * 100) + "%";
+    img.style.top = (-y / hh * 100) + "%";
+  });
+  var stage = document.getElementById("stage");
+  var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+  var nav = document.getElementById("nav");
+  var bar = document.querySelector("#topbar i");
+  var cur = 0;
+
+  // scale the fixed 1280x720 stage to whatever screen/projector it is on
+  function fit() {
+    var s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    stage.style.transform = "scale(" + s + ")";
+  }
+  window.addEventListener("resize", fit); fit();
+
+  slides.forEach(function (_, i) {
+    var b = document.createElement("button");
+    b.className = "dot-b"; b.setAttribute("aria-label", "שקף " + (i + 1));
+    b.addEventListener("click", function () { go(i); });
+    nav.appendChild(b);
+  });
+
+  function countUp(root) {
+    root.querySelectorAll("[data-count]").forEach(function (el) {
+      var target = +el.dataset.count, pre = el.dataset.prefix || "", suf = el.dataset.suffix || "";
+      var start = null, dur = 1700;
+      var delay = 700;
+      el.textContent = pre + "0" + suf;
+      function tick(t) {
+        if (start === null) start = t;
+        var p = Math.min(1, (t - start) / dur), e = 1 - Math.pow(1 - p, 3);
+        el.textContent = pre + Math.round(target * e) + suf;
+        if (p < 1) requestAnimationFrame(tick);
+      }
+      setTimeout(function () { requestAnimationFrame(tick); }, delay);
+    });
+  }
+
+  function go(i) {
+    i = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach(function (s, k) { s.classList.toggle("active", k === i); });
+    nav.querySelectorAll(".dot-b").forEach(function (b, k) { b.classList.toggle("on", k === i); });
+    bar.style.width = ((i + 1) / slides.length * 100) + "%";
+    if (i !== cur || !go.init) countUp(slides[i]);
+    go.init = true; cur = i;
+    try { history.replaceState(null, "", "#" + (i + 1)); } catch (e) {}
+  }
+
+  function next() { go(cur + 1); }
+  function prev() { go(cur - 1); }
+  document.getElementById("next").addEventListener("click", next);
+  document.getElementById("prev").addEventListener("click", prev);
+  document.getElementById("fs").addEventListener("click", toggleFs);
+  function toggleFs() {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+    else document.exitFullscreen();
+  }
+
+  // RTL deck: "forward" is toward the left
+  document.addEventListener("keydown", function (e) {
+    if (["ArrowLeft", "PageDown", " ", "Enter"].indexOf(e.key) > -1) { e.preventDefault(); next(); }
+    else if (["ArrowRight", "PageUp", "Backspace"].indexOf(e.key) > -1) { e.preventDefault(); prev(); }
+    else if (e.key === "Home") go(0);
+    else if (e.key === "End") go(slides.length - 1);
+    else if (e.key === "f" || e.key === "F" || e.key === "א") toggleFs();
+  });
+
+  var tx = null;
+  document.addEventListener("touchstart", function (e) { tx = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener("touchend", function (e) {
+    if (tx === null) return;
+    var dx = e.changedTouches[0].clientX - tx; tx = null;
+    if (Math.abs(dx) > 50) (dx < 0 ? next : prev)();
+  });
+
+  var h = parseInt((location.hash || "").slice(1), 10);
+  go(h >= 1 && h <= slides.length ? h - 1 : 0);
+})();
+</script>
+</body>
+</html>
